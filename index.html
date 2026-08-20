@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Session Card">
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#1F4FD8">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%231F4FD8'/><rect x='34' y='86' width='124' height='20' rx='8' fill='%23fff'/><rect x='26' y='68' width='20' height='56' rx='7' fill='%23fff'/><rect x='146' y='68' width='20' height='56' rx='7' fill='%23fff'/><rect x='12' y='78' width='14' height='36' rx='5' fill='%23fff' opacity='.75'/><rect x='166' y='78' width='14' height='36' rx='5' fill='%23fff' opacity='.75'/></svg>">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%231F4FD8'/><rect x='34' y='86' width='124' height='20' rx='8' fill='%23fff'/><rect x='26' y='68' width='20' height='56' rx='7' fill='%23fff'/><rect x='146' y='68' width='20' height='56' rx='7' fill='%23fff'/><rect x='12' y='78' width='14' height='36' rx='5' fill='%23fff' opacity='.75'/><rect x='166' y='78' width='14' height='36' rx='5' fill='%23fff' opacity='.75'/></svg>">
@@ -52,8 +53,37 @@ h1{margin:3px 0 0;font-size:26px;font-weight:800;letter-spacing:-.02em;text-tran
 .roadtbl td.now{color:var(--amber);font-weight:800;}
 .drbtn.exx{opacity:.7;}
 .drbtn.exx.warn{background:var(--red);border-color:var(--red);color:#fff;opacity:1;}
+.hdr-id{display:flex;align-items:center;gap:12px;}
+.hdr-tx{flex:1;min-width:0;}
+.ava-mini{width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid var(--line);flex:0 0 auto;}
+.hdr-nm{font-size:.62em;font-weight:600;color:var(--dim);letter-spacing:0;}
+/* The identity card: everything - ring included - drawn INSIDE its own borders.
+   overflow:hidden is a guarantee, not a style: nothing about a profile may ever spill. */
+.profcard{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:16px;margin:10px 0 4px;overflow:hidden;box-shadow:var(--shadow);}
+.profcard.pc-edit{display:block;}
+.prof-tx{flex:1;min-width:0;}
+.prof-nm{font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.prof-tag{font-size:12px;color:var(--dim);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.prof-edit{font-size:11px;color:var(--faint);text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:8px 2px;align-self:flex-start;flex:0 0 auto;}
+.profcard.pc-empty{gap:12px;}
+.prof-hint{font-size:11px;color:var(--faint);flex:1;line-height:1.45;}
+.prof-acts{display:flex;align-items:center;gap:8px;margin-top:12px;}
+.ava-row{display:flex;align-items:center;gap:12px;margin-top:10px;}
+.ava{width:58px;height:58px;border-radius:50%;background:var(--panel2);border:2.5px solid var(--amber);
+  display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;flex:0 0 auto;box-sizing:border-box;}
+.ava img{width:100%;height:100%;object-fit:cover;}
+.ava-init{font-size:22px;font-weight:800;color:var(--dim);letter-spacing:.04em;}
+.ava-fields{flex:1;min-width:0;}
+.ava-rm{font-size:11px;color:var(--faint);text-decoration:underline;text-underline-offset:3px;cursor:pointer;margin-top:6px;padding:4px 0;}
+/* the set to press: a slow amber breath; locked sets recede until it is their turn */
+.set.up{border-color:var(--amber);animation:setBreath 2.2s ease-in-out infinite;}
+@keyframes setBreath{0%,100%{box-shadow:0 0 0 0 rgba(230,177,80,0);}50%{box-shadow:0 0 0 4px rgba(230,177,80,.28);}}
+.set.lk{opacity:.38;cursor:default;}
+@media (prefers-reduced-motion: reduce){ .set.up{animation:none;box-shadow:0 0 0 2.5px rgba(230,177,80,.35);} }
 .dayutil{text-align:center;margin:22px 0 6px;font-size:11px;color:var(--faint);}
 .dayutil span[data-du]{cursor:pointer;padding:8px 6px;text-decoration:underline;text-underline-offset:3px;}
+.dayutil span[data-du].warn{color:var(--red);font-weight:700;text-decoration:none;}
 .du-dot{padding:0 4px;}
 .tabrow{display:flex;gap:2px;margin:8px 2px 0;border-bottom:1px solid var(--line);}
 .tab{flex:1;text-align:center;padding:8px 0 9px;font-size:11px;font-weight:800;letter-spacing:.1em;
@@ -313,26 +343,30 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 /* The element being explained is lifted above the dimming and left completely sharp - but it is
    a DEMONSTRATION, not a live control. Tapping it during the tour must never log anything into a
    real session, so it is inert while the coach is talking about it. */
-.coach-target{position:relative!important;z-index:91!important;pointer-events:none!important;}
+/* No z-lift: the spotlight reveals through the shadow-punched hole, so targets stay at
+   their natural depth. Lifting them above the host was how big targets covered the
+   panel and the finger - the guide must never lose the layering fight. */
+.coach-target{pointer-events:none!important;}
+.coach-ct{font-size:11px;font-weight:700;color:var(--faint);letter-spacing:.04em;}
 /* it presses itself in time with the finger, so the athlete sees the result without causing it */
 .coach-target.demo{animation:coachPress 1.9s cubic-bezier(.3,.8,.3,1) .5s infinite;}
 @keyframes coachPress{0%,60%,100%{transform:scale(1);filter:none;}
   72%{transform:scale(.965);filter:brightness(1.15);}
   84%{transform:scale(1);filter:none;}}
 /* a finger that travels to the control and taps it */
-.coach-finger{position:absolute;z-index:92;pointer-events:none;width:44px;height:44px;
+.coach-finger{position:absolute;z-index:3;pointer-events:none;width:44px;height:44px;
   margin-left:-8px;animation:fingerIn .45s cubic-bezier(.2,1.1,.3,1) both;}
 .coach-finger svg{display:block;animation:fingerTap 1.9s cubic-bezier(.3,.8,.3,1) .5s infinite;}
-.coach-ripple{position:absolute;z-index:91;pointer-events:none;border-radius:50%;
+.coach-ripple{position:absolute;z-index:2;pointer-events:none;border-radius:50%;
   border:2.5px solid var(--amber);width:36px;height:36px;margin:-18px 0 0 -18px;opacity:0;
   animation:fingerRipple 1.9s ease-out .5s infinite;}
 /* the spotlight is a transparent box with a giant shadow - the shadow IS the dimming */
-.coach-spot{position:absolute;border-radius:16px;pointer-events:none;
+.coach-spot{position:absolute;z-index:1;border-radius:16px;pointer-events:none;
   box-shadow:0 0 0 9999px rgba(8,10,14,.62), 0 0 0 3px var(--amber), 0 0 26px 6px rgba(31,79,216,.55);
   animation:coachSpot .45s cubic-bezier(.2,1.1,.3,1) both, coachRing 2.2s ease-in-out .5s infinite;
   transition:top .35s cubic-bezier(.2,.9,.25,1), left .35s cubic-bezier(.2,.9,.25,1),
              width .35s cubic-bezier(.2,.9,.25,1), height .35s cubic-bezier(.2,.9,.25,1);}
-.coach-panel{position:absolute;left:12px;right:12px;max-width:460px;margin:0 auto;
+.coach-panel{position:absolute;z-index:4;max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;left:12px;right:12px;max-width:460px;margin:0 auto;
   background:var(--panel);border:2px solid var(--amber);border-radius:20px;padding:18px;
   box-shadow:0 26px 60px -14px rgba(0,0,0,.6);
   animation:coachIn .5s cubic-bezier(.18,1.25,.35,1) both;}
@@ -473,7 +507,38 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 .prrow span{color:var(--dim);font-weight:600;}
 .prdis{margin-top:12px;text-align:center;font-size:13px;font-weight:800;color:var(--green);cursor:pointer;padding:6px;}
 /* ===== backup nag ===== */
-.bkbar{margin-top:14px;background:var(--panel);border:2px solid var(--amber);border-radius:var(--r);padding:16px;}
+.onb-mark{display:flex;justify-content:center;margin:8px 0 18px;opacity:.95;}
+#bootSplash{position:fixed;inset:0;z-index:220;background:#171A1F;display:flex;align-items:center;justify-content:center;
+  transition:opacity .35s ease;}
+#bootSplash.bs-out{opacity:0;pointer-events:none;}
+.bs-wrap{animation:bsBreathe 3.5s ease forwards;}
+.bs-d{stroke-dasharray:1;stroke-dashoffset:1;animation:bsDraw 1.05s cubic-bezier(.55,0,.25,1) forwards;}
+.bs-cap{opacity:0;animation:bsCap .45s ease 2.15s forwards;}
+@keyframes bsDraw{to{stroke-dashoffset:0;}}
+@keyframes bsCap{to{opacity:1;}}
+@keyframes bsBreathe{0%,64%{filter:drop-shadow(0 0 0 rgba(224,169,76,0));transform:scale(1);}
+  80%{filter:drop-shadow(0 0 30px rgba(224,169,76,.38));transform:scale(1.04);}
+  100%{filter:drop-shadow(0 0 12px rgba(224,169,76,.14));transform:scale(1.018);}}
+@media (prefers-reduced-motion: reduce){ .bs-d{animation:none;stroke-dashoffset:0;} .bs-cap{animation:none;opacity:1;} .bs-wrap{animation:none;} }
+.hdr-mark{flex:0 0 auto;display:flex;align-items:center;opacity:.92;}
+.hdr-mark svg{display:block;}
+.sh-mark{margin-bottom:6px;}
+.howto-min{margin:14px 18px 0;font-size:12px;color:var(--faint);cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px;padding:6px 0;}
+body.ui-min .cue:not(.keep){display:none;}
+body.ui-min .exnote{display:none;}
+body.ui-min .prof-hint{display:none;}
+body.ui-min .coach{display:none;}
+body.ui-min .ra-hint{display:none;}
+.sec-edit{font-size:11px;font-weight:600;color:var(--faint);text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px 6px;letter-spacing:0;text-transform:none;}
+.sec-ro{font-size:13.5px;color:var(--dim);font-weight:600;margin-top:8px;}
+.sec-acts{margin-top:10px;}
+.rt-reset{text-align:center;margin:10px 0 2px;font-size:11px;color:var(--faint);cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px;padding:8px 0;}
+.rt-reset .warn{color:var(--red);font-weight:700;text-decoration:none;}
+.bkline{text-align:center;margin:20px 0 0;font-size:11px;color:var(--faint);}
+.bkline span[data-bkgo],.bkline span[data-bksnooze]{cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:8px 4px;}
+.bkline span[data-bkgo]{color:var(--amber);}
 .bkt{font-size:15px;font-weight:800;color:var(--amber);letter-spacing:-.01em;}
 .bkm{font-size:13.5px;color:var(--dim);margin-top:5px;line-height:1.5;font-weight:600;}
 .bkrow{display:flex;gap:9px;margin-top:12px;}
@@ -646,7 +711,21 @@ td.c-n.now{font-weight:700;}
 @keyframes grrP{0%{transform:scale(1);opacity:1;}3.5%{transform:scale(1.4);}7%{transform:scale(1);}100%{transform:scale(1);}}
 @keyframes grrPg{0%{transform:scale(1);opacity:.55;}3.5%{transform:scale(1.4);opacity:.95;}7%{transform:scale(1);opacity:.55;}100%{transform:scale(1);opacity:.55;}}
 .rest-loaded{margin:8px 0 0;}
-.rest-lw{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;}
+.rest-lw{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;cursor:pointer;}
+/* The rest screen's field IS amber - anything drawn on it speaks amber-ink or it vanishes.
+   (v1 drew these amber-on-amber: present, tappable, invisible. Jerry found them by feel.) */
+.ra-hint{font-size:10px;font-weight:600;color:var(--amber-ink);opacity:.55;letter-spacing:.04em;}
+.rest-adj{display:flex;align-items:center;justify-content:center;gap:14px;}
+.ra-b{min-width:52px;padding:12px 0;border-radius:12px;border:2px solid var(--amber-ink);background:transparent;
+  color:var(--amber-ink);font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;}
+.ra-b:active{background:var(--amber-ink);color:var(--amber);}
+.rest-go,.rest-kill{position:relative;overflow:hidden;}
+.rest-go.holding::after,.rest-kill.holding::after{content:"";position:absolute;inset:0;
+  background:rgba(0,0,0,.22);transform-origin:left;transform:scaleX(0);
+  animation:holdFill var(--hd,650ms) linear forwards;animation-delay:var(--he,0ms);}
+@keyframes holdFill{from{transform:scaleX(0);}to{transform:scaleX(1);}}
+@media (prefers-reduced-motion: reduce){
+  .rest-go.holding::after,.rest-kill.holding::after{animation:none;transform:scaleX(1);opacity:.15;} }
 .rest-lw small{font-size:13px;font-weight:700;opacity:.8;margin-left:4px;}
 .rest-plates{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:6px;opacity:.95;}
 .rest-cue{font-size:11px;font-style:italic;opacity:.8;margin-top:8px;line-height:1.45;max-width:300px;margin-left:auto;margin-right:auto;}
@@ -693,14 +772,16 @@ td.c-n.now{font-weight:700;}
 .mini-open{font-size:11px;font-weight:800;letter-spacing:.1em;opacity:.75;flex:0 0 auto;}
 
 
-.stbar{position:fixed;left:10px;right:10px;bottom:96px;z-index:75;background:var(--panel);
-  border:2px solid var(--red);border-radius:var(--r);padding:14px 15px;
-  box-shadow:0 14px 34px -12px rgba(0,0,0,.5);
+.stbar{position:fixed;left:10px;right:10px;bottom:14px;z-index:75;display:flex;align-items:center;gap:9px;
+  background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--red);
+  border-radius:12px;padding:9px 12px;box-shadow:0 10px 26px -14px rgba(0,0,0,.5);
   font-family:ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
-.stb-t{font-size:15px;font-weight:800;color:var(--red);letter-spacing:-.01em;}
-.stb-m{font-size:13px;color:var(--dim);margin-top:5px;line-height:1.5;font-weight:600;}
-.stb-r{display:flex;gap:9px;margin-top:11px;}
-.stb-r .daybtn{flex:1;padding:11px;font-size:13px;}
+.stb-dot{width:8px;height:8px;border-radius:50%;background:var(--red);flex:0 0 auto;}
+.stb-x{flex:1;font-size:12px;font-weight:600;color:var(--dim);line-height:1.35;}
+.stb-x b{color:var(--chalk);cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-weight:800;}
+.stb-hide{flex:0 0 auto;color:var(--faint);cursor:pointer;padding:6px 8px;font-size:13px;}
+
+
 
 
 .onb-opt{display:block;padding:14px 16px;margin-top:8px;border-radius:12px;border:2px solid var(--line);
@@ -716,6 +797,7 @@ td.c-n.now{font-weight:700;}
 .onb-step span{width:42px;height:42px;border-radius:11px;border:2px solid var(--line);display:flex;
   align-items:center;justify-content:center;font-size:22px;font-weight:800;cursor:pointer;}
 .onb-step b{font-family:var(--mono,monospace);font-size:19px;min-width:78px;text-align:center;}
+.onb-step b input{width:84px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--chalk);font:inherit;text-align:center;padding:6px 4px;}
 .onb-day{flex:0 0 auto;padding:12px 0;width:46px;text-align:center;border-radius:11px;border:2px solid var(--line);background:var(--panel2);font-weight:800;font-size:13px;cursor:pointer;}
 .onb-day.on{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);}
 .onb-load{font-family:var(--mono,monospace);font-size:50px;font-weight:800;letter-spacing:-.02em;}
@@ -817,11 +899,11 @@ function stBanner(){
   var b=document.getElementById('stBar');
   if(!b){ b=document.createElement('div'); b.id='stBar'; document.body.appendChild(b); }
   b.className='stbar';
-  b.innerHTML='<div class="stb-t">Heads up \u2014 saving is off right now</div>'
-   +'<div class="stb-m">Your phone isn\u2019t letting this card store data at the moment. Train as normal \u2014 '
-   +'just tap Back up before you close and today\u2019s work comes with you. Adding the card to your home screen usually sorts this out for good.</div>'
-   +'<div class="stb-r"><span class="daybtn" id="stbBk">Back up now</span>'
-   +'<span class="daybtn" id="stbHide">Hide</span></div>';
+  // One slim strip, not a billboard: the message must survive (silence here = silently
+  // losing a session), but at the size of a status line, out of the training's way.
+  b.innerHTML='<span class="stb-dot"></span>'
+   +'<span class="stb-x">Saving is off \u2014 <b id="stbBk">back up before closing</b></span>'
+   +'<span class="stb-hide" id="stbHide">\u2715</span>';
   var h=document.getElementById('stbHide'); if(h) h.onclick=function(){ b.remove(); };
   var k=document.getElementById('stbBk'); if(k) k.onclick=function(){ try{ backupAll(); }catch(e){} };
 }
@@ -1488,38 +1570,120 @@ var TOUR={i:0, live:false};
 // so one script serves every build of this card without branching.
 var TOUR_STEPS=[
  {sel:null, t:'Welcome in.',
-  b:'I am the card you train with. Three minutes and you will know where everything is \u2014 including the parts that quietly get smarter as you log. Or skip and poke at it yourself; that works too.'},
+  b:'I am the card you train with. This is the full walk \u2014 every screen, every control, nothing left to discover the hard way. Skip any time; replay me later from PLAN.'},
  {sel:'.chiprow .chip', tap:1, t:'Your training days',
-  b:'Each letter is one session. Tap a letter to open that day. The one ringed in green is what your schedule says is today.'},
+  b:'Each letter is one session. Tap a letter to open that day; the one ringed in green is what your schedule says is today.'},
  {sel:'.weekrow', t:'Six weeks, then a deload',
   b:'Loads climb for five weeks, then week six drops light on purpose. That easy week is what makes the next block heavier \u2014 it is part of the program, not a week off.'},
+ {sel:'[data-rdy]', closest:'.ex', t:'Readiness \u2014 20 seconds before the first bar',
+  b:'Sleep, soreness, stress, energy. Score GREEN and the day runs as written; YELLOW quietly drops the mains 7.5%; RED runs 85% technique work. The card adjusts today\u2019s loads the moment you answer \u2014 you never argue with a bad day, you just tell the truth.'},
  {sel:'.ex-rx', t:'Put this on the bar',
   b:'The big number is today\u2019s working weight, already calculated from your own numbers. Tap it if you need to adjust for how the day is going.'},
+ {sel:'.rx', t:'Reading the prescription',
+  b:'4 \u00d7 5 means four working sets of five reps each. The middle phrase is your effort ceiling, and the last number is the rest \u2014 the exact clock the rest screen will run for you.'},
  {sel:'.ex-rx', t:'"Leave 2 in the tank"',
-  b:'This is the one phrase to learn. It means stop the set while you could still do two clean reps \u2014 not at failure. Every weight here is built around that honest stopping point, and the card will even test how good you are at judging it.'},
+  b:'The one phrase to learn. \u201cLeave 2\u201d means stop while two clean reps remain \u2014 lifters call that 2 reps in reserve, RIR 2. When a set does not go to plan you log the reps you got AND how many were left; both feed your numbers. The accuracy checks even measure how well you judge it and correct the math to you personally.'},
  {sel:'[data-wuopen]', tap:1, t:'Warm-up, drawn out',
-  b:'Tap this and every warm-up set appears as a loaded bar \u2014 plates coloured, sized, and split per side. Dumbbells, fixed bars and pin stacks draw as themselves too. No arithmetic between sets.'},
- {sel:'.sets', tap:1, t:'Log a set with one tap',
-  b:'Tap once when a set is done. Tap again if it did not go to plan and you can fix the reps. That is the whole logging system \u2014 and every set you log becomes evidence the card learns from.'},
- {sel:null, t:'Then the rest clock takes over',
-  b:'Logging a set fills the screen with a countdown, beeps you down the last ten seconds, and offers a single button to log the next set without hunting for it.'},
+  b:'Tap this and every warm-up set appears as a drawing of the actual bar: each coloured block is a real plate at true relative size, listed per side beneath it. Load what the picture shows \u2014 no arithmetic between sets.'},
+ {sel:'.set.up', tap:1, t:'The glowing set is the live one',
+  b:'Sets log in order: only the breathing one accepts a tap, so a stray thumb can never log set 3 before set 1. Tap it when the set is done; tap a logged set to correct its reps. ADD gives you a bonus set; its UNDO takes it back.'},
+ {sel:'[data-pain]', closest:'.ed-row', t:'The pain check',
+  b:'None, ache, or real pain \u2014 answer per exercise. Flag pain and the card remembers the day on your calendar and watches the pattern. Two flags in ten days and it will say something.'},
+ {sel:'[data-feel]', closest:'.ed-row', t:'Too heavy? Too light? Say so',
+  b:'One tap tells the card how the prescription felt. This is direct evidence \u2014 alongside your logged reps, it feeds the numbers that write next week.'},
+ {sel:'.howto, .howto-min', t:'Form notes on every movement',
+  b:'Setup, execution, and the safety lines for each exercise. If you switch coaching text to Minimal later, these fold to one quiet line \u2014 never gone, one tap away.'},
+ {sel:'.dayutil', t:'The quiet utilities',
+  b:'Reset day wipes today\u2019s logged sets \u2014 two taps, always tells you what it did. Report a problem copies a diagnostic you can send me. And the backup reminder lives down here too, appearing only when there is something to lose.'},
+ {sel:null, t:'When the day is done',
+  b:'Log the last set and the card closes the session properly: a send-off with the day\u2019s work summed up, PR banners when you set one, and a notes line so \u201cleft knee felt off\u201d is on the record next time. All of it rides your log.'},
  {sel:'.deckhead', tap:1, t:'The whole day at a glance',
   b:'Pull this open to see every exercise, what is done, and what is left. Tap any one to jump straight to it.'},
- {sel:'[data-day="MAX"]', tap:1, go:'MAX', t:'YOU \u2014 your numbers',
-  b:'This is that screen, live. Your maxes drive every barbell load \u2014 change one and all six weeks recalculate on the spot. Your benchmark, bodyweight and body-composition scans live here too.'},
+ {sel:'[data-ss]', view:'deck', t:'No pec deck? Swap it',
+  b:'The \u21c4 on any row swaps a movement for an equivalent your gym actually has \u2014 same muscles, same slot. Your logged history follows the movement wherever it goes.'},
+ {sel:'.drbtn.exx', view:'deck', t:'Remove what you do not want',
+  b:'The \u2715 takes an exercise out \u2014 two taps, armed in red first. A planned movement can always be restored; nothing here is a one-way door.'},
+ {sel:'#restTick', view:'focus', demo:'rest', t:'Then the rest clock takes over',
+  b:'The rest screen. What you are looking at now is a demonstration \u2014 nothing on it is live \u2014 so let me walk you through every piece of it.'},
+ {sel:'#restTick .mono', demo:'rest', t:'The countdown',
+  b:'It counts your prescribed rest and beeps you down the final seconds \u2014 the beep voice and pitch are yours to pick in settings. Need longer today? +30s stretches this rest only.'},
+ {sel:'#restTick .rest-lw', demo:'rest', tap:1, t:'Fix the weight without leaving',
+  b:'Too light or too heavy last set? Tap the weight right here \u2014 a stepper opens in place, the plate math updates instantly, and the whole card agrees on the new number.'},
+ {sel:'#restTick [data-restnext]', demo:'rest', t:'Hold, not tap',
+  b:'The big buttons need a deliberate hold \u2014 about two-thirds of a second, with a fill you can see. A phone being pocketed or picked up cannot misfire them.'},
+ {sel:'#restTick [data-restkill]', demo:'rest', t:'Skipping rest works the same way',
+  b:'Hold to skip. Minimise keeps the clock running in a corner while you look at anything else on the card.'},
+ {sel:'[data-day="MAX"]', tap:1, go:'MAX', t:'YOU \u2014 your numbers live here',
+  b:'Everything the card knows about you, and every dial that tunes it. Let me take it top to bottom.'},
+ {sel:'.profcard', go:'MAX', t:'Your identity',
+  b:'Name and photo, set once behind a deliberate Edit. It travels with your backups \u2014 this card is yours, and it looks it.'},
+ {sel:'#benchCard', go:'MAX', t:'Conditioning \u2014 anchored to one run',
+  b:'Log your benchmark 2-mile once and the card derives your personal paces. From then on every conditioning session \u2014 steady runs, 30:60 and 60:120 intervals, the whole progression \u2014 prescribes in seconds that are yours, not a chart\u2019s. Re-run the benchmark and everything re-anchors.'},
+ {sel:'#bcompSec', go:'MAX', t:'Body composition',
+  b:'Log scans over time and watch composition move alongside strength. Bodyweight here also caps bodyweight-scaled loads \u2014 exact numbers, never rounded.'},
+ {sel:'[data-mxlock="1"]', go:'MAX', t:'Maxes are locked on purpose',
+  b:'These numbers reprogram every load in the plan, so they sit behind an Edit you must choose. Change one and all six weeks recalculate on the spot. The small chart under each lift is its recent history from your logged sets \u2014 the evidence the card uses to revise these on its own.'},
+ {sel:'[data-thm]', closest:'.ex', go:'MAX', t:'Make it look like yours',
+  b:'Themes \u2014 including Iron, the card\u2019s own colours \u2014 fonts, and text size. And Coaching text: switch it to Minimal once you know the card, and the narration steps back while every number and safety line stays.'},
+ {sel:'[data-jump]', closest:'.ex', go:'MAX', t:'Timer, sound and loading',
+  b:'Pick the countdown voice and pitch, and tell the card your smallest plates \u2014 microplates make every prescription land on weights you can actually build.'},
+ {sel:'#saveLog', closest:'.block', go:'MAX', t:'Session logs \u2014 how they work',
+  b:'Save session to log stamps today \u2014 every set, weight, rep and note \u2014 into a named entry you can reopen any time. Export all bundles the lot into one file for a coach or a spreadsheet. And the light beside the heading is the storage truth: if saving is ever off, the card says so instead of losing a rep.'},
  {sel:'[data-day="RATE"]', tap:1, go:'RATE', t:'RATE \u2014 what your sets are saying',
-  b:'Every logged set becomes an estimate of what you could lift. This screen turns those into a rate per lift \u2014 pounds per week, building or sliding \u2014 and you can run an accuracy check on any exercise in the gym, any time, right from here.'},
- {sel:'[data-day="CAL"]', tap:1, go:'CAL', t:'CAL \u2014 what you actually did',
-  b:'A month at a time. Green days are sessions you logged, dashed weeks are deloads, red outlines are days you flagged pain. Tap any day to reopen it.'},
+  b:'Every logged set becomes an estimate of what you could lift. This screen turns those into a rate per lift \u2014 pounds per week, building or sliding \u2014 with the evidence drawn out per session.'},
+ {sel:'#adhocSec', go:'RATE', t:'Check any lift, right now',
+  b:'Ten spare minutes? Run the accuracy check on anything \u2014 curls, machines, movements the plan has never seen. Every check sharpens the card\u2019s personal correction for how you judge effort.'},
+ {sel:'[data-day="CAL"]', tap:1, go:'CAL', t:'CALENDAR \u2014 what you actually did',
+  b:'Filled days are logged sessions, dashed weeks are deloads, red outlines are days you flagged pain. Tap any day to reopen it exactly as it was.'},
+ {sel:'[data-cal="1"]', go:'CAL', tap:1, t:'Walk the months',
+  b:'Browse back through every month you have trained. Your schedule\u2019s weekday pattern lives here too \u2014 the card knows which days are yours.'},
  {sel:'[data-day="PLAN"]', tap:1, go:'PLAN', t:'PLAN \u2014 make it yours, keep it safe',
-  b:'Swap anything your gym does not have, reorder, print the week. Two taps here matter more than all of that: Back up saves everything to a file, and Add to Home Screen keeps your phone from ever clearing your history.'},
+  b:'The program itself: edit it, print it, and protect it. The three controls that matter most in the whole card live on this screen.'},
+ {sel:'[data-rtday]', tap:1, go:'PLAN', t:'Edit any day',
+  b:'Pick a day, then drag to reorder, swap a movement, or remove one \u2014 and one quiet line always leads back to the plan\u2019s original order.'},
+ {sel:'.roadtbl', go:'PLAN', t:'The road ahead',
+  b:'Eight blocks projected from today\u2019s numbers \u2014 where the rule takes you if you keep showing up. A projection of the rule, not a promise. The printable program carries the same tables in a clean sheet you can pin to a wall.'},
+ {sel:'#backupBtn', tap:1, go:'PLAN', t:'Back up \u2014 the one habit',
+  b:'Your history lives only on this phone. One tap on Back up saves everything to a file; Restore and Paste-a-backup bring it back anywhere. Add to Home Screen keeps your phone from ever clearing it. Weekly habit, nothing can take your log.'},
+ {sel:'#tourT', go:'PLAN', t:'And I live right here',
+  b:'Replay this walk any time \u2014 for yourself, or to hand the card to someone new.'},
  {sel:'#calcFab', tap:1, t:'Maths without leaving',
-  b:'A calculator lives here for the moment you need 80% of something. It speaks percentages the way a lifter says them, and rounds to the nearest 5.'},
- {sel:null, t:'That is the tour.',
-  b:'From here the card watches your actual performance: hit your reps and loads climb, log honest effort and your numbers revise themselves from real evidence. Train, log, and it gets sharper every week. Go.'}
+  b:'A calculator floats here for the moment you need 80% of something. It speaks percentages the way a lifter says them and rounds to real plates.'},
+ {sel:null, t:'That is the tour \u2014 and the whole card.',
+  b:'From here it watches your actual performance: hit your reps and loads climb; log honest effort and your numbers revise themselves from evidence. Train, log, and it gets sharper every week. Go.'}
 ];
 // Belt and braces on top of pointer-events: catch clicks in the capture phase, before any of the
 // card's own handlers see them. A tour must not be able to write into someone's real training log.
+
+// ===== the tour's demo rest screen =====
+// A faithful, INERT replica of the real rest takeover, so the tour can walk it piece by
+// piece. It is a DEMONSTRATION, not a live control. Tapping it during the tour must never log
+// anything into a real training history - tourGuard already swallows every interaction.
+function tourRestShow(){
+  try{
+    var el=document.getElementById('restTick'); if(!el) return;
+    el.dataset.tourDemo='1';
+    el.className='restchip'; el.style.display='flex';
+    el.innerHTML='<div class="rest-body">'
+      +'<div class="rest-eyebrow">REST \u00b7 BENCH PRESS \u00b7 SET 1 DONE</div>'
+      +'<div class="mono" style="text-align:center">2:47</div>'
+      +'<button class="rest-ext" data-restext="30">+30s this rest</button>'
+      +'<div class="rest-loaded"><div class="rest-next">NEXT \u2014 SET 2 OF 4</div>'
+      +'<div class="rest-lw" data-rwadj="1">245<small>lb</small> <small class="ra-hint">tap to adjust</small></div>'
+      +'<div class="rest-plates"><span>Per side:</span><span>45</span><span>45</span><span>10</span></div></div>'
+      +restHoldBtn('rest-go','data-restnext','\u2713 Did set 2 \u2014 hold to log')
+      +restHoldBtn('rest-kill','data-restkill','Skip rest \u2014 hold')
+      +'<button class="rest-min" data-restmin="1">Minimise \u2014 keep it running</button>'
+      +'</div>';
+  }catch(e){}
+}
+function tourRestHide(){
+  try{
+    var el=document.getElementById('restTick'); if(!el || el.dataset.tourDemo!=='1') return;
+    delete el.dataset.tourDemo;
+    el.style.display='none'; el.innerHTML=''; el.className='restchip';
+  }catch(e){}
+}
 function tourGuard(ev){
   try{
     // key off the coach actually being on screen - a stale live flag must never
@@ -1547,12 +1711,14 @@ try{ ['click','pointerdown','mousedown','touchstart','touchend'].forEach(functio
 function tourAvailable(){
   try{ return !(S.tour&&S.tour.done); }catch(e){ return false; }
 }
-function tourStart(){ S.tour={done:false}; TOUR={i:0, live:true, day0:S.day}; save(); coachPaint(); }
+function tourStart(){ S.tour={done:false}; TOUR={i:0, live:true, day0:S.day, view0:S.view}; save(); coachPaint(); }
 function tourEnd(){
+  try{ tourRestHide(); }catch(e){}
   try{ document.querySelectorAll('.coach-target').forEach(function(x){
     x.classList.remove('coach-target'); x.classList.remove('demo'); }); }catch(e){}
   S.tour={done:true}; TOUR.live=false;
   try{ if(TOUR.day0!=null && S.day!==TOUR.day0){ S.day=TOUR.day0; } }catch(e){}
+  try{ if(TOUR.view0!=null && S.view!==TOUR.view0){ S.view=TOUR.view0; } }catch(e){}
   save(); try{ render(); }catch(e){} coachPaint();
 }
 function tourStep(){ return TOUR_STEPS[Math.max(0,Math.min(TOUR_STEPS.length-1,TOUR.i))]; }
@@ -1569,6 +1735,8 @@ function tourMove(dir){
   TOUR.i=i;
   try{ var stG=TOUR_STEPS[i];
     if(stG && stG.go && S.day!==stG.go){ S.day=stG.go; save(); render(); }   // the tour shows the room, not just the door
+    if(stG && stG.view && S.view!==stG.view){ S.view=stG.view; render(); }   // and opens the deck when a step lives there
+    if(stG && stG.demo==='rest') tourRestShow(); else tourRestHide();
   }catch(e){}
   coachPaint();
 }
@@ -1604,25 +1772,36 @@ function coachPaint(){
       });
     }
     var st=tourStep(), last=(TOUR.i===TOUR_STEPS.length-1);
+    var pad=10;
     // release whatever was lifted for the previous step
     try{ document.querySelectorAll('.coach-target').forEach(function(x){
       x.classList.remove('coach-target'); x.classList.remove('demo'); }); }catch(e){}
     var el=st.sel? document.querySelector(st.sel) : null;
+    // a step about a SECTION spotlights the section, not the one stepper it anchored on
+    if(el && st.closest){ try{ var up=el.closest(st.closest); if(up) el=up; }catch(e){} }
     var box=null;
     if(el){
-      try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){}
+      // INSTANT scroll, then measure on the next frame - measuring during a smooth scroll
+      // draws the spotlight where the element USED to be (the way-off-focus bug).
+      try{ el.scrollIntoView({block:'center'}); }catch(e){}
       var r=el.getBoundingClientRect();
       if(r.width>0&&r.height>0){
         box={t:r.top, l:r.left, w:r.width, h:r.height};
-        el.classList.add('coach-target');      // sits above the dimming, fully sharp
+        el.classList.add('coach-target');      // revealed through the hole at natural depth
         if(st.tap) el.classList.add('demo');   // and presses itself in time with the finger
       }
+    }
+    // the world can move under the tour (keyboard, rotation, late layout) - follow it
+    if(!TOUR._wired){ TOUR._wired=true;
+      var relayout=function(){ if(!TOUR.live||TOUR._raf) return;
+        TOUR._raf=requestAnimationFrame(function(){ TOUR._raf=null; try{ coachPaint(); }catch(e){} }); };
+      window.addEventListener('resize', relayout, {passive:true});
+      window.addEventListener('scroll', relayout, {passive:true, capture:true});
     }
     // keep the panel clear of whatever is being pointed at
     TOUR.box=box? {t:box.t-pad, l:box.l-pad, w:box.w+pad*2, h:box.h+pad*2} : null;
     var lowerHalf = box? (box.t+box.h/2) > (window.innerHeight/2) : false;
     var pos = lowerHalf? 'top' : 'bottom';
-    var pad=10;
     var dots=TOUR_STEPS.map(function(_,k){ return '<i class="'+(k===TOUR.i?'on':(k<TOUR.i?'past':''))+'"></i>'; }).join('');
     var fx=box? (box.l+box.w/2) : 0, fy=box? (box.t+box.h*0.72) : 0;
     var finger = (box && st.tap)
@@ -1638,6 +1817,7 @@ function coachPaint(){
       +(box? '<div class="coach-spot" style="top:'+(box.t-pad)+'px;left:'+(box.l-pad)+'px;width:'+(box.w+pad*2)+'px;height:'+(box.h+pad*2)+'px"></div>' : '')
       +finger
       +'<div class="coach-panel '+pos+'" key="'+TOUR.i+'">'
+      +'<span class="coach-ct">'+(TOUR.i+1)+' / '+TOUR_STEPS.length+'</span>'
       +(last? '' : '<button class="coach-skip" data-tour="skip">Skip</button>')
       +'<div class="coach-row">'
       +'<div class="coach-av" aria-hidden="true">'
@@ -1799,7 +1979,19 @@ function restNextLoaded(b){
     var w=(st&&st.sub)? st.w : (ex.loadNum!=null? curLoad(ex,st) : null);
     var h2='<div class="rest-loaded">';
     if(w!=null){
-      h2+='<div class="rest-lw">'+w+'<small>lb</small>'+(ex.perHand? ' <small>each hand</small>':'')+'</div>';
+      // Too light or too heavy last set? Fix it HERE - tap the weight, step it, keep resting.
+      // Same st.w override and same step sizes as the focus card's editor; the plate chips
+      // below recompute from the new number on the next paint.
+      if(restWOpen){
+        var stp2=ex.barbell? 10:5;
+        h2+='<div class="rest-adj" data-rstop="1">'
+          +'<button class="ra-b" data-rwe="-1">\u2212'+stp2+'</button>'
+          +'<div class="rest-lw" data-rwadj="1">'+w+'<small>lb</small>'+(ex.perHand? ' <small>each hand</small>':'')+'</div>'
+          +'<button class="ra-b" data-rwe="1">+'+stp2+'</button></div>';
+      } else {
+        h2+='<div class="rest-lw" data-rwadj="1">'+w+'<small>lb</small>'+(ex.perHand? ' <small>each hand</small>':'')
+          +' <small class="ra-hint">tap to adjust</small></div>';
+      }
       if(ex.barbell && !st.sub){
         var ps=platesFor(w);          // platesFor takes the TOTAL and does the bar math itself
         if(ps) h2+='<div class="rest-plates"><span>per side:</span>'+ps.map(function(p){ return plateChip(p,false); }).join('')+'</div>';
@@ -1867,6 +2059,12 @@ function ghostRow(taken, rir){
        : taken+' taken \u00b7 '+rir+' in the tank \u00b7 the wall is failure');
   return s+'<div class="grr-cap">'+cap+'</div>';
 }
+function restHoldBtn(cls, attr, label){
+  var k=attr, holding=(holdK===k);
+  var el='<button class="'+cls+(holding?' holding':'')+'" '+attr+'="1" data-hold="1"';
+  if(holding){ var elp=Date.now()-holdT0; el+=' style="--hd:'+HOLD_MS+'ms;--he:-'+elp+'ms"'; }
+  return el+'>'+label+'</button>';
+}
 function restBody(b,e,go){
   var r=restSetRef(b);
   var reps=r? ((r.s.reps!=null)? r.s.reps : r.tgt) : null;
@@ -1899,17 +2097,18 @@ function restBody(b,e,go){
     if(tgt.kind==='set'){
       var nm=''; try{ if(tgt.i!==b.exi){ var d2=(typeof effDay==='function')? effDay():dayObj();
         nm=(tgt.st.sub||d2.exercises[tgt.i].name); } }catch(x){}
-      return '<button class="rest-go" data-restnext="1">\u2713 Did '+(nm? esc(nm)+' ':'')+'set '+(tgt.j+1)+' \u2014 log it, restart timer</button>'; }
-    if(tgt.kind==='ex') return '<button class="rest-go" data-restnext="1">Next exercise \u2192</button>';
-    return '<button class="rest-go" data-restnext="1">Day done \u2014 clear timer</button>'; })();
+      return restHoldBtn('rest-go','data-restnext','\u2713 Did '+(nm? esc(nm)+' ':'')+'set '+(tgt.j+1)+' \u2014 hold to log'); }
+    if(tgt.kind==='ex') return restHoldBtn('rest-go','data-restnext','Next exercise \u2192 hold');
+    return restHoldBtn('rest-go','data-restnext','Day done \u2014 hold to clear'); })();
   h+='<div class="rest-acts">'
    +'<button class="rest-min" data-restmin="1">Minimise \u2014 keep it running</button>'
-   +'<button class="rest-kill" data-restkill="1">Skip rest</button>'
+   +restHoldBtn('rest-kill','data-restkill','Skip rest \u2014 hold')
    +'</div></div>';
   return h;
 }
 function paintRest(force){
   var el=document.getElementById('restTick'); if(!el) return;
+  if(el.dataset && el.dataset.tourDemo==='1' && TOUR && TOUR.live) return;   // the demo owns the screen mid-tour
   var b=lastCompletion();
   if(!b||Date.now()-b.t>6*3600000||S.restDismiss===b.t){ stopScheduled(); el.style.display='none'; el.className='restchip'; return; }
   var e=Date.now()-b.t, go=e>=b.target*1000;
@@ -1929,16 +2128,51 @@ function paintRest(force){
 }
 function wireRest(){
   var el=document.getElementById('restTick'); if(!el) return;
+  // addEventListener, not the on- property: jsdom never routes pointer events to
+  // onpointerdown (PointerEvent is outside its vocabulary), and the tests must exercise
+  // the SAME path phones do. Guarded so re-wiring never stacks duplicate listeners.
+  if(!el.__holdWired){ el.__holdWired=true;
+    el.addEventListener('pointerdown', function(ev){
+      var b=lastCompletion(); if(!b) return;
+      var t=ev.target, n=t.closest? t.closest('[data-hold]') : null; if(!n) return;
+      var k=n.hasAttribute('data-restnext')? 'data-restnext':'data-restkill';
+      holdK=k; holdT0=Date.now();
+      if(holdTimer) clearTimeout(holdTimer);
+      holdTimer=setTimeout(function(){
+        if(holdK!==k) return;
+        holdK=null; holdTimer=null; holdFired=Date.now();
+        if(k==='data-restnext'){ restWOpen=false; restLogNext(b); }
+        else { S.restDismiss=b.t; stopScheduled(); save(); paintRest(true); render(); }
+      }, HOLD_MS);
+      paintRest(true);
+    });
+    ['pointerup','pointercancel','pointerleave'].forEach(function(tp){
+      el.addEventListener(tp, function(){ if(holdK) holdCancel(); }); });
+  }
   el.onclick=function(ev){
     var b=lastCompletion(); if(!b) return;
     var t=ev.target, hit=function(a){ return t.closest? t.closest('['+a+']') : null; };
     var n;
+    if((n=hit('data-rwe'))){
+      try{ var tg=restNextTarget(b);
+        if(tg && tg.kind==='set'){ var d3=(typeof effDay==='function')? effDay():dayObj();
+          var ex3=d3.exercises[tg.i], st3=tg.st||exState(tg.i,ex3);
+          var stp3=ex3.barbell? 10:5;
+          var base3=(st3&&st3.sub)? (st3.w!=null? st3.w:50) : curLoad(ex3,st3);
+          st3.w=Math.max(0, base3+(+n.dataset.rwe)*stp3); save(); paintRest(true); } }catch(e){}
+      return; }
+    if(hit('data-rwadj')){ restWOpen=!restWOpen; paintRest(true); return; }
     if((n=hit('data-restrep'))){ restEditReps(b,+n.dataset.restrep); return; }
     if((n=hit('data-restrir'))){ restSetRir(b,+n.dataset.restrir); return; }
     if(hit('data-restgrind')){ restToggleGrind(b); return; }
-    if(hit('data-restnext')){ restLogNext(b); return; }
+    if(hit('data-restnext')||hit('data-restkill')){
+      // taps don't fire these anymore - holds do. A click right after a completed hold is
+      // the pointer sequence finishing; anything else gets one gentle hint.
+      if(Date.now()-holdFired<600) return;
+      if(!holdHinted){ holdHinted=true; alertToast('Hold the button \u2014 quick taps are ignored on purpose'); }
+      return; }
     if(hit('data-restmin')){ S.restMin=b.t; save(); paintRest(true); return; }
-    if(hit('data-restkill')){ S.restDismiss=b.t; stopScheduled(); save(); paintRest(true); render(); return; }
+
     if(S.restMin===b.t){ S.restMin=null; save(); paintRest(true); }   // tap the mini bar to reopen
   };
 }
@@ -2024,6 +2258,50 @@ function sheetPlates(v,ex){
   if(!ex.barbell||typeof v!=='number') return '';
   var p=null; try{ p=platesFor(v); }catch(e){}
   return p? p.join(' + ')+' per side' : '';
+}
+// ---- the mark, inline: the blueprint barbell without its tile ----
+// mode 'dark' draws amber+chalk for the app's iron; mode 'ink' draws for white paper.
+function brandMark(w, mode, anim){
+  // three literacies: 'ink' for paper, 'dark' for the splash's own iron, and the default -
+  // THEME - which draws from the CSS variables so the mark is native to any background the
+  // card ever wears (blue-on-white today, amber-on-iron on dark, correct forever).
+  var amber, bevel, chalk;
+  if(mode==='ink'){ amber='#3a3a3a'; bevel='#8a8a8a'; chalk='#1a1a1a'; }
+  else if(mode==='dark'){ amber='#E0A94C'; bevel='#B08034'; chalk='#F0ECE4'; }
+  else { amber='var(--amber)'; bevel='var(--dim)'; chalk='var(--chalk)'; }
+  var hgt=Math.round(w*224/512);
+  // anim: each stroked shape carries pathLength=1 so one dash rule draws them all,
+  // staggered like a machinist laying down a blueprint: bar, big plates, bevels, small plates.
+  var A=function(ms){ return anim? ' pathLength="1" class="bs-d" style="animation-delay:'+ms+'ms"' : ''; };
+  var C=anim? ' class="bs-cap"' : '';
+  return '<svg class="brandmark" width="'+w+'" height="'+hgt+'" viewBox="0 144 512 224" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    +'<line x1="12" y1="256" x2="500" y2="256" stroke="'+chalk+'" stroke-width="6"'+A(0)+'/>'
+    +'<rect x="92" y="144" width="52" height="224" rx="22" fill="none" stroke="'+amber+'" stroke-width="11"'+A(650)+'/>'
+    +'<rect x="105" y="157" width="26" height="198" rx="10" fill="none" stroke="'+bevel+'" stroke-width="2.5"'+A(1600)+'/>'
+    +'<rect x="368" y="144" width="52" height="224" rx="22" fill="none" stroke="'+amber+'" stroke-width="11"'+A(650)+'/>'
+    +'<rect x="381" y="157" width="26" height="198" rx="10" fill="none" stroke="'+bevel+'" stroke-width="2.5"'+A(1600)+'/>'
+    +'<rect x="162" y="188" width="32" height="136" rx="14" fill="none" stroke="'+amber+'" stroke-width="7"'+A(1150)+'/>'
+    +'<rect x="318" y="188" width="32" height="136" rx="14" fill="none" stroke="'+amber+'" stroke-width="7"'+A(1150)+'/>'
+    +'<rect x="5" y="243" width="14" height="26" rx="6" fill="'+chalk+'"'+C+'/>'
+    +'<rect x="493" y="243" width="14" height="26" rx="6" fill="'+chalk+'"'+C+'/>'
+    +'</svg>';
+}
+// ---- the boot ident: the blueprint draws itself, breathes amber, hands over to the card ----
+// ~1.9s, tap anywhere to skip, never created at all under reduced motion. No sound - it is
+// a gym tool, and the mark speaks in line, not noise.
+function bootIdent(){
+  try{
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if(document.getElementById('bootSplash')) return;
+    var v=document.createElement('div'); v.id='bootSplash';
+    v.innerHTML='<div class="bs-wrap">'+brandMark(Math.min(340, Math.round((window.innerWidth||360)*0.72)), 'dark', true)+'</div>';
+    document.body.appendChild(v);
+    var gone=false;
+    var out=function(){ if(gone) return; gone=true; v.classList.add('bs-out');
+      setTimeout(function(){ try{ v.remove(); }catch(e){} }, 380); };
+    v.addEventListener('click', out);
+    setTimeout(out, 3450);
+  }catch(e){}
 }
 function sheetWho(){
   try{ if(S.profile&&S.profile.name) return S.profile.name; }catch(e){}
@@ -2199,6 +2477,16 @@ function setOrder(code, newNames){
   var n=remapData(code, oldNames, newNames);
   save();
   return n;
+}
+// The plan's original order lives in the code and cannot be forgotten - this is the door
+// back to it. Logged sets ride the remap exactly like any other reorder; customs keep
+// their place at the end. Two-tap armed, because it undoes every manual move at once.
+function resetOrder(code){
+  var oldNames=dayOrderNames(code);
+  if(S.order) delete S.order[code];
+  var newNames=dayOrderNames(code);        // with the override gone, this IS the plan's order
+  remapData(code, oldNames, newNames);
+  save(); render(); alertToast('Day '+code+' back to the plan\u2019s order');
 }
 function moveInDay(code, from, to){
   var names=dayOrderNames(code);
@@ -2379,6 +2667,12 @@ function routineHTML(){
   if(S.swapFor&&S.swapFor.code===c) return h+swapPickerHTML(c,S.swapFor.name);
   h+='<div class="exnote" style="padding:4px 0 0">Drag the \u2261 handle to reorder \u00b7 \u21C4 swaps a movement \u00b7 \u2212 removes it. Your logged history follows the movement.</div>';
   h+=routineListHTML(c);
+  if(ordFor(c)&&ordFor(c).length){
+    var rk='rtreset:'+c;
+    h+='<div class="rt-reset" data-rtreset="'+c+'">'
+      +(armDel===rk? '<span class="warn">Restore the plan\u2019s original order for Day '+c+'? Tap again.</span>'
+                   : 'Back to the plan\u2019s order')+'</div>';
+  }
   if(outs.length){
     h+='<div class="block"><h3>Removed from this day</h3>';
     outs.forEach(function(nm){
@@ -2445,6 +2739,8 @@ function libAdd(name, code){
 }
 function wirePlan(){
   var q=function(s,f){ document.querySelectorAll(s).forEach(f); };
+  q('[data-rtreset]',function(el){ el.onclick=function(){ var c2=el.dataset.rtreset, k='rtreset:'+c2;
+    if(armDel===k){ armDel=null; resetOrder(c2); } else arm(k); }; });
   q('[data-rtday]',function(el){ el.onclick=function(){ S.rtDay=el.dataset.rtday; save(); render(); }; });
   q('[data-rtdrop]',function(el){ el.onclick=function(){ var c=el.dataset.rtc, n=el.dataset.rtdrop;
     var o=outList(c); if(o.indexOf(n)<0) o.push(n); save(); render(); }; });
@@ -2730,15 +3026,13 @@ function backupDue(){
   if(!S.lastBackup) return true;
   try{ return (new Date(localDate())-new Date(S.lastBackup))/86400000 >= 7; }catch(e){ return true; } }
 function backupBarHTML(){
+  // One quiet line, at the BOTTOM, only when there is something to lose. The old version was
+  // a doom-copy amber box greeting the athlete at startup - right message, wrong delivery.
   if(!backupDue()||S.backupSnooze===localDate()) return '';
   var never=!S.lastBackup;
-  return '<div class="bkbar"><div class="bkt">'+(never?'Your training is only on this device'
-      :'Last backup '+S.lastBackup)+'</div>'
-   +'<div class="bkm">'+(never
-      ? 'Clear your browser or lose this phone and it is gone. Save a backup file now \u2014 it takes one tap.'
-      : 'It has been a week. Save a fresh backup.')+'</div>'
-   +'<div class="bkrow"><div class="daybtn" data-bkgo="1" style="flex:1;border-color:var(--amber);color:var(--amber)">Back up now</div>'
-   +'<div class="daybtn" data-bksnooze="1" style="flex:0 0 auto;color:var(--faint)">Later</div></div></div>'; }
+  return '<div class="bkline">'
+   +(never? 'Your log lives only on this phone' : 'Last backup '+S.lastBackup)
+   +' \u2014 <span data-bkgo="1">Back up</span><span class="du-dot">\u00b7</span><span data-bksnooze="1">Later</span></div>'; }
 function markBackedUp(){ S.lastBackup=localDate(); save(); }
 
 // ================= ADD TO HOME SCREEN =================
@@ -2823,7 +3117,7 @@ const BENCH={
  unlockNote:'Log a 1-mile time trial to unlock personalized run paces.'
 };
 const COPY={
- profileHeading:'Your profile - the card programs itself around this',
+ profileHeading:'Your profile<span class="coach"> - the card programs itself around this</span>',
  rampSummary:'Warm-up - 5 to 8 minutes, injury insurance',
  rampBannerLabel:'Warm up before every session:',
  rampBannerBody:' 3-4 min easy sweat, then activation and mobility for the day\u2019s pattern, then light ramp sets into the first lift.',
@@ -2952,6 +3246,18 @@ const SCHEMA_V = 2; // bump this whenever the saved-state shape changes, and add
 function esc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 let storageOK=null, logKeys=[], logOpen=null, logCache={};
 let armDel=null;
+let profEdit=false;   // profile shows as a composed identity; editing is an explicit mode
+// Prescription-driving sections are LOCKED by default: an accidental brush on a max stepper
+// or the goal select silently reprograms every barbell load. Edit is a deliberate act.
+let mxEdit=false, bgEdit=false;
+let howtoOpen={};   // Minimal mode: which how-to blocks the athlete has expanded this visit
+let restWOpen=false;  // rest-screen weight adjust: open stepper survives the per-second repaint
+// Hold-to-fire for the rest screen's consequential buttons: a phone being pocketed or
+// picked up brushes taps constantly; logging a set or skipping rest must take a DELIBERATE
+// ~0.65s hold. State is wall-clock so the per-second repaint can't reset a hold in progress.
+let holdK=null, holdT0=0, holdTimer=null, holdFired=0, holdHinted=false;
+const HOLD_MS=650;
+function holdCancel(){ holdK=null; if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; } try{ paintRest(true); }catch(e){} }
 let holdT=null;
 // tracks which countdown/GO beeps already fired for the current rest, so each sounds once.
 // This was never declared before v28 — reading it threw a ReferenceError on every one of the
@@ -2961,6 +3267,9 @@ var aMark={sec:null, go:null};
 let wlSent=null;
 let AC=null; const audioMark={sec:null,go:null};
 const THEMES=[{id:'coach',name:'Coach',v:{}},
+ // Iron: the mark's native world - cast-iron ground, burnished amber, chalk ink. The boot
+ // ident draws on this exact background, so startup fades from logo to app without a seam.
+ {id:'iron', name:'Iron', v:{'--bg':'#14161A','--panel':'#1C2026','--panel2':'#22262D','--line':'#2E333B','--chalk':'#F0ECE4','--dim':'#A8AEB8','--faint':'#6C727C','--amber':'#E0A94C','--amber-ink':'#171A1F','--green':'#8FBF6F','--red':'#E2574C'}},
  {id:'night',name:'Night',v:{'--bg':'#12151A','--panel':'#1A1F27','--panel2':'#232A34','--line':'#333C48','--chalk':'#EDF1F5','--dim':'#9BA6B3','--faint':'#6B7683','--amber':'#5B8CFF','--amber-ink':'#0A1226','--green':'#5BD98A','--red':'#FF6B5E'}},
  {id:'nightops',name:'Night Ops',v:{'--bg':'#0B0E11','--panel':'#12161B','--panel2':'#1A2027','--line':'#2A333D','--chalk':'#E8EDF2','--dim':'#9AA7B4','--faint':'#66727E','--amber':'#4FC3F7','--amber-ink':'#04222E','--green':'#5BD6A0','--red':'#FF6B5E'}},
  {id:'desert', name:'Desert Tan', v:{'--bg':'#1B140C','--panel':'#251C11','--panel2':'#2F2416','--line':'#4A3A22','--chalk':'#F4EBDD','--dim':'#C4B49A','--faint':'#8F8168','--amber':'#E0A458','--amber-ink':'#2A1A05','--green':'#9DB86A','--red':'#E2574C'}},
@@ -2994,7 +3303,7 @@ const FONTS=[
  {id:'typewriter',name:'Typewriter', f:'ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace'}
 ];
 function applyTheme(){
-  const t=THEMES.find(x=>x.id===(S.theme||'coach'))||THEMES[0];
+  const t=THEMES.find(x=>x.id===(S.theme||'iron'))||THEMES[0];
   const r=document.documentElement.style;
   ['--bg','--panel','--panel2','--line','--chalk','--dim','--faint','--amber','--amber-ink','--green','--red'].forEach(k=>r.removeProperty(k));
   Object.keys(t.v||{}).forEach(k=>r.setProperty(k,t.v[k]));
@@ -3414,6 +3723,15 @@ function beep(f,ms){ if(!S.sound) return; try{ ensureAudio(); if(!AC) return;
 const CD_START=10;              // countdown begins 10s out
 let schedB={key:null, nodes:[]};
 function toneMul(){ return ({deep:0.72, std:1, bright:1.35})[S.tone||'std']||1; }
+// Run a sound AFTER the context is truly awake. resume() is async, so checking
+// AC.state synchronously right after ensureAudio() skips the play on exactly the tap
+// that woke the system - the sound-picker previews were silent for precisely this reason.
+function audioReady(cb){ try{
+  ensureAudio(); if(!AC) return;
+  if(AC.state==='running'){ cb(); return; }
+  var p=AC.resume();
+  if(p&&p.then) p.then(function(){ try{ if(AC.state==='running') cb(); }catch(e){} }).catch(function(){});
+}catch(e){} }
 function toneAt(freq, dur, when, gain, type){
   if(!AC) return null;
   try{
@@ -3470,7 +3788,11 @@ async function wlAcquire(){ try{ if(navigator.wakeLock){ wlSent=await navigator.
 document.addEventListener('visibilitychange',()=>{ if(S.wl && document.visibilityState==='visible' && !wlSent) wlAcquire(); });
 function arm(key){ armDel=key; render(); setTimeout(function(){ try{ if(armDel===key){armDel=null;render();} }catch(e){ try{__logErr('armTimer',e.message,'arm',0,0,e);}catch(x){} } },4000); }
 async function probeStorage(){
-  if(!window.storage){ storageOK=false; stFailHard(); return; }
+  // Mode-aware: the round-trip below routes through whichever backend ST_MODE selected
+  // (Claude bridge OR plain localStorage). The old first line demanded the bridge before
+  // trying anything - so GitHub-hosted cards with perfectly working localStorage reported
+  // "Storage unavailable" and benched the session-log feature for no reason.
+  if(ST_MODE==='none'){ storageOK=false; stFailHard(); return; }
   var ok=await stSet(LOGP+'probe','1');
   if(ok){ var v=await stGet(LOGP+'probe'); await stDel(LOGP+'probe'); storageOK=(v==='1'); }
   else storageOK=false;
@@ -3587,8 +3909,8 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(S.calSel===undefined) S.calSel=null;
   if(!S.cycleLog) S.cycleLog=[];
   if(S.cycleAck==null) S.cycleAck=0;
-  if(!S.theme) S.theme='coach';
-  if(S.theme==='nova') S.theme='coach';   // 'Nova' was a duplicate of Coach's empty palette - migrate old saves
+  if(!S.theme) S.theme='iron';            // startup wears the mark's tones - splash to app, one world
+  if(S.theme==='nova') S.theme='iron';    // Nova WAS dark-and-amber - Iron is its faithful heir
   if(!S.font) S.font='system';
   if(!S.readyH) S.readyH=[];
   if(S.fatAck===undefined) S.fatAck=null;
@@ -3618,6 +3940,7 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
 }
 
 function render(){
+  try{ document.body.classList.toggle('ui-min', S.uiMode==='min'); }catch(e){}
   // the calculator lives outside the app container, so paint it on every render regardless of
   // which screen renderInner chose - including onboarding, where wire() never runs
   try{ var _r=renderInner(); calcPaint(); coachPaint(); return _r; }
@@ -3634,8 +3957,11 @@ function renderInner(){
     return;
   }
   const d=dayObj(); const app=document.getElementById('app');
-  let h='<header><div class="eyebrow">'+PLAN.block+'</div><h1>Session Card</h1>'
-      +'<div class="sub">Starts '+PLAN.start+' \u00b7 loads as of '+PLAN.builtOn+' \u00b7 '+BUILD+'</div></header>';
+  let h='<header class="hdr-id">'
+    +(S.avatar? '<img class="ava-mini" src="'+S.avatar+'" alt="">' : '<span class="hdr-mark">'+brandMark(84)+'</span>')
+    +'<div class="hdr-tx"><div class="eyebrow">'+PLAN.block+'</div><h1>Training Card'
+    +(S.profileName? ' <span class="hdr-nm">\u00b7 '+esc(S.profileName)+'</span>':'')+'</h1>'
+      +'<div class="sub">Starts '+PLAN.start+' \u00b7 loads as of '+PLAN.builtOn+' \u00b7 '+BUILD+'</div></div></header>';
   var __td=schedTodayCode();
   // Two rows, two visual languages: training days are chips (content), app sections are a
   // tab strip (navigation). One row of 10+ identical chips read as clutter - because it was.
@@ -3671,9 +3997,39 @@ function renderInner(){
   if(S.day==='MAX'){
     const G=goalDef();
     h+='<div class="sub" style="margin-top:8px">'+COPY.profileHeading+'</div>';
+    h+=(function(){
+        var initials=esc(((S.profileName||'').trim().split(/\s+/).map(function(x){return x[0]||'';}).join('').slice(0,2).toUpperCase())||'\u25CB');
+        var circle=function(cls){ return '<div class="'+cls+'"'+(profEdit?' id="avaTap" title="Tap to change the photo"':'')+'>'
+          +(S.avatar? '<img src="'+S.avatar+'" alt="">':'<span class="ava-init">'+initials+'</span>')+'</div>'; };
+        if(profEdit){
+          return '<div class="profcard pc-edit"><div class="ava-row">'+circle('ava')
+            +'<div class="ava-fields">'
+            +'<input class="dtin" id="pName" maxlength="40" placeholder="Your name" value="'+esc(S.profileName||'')+'">'
+            +'<input class="dtin" id="pTag" maxlength="60" placeholder="One line \u2014 goal, gym, motto" value="'+esc(S.profileTag||'')+'" style="margin-top:6px">'
+            +'</div></div>'
+            +'<div class="prof-acts">'
+            +(S.avatar? '<span class="ava-rm" id="avaRm">Remove photo</span>':'<span class="ava-rm" id="avaTap2">Add a photo</span>')
+            +'<span style="flex:1"></span>'
+            +'<div class="daybtn" id="profCancel" style="color:var(--faint)">Cancel</div>'
+            +'<div class="daybtn" id="profSave" style="border-color:var(--amber);color:var(--amber)">Save</div>'
+            +'</div>'
+            +'<input type="file" id="avaFile" accept="image/*" style="display:none"></div>';
+        }
+        if(!S.profileName && !S.avatar && !S.profileTag){
+          return '<div class="profcard pc-empty"><div class="daybtn" id="profEditBtn" style="flex:0 0 auto">Set up your profile</div>'
+            +'<div class="prof-hint">Your name and photo travel with your backups \u2014 this card is yours.</div></div>';
+        }
+        return '<div class="profcard">'+circle('ava')
+          +'<div class="prof-tx"><div class="prof-nm">'+esc(S.profileName||'')+'</div>'
+          +(S.profileTag? '<div class="prof-tag">'+esc(S.profileTag)+'</div>':'')
+          +'</div><span class="prof-edit" id="profEditBtn">Edit</span></div>';
+      })();
     h+='<div class="ex"><div class="ex-head">'
-      +'<div class="ex-name">Body & Goal</div>'
-      +'<div class="ed-row" style="margin-top:10px"><div class="ed-label">Height</div>'
+      +'<div class="ex-name">Body & Goal'+(bgEdit?'':' <span class="sec-edit" data-bglock="1">Edit</span>')+'</div>'
+      +(bgEdit? '' :
+        '<div class="sec-ro">'+S.profile.hFt+' ft '+S.profile.hIn+' \u00b7 '+S.profile.wt+' lb \u00b7 '
+        +(goalDef()? goalDef().label : 'Block 1 \u2014 Squat Priority (coach-built)')+'</div>')
+      +(bgEdit? '<div class="ed-row" style="margin-top:10px"><div class="ed-label">Height</div>'
       +'<input type="number" class="dtin" id="pHFt" value="'+S.profile.hFt+'" min="4" max="7" style="width:64px"> ft '
       +'<input type="number" class="dtin" id="pHIn" value="'+S.profile.hIn+'" min="0" max="11" style="width:64px"> in</div>'
       +'<div class="ed-row"><div class="ed-label">Weight</div>'
@@ -3688,13 +4044,14 @@ function renderInner(){
       +'<option value="cut"'+(S.profile.goal==='cut'?' selected':'')+'>Lose Weight \u2014 cut, keep muscle</option>'
       +'<option value="build"'+(S.profile.goal==='build'?' selected':'')+'>Build Muscle \u2014 lean gain</option>'
       +'</select></div>'
+      +'<div class="sec-acts"><span class="sec-edit" data-bglock="0">Done</span></div>' : '')
       +(G? '<div class="cue" style="padding:8px 0 0">'+G.label+': mains '+G.sets+'\u00d7'+G.reps+' at '
           +Math.round(G.pct[0]*100)+'\u2013'+Math.round(G.pct[4]*100)+'% of max \u00b7 rest '+G.restMain
           +' \u00b7 accessories '+G.accReps+' reps</div>'
         : '<div class="cue" style="padding:8px 0 0">Coach-built block: loads and waves exactly as programmed for the squat correction.</div>')
       +'</div></div>';
-    h+='<div class="sub" style="margin-top:12px">'+BENCH.anchorLabel+'</div>';
-    h+='<div class="ex"><div class="ex-head">'
+    h+='<div class="sub" id="benchSec" style="margin-top:12px">'+BENCH.anchorLabel+'</div>';
+    h+='<div class="ex" id="benchCard"><div class="ex-head">'
      +'<div class="ed-row" style="margin-top:2px"><div class="ed-label">Date</div><input type="date" class="dtin" id="r2d" value="'+localDate()+'"></div>'
      +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Time (mm:ss)</div><input class="dtin" id="r2t" placeholder="'+BENCH.placeholder+'" inputmode="numeric"></div>'
      +'<div class="ed-row" style="margin-top:8px"><div class="daybtn" data-r2go="1" style="background:var(--amber);color:var(--amber-ink,#111);border-color:var(--amber)">Log '+BENCH.short+'</div></div>';
@@ -3704,7 +4061,7 @@ function renderInner(){
       else { h+='<div class="cue" style="padding:6px 0 0">'+BENCH.unlockNote+'</div>'; }
     })();
     h+='</div></div>';
-    h+='<div class="sub" style="margin-top:12px">Body composition</div>';
+    h+='<div class="sub" id="bcompSec" style="margin-top:12px">Body composition</div>';
     h+='<div class="ex"><div class="ex-head">'
      +'<div class="ed-row" style="margin-top:2px"><div class="ed-label">Date</div><input type="date" class="dtin" id="bcd" value="'+localDate()+'"></div>'
      +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Weight (lb)</div><input class="dtin" id="bcw" placeholder="200" inputmode="decimal"></div>'
@@ -3723,7 +4080,10 @@ function renderInner(){
       }
     })();
     h+='</div></div>';
-    h+='<div class="sub" style="margin-top:12px">Programming maxes \u2014 the engine behind every barbell load</div>';
+    h+='<div class="sub" style="margin-top:12px">Programming maxes<span class="coach"> \u2014 the engine behind every barbell load</span>'
+      +(mxEdit? ' <span class="sec-edit" data-mxlock="0">Done</span>'
+              : ' <span class="sec-edit" data-mxlock="1">Edit</span>')+'</div>';
+    if(mxEdit) h+='<div class="cue keep" style="padding:0 0 4px;color:var(--amber)">Unlocked \u2014 every change here reprograms the barbell loads.</div>';
     MAXINFO.forEach(mi=>{
       const m=S.maxes[mi.k], prev=topLoadPreview(mi.k), base=PLAN.maxes[mi.k];
       const jump = Math.abs(m-base)/base > 0.10;
@@ -3731,7 +4091,7 @@ function renderInner(){
         +'<div class="ex-name">'+mi.name+'</div>'
         +'<div class="target-label">Programming max \u2014 a heavy single you could hit today, not your all-time PR</div>'
         +'<div class="ex-rx"><span class="load mono">'+m+'<small> lb</small></span>'
-        +'<div class="step"><button data-mx="'+mi.k+'" data-d="-5">−5</button><div class="val mono" style="min-width:20px"></div><button data-mx="'+mi.k+'" data-d="5">+5</button></div></div>'
+        +(mxEdit? '<div class="step"><button data-mx="'+mi.k+'" data-d="-5">−5</button><div class="val mono" style="min-width:20px"></div><button data-mx="'+mi.k+'" data-d="5">+5</button></div>':'')+'</div>'
         +'<div class="sleeve-label">drives '+mi.lifts+' \u00b7 this week\u2019s top set: '+(prev!=null? prev+' lb':'\u2014')+'</div>'
         +e1Spark(mi.k)
         +(function(){ const c=(S.rmc&&S.rmc[mi.k])||{};
@@ -3758,13 +4118,16 @@ function renderInner(){
     h+='<div class="sub" style="margin-top:12px">Appearance</div>';
     h+='<div class="ex"><div class="ex-head">'
       +'<div class="target-label">Theme</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
-      +THEMES.map(t=>'<div class="chip'+((S.theme||'coach')===t.id?' on':'')+'" data-thm="'+t.id+'" style="flex:1 1 30%;min-width:90px;font-size:12px;padding:9px 0">'+t.name+'</div>').join('')
+      +THEMES.map(t=>'<div class="chip'+((S.theme||'iron')===t.id?' on':'')+'" data-thm="'+t.id+'" style="flex:1 1 30%;min-width:90px;font-size:12px;padding:9px 0">'+t.name+'</div>').join('')
       +'</div>'
       +'<div class="target-label" style="margin-top:12px">Font</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
       +FONTS.map(f=>'<div class="chip'+((S.font||'system')===f.id?' on':'')+'" data-fnt="'+f.id+'" style="flex:1 1 44%;min-width:110px;font-size:13px;padding:9px 0;font-family:'+f.f.replace(/"/g,'&quot;')+'">'+f.name+'</div>').join('')
       +'</div>'
       +'<div class="target-label" style="margin-top:12px">Text size</div><div class="chiprow" style="margin-top:6px;gap:6px">'
       +[['std','Standard'],['lg','Large'],['xl','Extra']].map(z=>'<div class="chip'+((S.tsize||'std')===z[0]?' on':'')+'" data-tsz="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
+      +'</div>'
+      +'<div class="target-label" style="margin-top:12px">Coaching text</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+      +[['full','Full'],['min','Minimal']].map(z=>'<div class="chip'+((S.uiMode||'full')===z[0]?' on':'')+'" data-uimode="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
       +'</div>'
       +'<div class="exnote" style="padding:8px 0 0">Applies everywhere instantly and sticks across sessions. Daylight is the outdoor/bright-gym option.</div>'
       +'</div></div>';
@@ -3831,7 +4194,6 @@ function renderInner(){
   try{ h+=acBannerHTML(); }catch(e){}
   try{ h+=fatigueHTML(); }catch(e){}
   try{ h+=prBannerHTML(); }catch(e){}
-  try{ h+=backupBarHTML(); }catch(e){}
   h+=deckHeadHTML();
   if(S.view==='deck'){ h+=deckHTML(); h+=dayUtilHTML(); app.innerHTML=h; wire(); wireFocus(); return; }
   d.exercises.forEach((ex,i)=>{
@@ -3884,12 +4246,24 @@ function renderInner(){
       +'</div></div>'
       +(!subbed && ex.cue? '<div class="cue">Cue \u2014 '+ex.cue+'</div>':'')
       +((ex.note && (!goalDef() || !ex.wk))? '<div class="exnote">'+ex.note+'</div>':'')
-      +(function(){var t=howtoFor(st.sub||ex.name);return t?'<div class="howto"><div class="k">How to do it</div><p>'+t+'</p></div>':'';})()
+      +(function(){var t=howtoFor(st.sub||ex.name); if(!t) return '';
+        // Minimal coaching: form notes fold to one quiet line, one tap from full text -
+        // a veteran's screen stays clean, but the safety lines are never out of reach.
+        if(S.uiMode==='min' && !howtoOpen[i])
+          return '<div class="howto-min" data-howto="'+i+'">Form notes \u203a</div>';
+        return '<div class="howto"'+(S.uiMode==='min'?' data-howto="'+i+'"':'')+'><div class="k">How to do it</div><p>'+t+'</p></div>'; })()
       +'<div class="sets">'
-      +st.sets.map((s,j)=>{
+      +(function(){
+        // Sets log in order: only the FIRST pending set is live (it glows - "press me when
+        // done"); pending sets beyond it are locked so a mid-training stray thumb cannot
+        // log set 3 before set 1. Already-logged sets stay tappable for corrections.
+        var firstPend=-1; st.sets.forEach(function(s2,k){ if(firstPend<0 && s2.st==='pend') firstPend=k; });
+        return st.sets.map((s,j)=>{
           const v0=s.st==='pend'?(j+1):(s.st==='hit'?'✓':(s.reps!=null?s.reps:'±')); const v=(s.st!=='pend'&&s.g)? v0+'!' : v0;
-          return '<div class="set '+(s.st!=='pend'?s.st:'')+'" data-ex="'+i+'" data-set="'+j+'"><div class="n">SET '+(j+1)+'</div><div class="v mono">'+v+'</div>'+(s.w!=null? '<div class="mono" style="font-size:9px;color:var(--amber)">'+s.w+'</div>':'')+'</div>';
-        }).join('')
+          const up=(s.st==='pend' && j===firstPend), lk=(s.st==='pend' && j>firstPend);
+          return '<div class="set '+(s.st!=='pend'?s.st:(up?'up':'lk'))+'" data-ex="'+i+'" data-set="'+j+'"'+(lk?' data-lk="1"':'')+'><div class="n">SET '+(j+1)+'</div><div class="v mono">'+v+'</div>'+(s.w!=null? '<div class="mono" style="font-size:9px;color:var(--amber)">'+s.w+'</div>':'')+'</div>';
+        }).join('');
+      })()
       +'<div class="set" data-addset="'+i+'" style="opacity:.78"><div class="n">ADD</div><div class="v mono">+</div></div>'
       +((st.sets.length && st.sets[st.sets.length-1].added && st.sets[st.sets.length-1].st==='pend')? '<div class="set" data-subset="'+i+'" style="opacity:.55"><div class="n">UNDO</div><div class="v mono">\u2212</div></div>':'')
       +'</div>'
@@ -4009,10 +4383,46 @@ function setEditorHTML(i, ex, st){
 }
 
 
+// Photos are stored IN the card's state, so they ride every backup - which is exactly why
+// they must be small. Downscale to a 256px square JPEG and hard-cap the stored size: a raw
+// camera photo left as-is could crowd out actual training data, the unforgivable trade.
+var AVA_MAX=100000;   // ~100 KB ceiling on the stored data URL
+function setAvatar(dataUrl){
+  if(!dataUrl || dataUrl.slice(0,10)!=='data:image'){ alertToast('That is not an image'); return false; }
+  if(dataUrl.length>AVA_MAX){ alertToast('Photo too large even after shrinking'); return false; }
+  S.avatar=dataUrl; save(); render(); return true;
+}
+function avatarFromFile(file){
+  try{
+    var rd=new FileReader();
+    rd.onload=function(){
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var side=256, c=document.createElement('canvas'); c.width=side; c.height=side;
+          var ctx=c.getContext('2d');
+          if(!ctx){ setAvatar(String(rd.result)); return; }   // environments without canvas: try as-is (cap still guards)
+          var m=Math.min(img.width,img.height);
+          ctx.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,side,side);
+          var out=c.toDataURL('image/jpeg',0.82);
+          if(out.length>AVA_MAX) out=c.toDataURL('image/jpeg',0.55);
+          setAvatar(out);
+        }catch(e){ alertToast('Could not process that photo'); }
+      };
+      img.onerror=function(){ alertToast('Could not read that photo'); };
+      img.src=String(rd.result);
+    };
+    rd.readAsDataURL(file);
+  }catch(e){ alertToast('Could not read that photo'); }
+}
 function dayUtilHTML(){
   // Session utilities live at the BOTTOM of the training day only - quiet text, out of the
   // way, present exactly where "reset this day" and "something looks wrong" can occur.
-  return '<div class="dayutil"><span data-du="reset">Reset day</span><span class="du-dot">\u00b7</span><span data-du="report">Report a problem</span></div>';
+  var bk=''; try{ bk=backupBarHTML(); }catch(e){}
+  var rk='dureset:'+S.day;
+  var rlab=(armDel===rk)? '<span data-du="reset" class="warn">Wipe today\u2019s logged sets? Tap again</span>'
+                        : '<span data-du="reset">Reset day</span>';
+  return bk+'<div class="dayutil">'+rlab+'<span class="du-dot">\u00b7</span><span data-du="report">Report a problem</span></div>';
 }
 function paintFoot(){ var el=document.getElementById('footInner'); if(!el) return;
   var training=false;
@@ -4054,6 +4464,7 @@ function wire(){
     save(); render();
   });
   document.querySelectorAll('[data-day]').forEach(el=>el.onclick=()=>{
+    mxEdit=false; bgEdit=false;
     const nd=el.dataset.day, wasT=S.lastTDay;
     S.day=nd;
     // Switching to a DIFFERENT training day lands on its first exercise with work left -
@@ -4073,6 +4484,7 @@ function wire(){
   const pw=document.getElementById('pWt'); if(pw) pw.onchange=()=>{S.profile.wt=Math.max(80,Math.min(400,parseInt(pw.value)||200));save();render();};
   const pg=document.getElementById('pGoal'); if(pg) pg.onchange=()=>{S.profile.goal=pg.value;save();render();};
   document.querySelectorAll('[data-mxapply]').forEach(b=>b.onclick=()=>{
+    if(!mxEdit){ alertToast('Maxes are locked \u2014 tap Edit above to change them'); return; }
     S.maxes[b.dataset.mxapply]=+b.dataset.v; save(); render();
   });
   document.querySelectorAll('[data-blkapply]').forEach(b=>b.onclick=()=>{ S.maxes[b.dataset.blkapply]=+b.dataset.v; save(); render(); });
@@ -4084,18 +4496,48 @@ function wire(){
   document.querySelectorAll('[data-thm]').forEach(b=>b.onclick=()=>{ S.theme=b.dataset.thm; save(); applyTheme(); render(); });
   document.querySelectorAll('[data-fnt]').forEach(b=>b.onclick=()=>{ S.font=b.dataset.fnt; save(); applyTheme(); render(); });
   document.querySelectorAll('[data-tsz]').forEach(b=>b.onclick=()=>{ S.tsize=b.dataset.tsz; save(); applyTheme(); render(); });
+  document.querySelectorAll('[data-uimode]').forEach(b=>b.onclick=()=>{ S.uiMode=b.dataset.uimode; save(); render(); });
+  document.querySelectorAll('[data-howto]').forEach(b=>b.onclick=()=>{ var i2=+b.dataset.howto; howtoOpen[i2]=!howtoOpen[i2]; render(); });
   document.querySelectorAll('[data-radj]').forEach(b=>b.onclick=()=>{ S.restAdj=+b.dataset.radj; save(); render(); });
-  document.querySelectorAll('[data-tone]').forEach(b=>b.onclick=()=>{ S.tone=b.dataset.tone; save(); render(); try{ ensureAudio(); if(AC&&AC.state==='running') toneAt(SND().tick.f,0.12,AC.currentTime+0.01,0.28,SND().tick.w); }catch(e){} });
+  document.querySelectorAll('[data-tone]').forEach(b=>b.onclick=()=>{ S.tone=b.dataset.tone; save(); render();
+    audioReady(function(){ toneAt(SND().tick.f,0.12,AC.currentTime+0.01,0.28,SND().tick.w); }); });
   document.querySelectorAll('[data-snd]').forEach(b=>b.onclick=()=>{ S.snd=b.dataset.snd; save(); render();
-    try{ ensureAudio(); if(AC&&AC.state==='running'){ const V=SND(), t0=AC.currentTime+0.01;
+    audioReady(function(){ const V=SND(), t0=AC.currentTime+0.01;
       toneAt(V.tick.f,V.tick.d,t0,V.tick.g,V.tick.w);
       V.go.forEach(function(t){ toneAt(t[0],t[1],t0+0.5+t[2],Math.max(0.42,V.tick.g+0.12),V.gw); });
-    } }catch(e){} });
+    }); });
   document.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{ S.jump=+b.dataset.jump; save(); render(); });
   document.querySelectorAll('[data-brth]').forEach(b=>b.onclick=()=>{ S.breathe=!!(+b.dataset.brth); save(); render(); });
+  // profile identity: display-first; editing is an explicit mode with Save/Cancel
+  var pEB=document.getElementById('profEditBtn');
+  if(pEB) pEB.onclick=function(){ profEdit=true; render(); };
+  var pSv=document.getElementById('profSave'), pCx=document.getElementById('profCancel');
+  if(pSv) pSv.onclick=function(){
+    var pN=document.getElementById('pName'), pT=document.getElementById('pTag');
+    S.profileName=(pN? pN.value:'').trim().slice(0,40);
+    S.profileTag=(pT? pT.value:'').trim().slice(0,60);
+    profEdit=false; save(); render(); };
+  if(pCx) pCx.onclick=function(){ profEdit=false; render(); };
+  var avT=document.getElementById('avaTap')||document.getElementById('avaTap2');
+  var avF=document.getElementById('avaFile'), avR=document.getElementById('avaRm');
+  if(avT&&avF){ avT.onclick=function(){ avF.click(); };
+    avF.onchange=function(){ if(avF.files&&avF.files[0]) avatarFromFile(avF.files[0]); }; }
+  if(avR) avR.onclick=function(){ S.avatar=null; save(); render(); };
   document.querySelectorAll('[data-du]').forEach(b=>b.onclick=()=>{
-    const m=document.getElementById(b.dataset.du==='reset'? 'resetBtn':'copyBtn'); if(m) m.click(); });
+    if(b.dataset.du!=='reset'){ const m=document.getElementById('copyBtn'); if(m) m.click(); return; }
+    // Reset is destructive, so it obeys the card's two-tap rule - and it ALWAYS answers,
+    // because a silent reset on an empty day is indistinguishable from a broken button.
+    const rk='dureset:'+S.day;
+    if(armDel!==rk){ arm(rk); return; }
+    armDel=null;
+    const n=Object.keys(S.data).filter(k=>k.startsWith(cyc()+'c|'+S.week+'|'+S.day+'|'))
+      .reduce((a,k)=>a+((S.data[k].sets||[]).filter(x=>x.st&&x.st!=='pend').length),0);
+    const m=document.getElementById('resetBtn'); if(m) m.click();
+    alertToast(n? 'Day reset \u2014 '+n+' logged set'+(n===1?'':'s')+' cleared' : 'Nothing was logged today \u2014 already clean'); });
+  document.querySelectorAll('[data-mxlock]').forEach(b=>b.onclick=()=>{ mxEdit=b.dataset.mxlock==='1'; render(); });
+  document.querySelectorAll('[data-bglock]').forEach(b=>b.onclick=()=>{ bgEdit=b.dataset.bglock==='1'; render(); });
   document.querySelectorAll('[data-mx]').forEach(b=>b.onclick=()=>{
+    if(!mxEdit) return;
     const k=b.dataset.mx; S.maxes[k]=Math.max(45, S.maxes[k]+(+b.dataset.d)); save(); render();
   });
   document.querySelectorAll('[data-week]').forEach(el=>el.onclick=()=>{S.week=+el.dataset.week;save();render();});
@@ -4158,6 +4600,7 @@ function wire(){
   });
  document.querySelectorAll('.set[data-set]').forEach(el=>el.onclick=()=>{ if(el.dataset.set==null) return;
     ensureAudio();
+    if(el.dataset.lk){ alertToast('One at a time \u2014 log the glowing set first'); return; }
     const i=+el.dataset.ex, j=+el.dataset.set, ex=dayObj().exercises[i], st=exState(i,ex), s=st.sets[j];
     if(s.st==='pend'){s.st='hit';s.reps=null;s.rir=null;s.t=Date.now();st.open=-1;}
     else if(s.st==='hit'){s.st='dev';s.reps=defReps(ex);st.open=j;}
@@ -4570,7 +5013,7 @@ function adhocWarnHTML(name){
 function adhocHTML(){
   var C=S.adhoc;
   if(!C||!C.active){
-    return '<div class="block"><h3>Check any lift, right now</h3>'
+    return '<div class="block" id="adhocSec"><h3>Check any lift, right now</h3>'
      +'<div style="font-size:13px;line-height:1.6">Ten spare minutes at the end of a session, or a movement the card has never seen you push \u2014 '
      +'run the same accuracy check on it. Curls, pulldowns, machines, anything. Every check sharpens your personal correction; '
      +'a fresh check on a main barbell lift also counts as real evidence toward your numbers.</div>'
@@ -5374,7 +5817,7 @@ function roadAheadHTML(forPrint){
 }
 function printPlanHTML(){
   var h='<div class="sheet">';
-  h+='<div class="sh-head"><div><div class="sh-title">Training Card \u00b7 Full Plan</div>'
+  h+='<div class="sh-head"><div><div class="sh-mark">'+brandMark(120,'ink')+'</div><div class="sh-title">Training Card \u00b7 Full Plan</div>'
     +'<div class="sh-who">'+esc(PLAN.block)+'</div>'
     +'<div class="sh-meta">'+(S.profile? (S.profile.hFt+"'"+S.profile.hIn+'" \u00b7 '+S.profile.wt+' lb \u00b7 ') : '')
     +'Starts '+PLAN.start+' \u00b7 printed '+localDate()+'</div></div>'
@@ -5819,6 +6262,7 @@ document.getElementById('resetBtn').onclick=()=>{
 // If a service worker is hosted beside this page, register it so the card opens offline and
 // behaves like an installed app. With no worker present - a bare file, or a plain upload - this
 // quietly does nothing.
+try{ bootIdent(); }catch(e){}
 try{
   if('serviceWorker' in navigator && String(location.protocol).indexOf('http')===0){
     window.addEventListener('load', function(){
@@ -5846,7 +6290,7 @@ load().then(async()=>{
       var pm=PRESET.maxes||null;
       if(pm){
         S.genPlan=generatePlan({maxes:pm, goal:S.onb.goal, days:S.onb.days,
-          limits:S.onb.limits, emphasis:S.onb.emph, weekdays:S.onb.wd});
+          limits:S.onb.limits, emphasis:S.onb.emph, weekdays:S.onb.wd, weak:S.onb.weak||'auto'});
         PLAN=S.genPlan; S.maxes=Object.assign({}, S.genPlan.maxes);
         S.day=PLAN.days[0].code; S.week=1;
       } else {
@@ -6126,6 +6570,12 @@ function generatePlan(cfg){
   // cfg: {maxes:{squat,bench,dead,ohp}, goal, days, limits:[], name}
   var maxes={}; ['squat','bench','dead','ohp'].forEach(function(k){ maxes[k]=PG_r5(cfg.maxes[k]||95); });
   var diag=PG_diagnose(maxes);
+  // the athlete's answer to the priority question outranks the automatic diagnosis:
+  // maybe the "weak" lift is weak because of an injury they are managing, or maybe they
+  // simply want a different fight this block. 'auto' keeps the diagnosis; a lift name
+  // forces it; 'none' declines priority entirely.
+  if(cfg.weak==='none'){ diag.weak=null; }
+  else if(cfg.weak && cfg.weak!=='auto'){ diag.weak=cfg.weak; diag.forced=true; }
   var tpl=PG_TEMPLATES[cfg.days] || PG_TEMPLATES[4];
   var goal=cfg.goal||'general';
   var today=new Date(); var iso=new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
@@ -6154,7 +6604,8 @@ function generatePlan(cfg){
   });
   days=PG_applyEmphasis(days, cfg.emphasis||'balanced', maxes);
   var out={
-    block:'Starter Block - '+({strength:'Strength',muscle:'Muscle',lean:'Lean Out',general:'General Fitness'}[goal]||'General'),
+    block:'Starter Block - '+({strength:'Strength',muscle:'Muscle',lean:'Lean Out',general:'General Fitness'}[goal]||'General')
+      +(diag.weak? ' \u00b7 '+({squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Press'}[diag.weak])+' Priority':''),
     start:iso, builtOn:iso, weeks:6, v:1,
     maxes:maxes, days:days, diag:diag, limits:(cfg.limits||[]),
     medical:((cfg.limits||[]).indexOf('bp')>-1)? 'Cleared-by-doctor training only. Effort stays conversational, no breath-holding grinds.' : null
@@ -6197,9 +6648,21 @@ var ONB_BWM={squat:{new:.75,some:1.25,vet:1.75}, bench:{new:.50,some:.90,vet:1.3
 // Five reps only while it is genuinely light; singles near the top. Total work stays about 14 reps.
 var ONB_SCHED=[{p:.40,r:5},{p:.60,r:3},{p:.75,r:2},{p:.85,r:1},{p:.92,r:1}];
 var ONB_ORDER=['squat','bench','dead','ohp'];
-var ONB_STEPS=['welcome','goal','body','experience','schedule','weekdays','emphasis','limits','calibrate','review'];
+var ONB_STEPS=['welcome','goal','body','experience','schedule','weekdays','emphasis','limits','calibrate','priority','review'];
 
-function ONB(){ if(!S.onb) S.onb={step:0, goal:null, sex:null, age:30, wt:180, days:null, exp:null,
+// The card's founding move, offered to everyone: it was built because a coach looked at one
+// lifter's numbers and said "your squat is behind - we fix that first." After calibration
+// the card can say the same thing, out loud, and let the athlete answer.
+function ONB_priorityDiag(){
+  var o=ONB(), maxes={};
+  ONB_ORDER.forEach(function(l){ maxes[l]=(o.res[l]&&o.res[l].pm)||Math.round(o.wt*({squat:.6,bench:.45,dead:.8,ohp:.3})[l]); });
+  var d=PG_diagnose(maxes);
+  var gap=(d.weak!=null)? d.gaps[d.weak] : 0;
+  return {weak:d.weak, gap:gap, meaningful:(d.weak!=null && gap<=-8)};
+}
+
+
+function ONB(){ if(!S.onb) S.onb={step:0, goal:null, sex:null, age:30, wt:180, days:null, exp:null, weak:'auto',
   limits:[], ramp:null, res:{}, done:false}; return S.onb; }
 function ONB_ACTIVE(){ try{
   var o=ONB();
@@ -6284,10 +6747,10 @@ function ONB_HTML(){
   var o=ONB(), st=ONB_STEPS[o.step], h='';
   var done=ONB_ORDER.filter(function(l){ return !!o.res[l]; }).length;
   h+='<header><div class="eyebrow">Setup</div><h1>'+({welcome:'Let\u2019s build your program.',goal:'What are you training for?',
-      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',weekdays:'Which days can you train?',schedule:'How often can you train?',limits:'Anything to work around?',
+      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',priority:'Your numbers say something.',weekdays:'Which days can you train?',schedule:'How often can you train?',limits:'Anything to work around?',
       calibrate:'Find your starting weights',review:'Ready to go.'}[st])+'</h1></header>';
 
-  if(st==='welcome') h+='<div class="block"><div class="cue" style="padding:0">A few short questions, then a guided warm-up on four lifts to find your starting weights. '
+  if(st==='welcome') h+='<div class="onb-mark">'+brandMark(250)+'</div><div class="block"><div class="cue" style="padding:0">A few short questions, then a guided warm-up on four lifts to find your starting weights. '
     +'It follows the standard testing method - fives while it is light, then threes, then singles, resting 2-3 minutes before the heavy ones - and stops as soon as a set feels hard. '
     +'About six sets and fourteen reps per lift, so you are still fresh when the weight actually matters. You are never asked to max out.'
     +'<br><br>What comes out is an <b>estimate with a range</b>, not a measurement. Judging how close you are to failure is a skill that sharpens with practice, so the card starts your weights below the estimate and corrects them from your real sets over the first two weeks.</div></div>'
@@ -6307,7 +6770,9 @@ function ONB_HTML(){
     +'<div class="ed-row" style="margin-top:10px"><div class="ed-label">Age</div>'
     +'<div class="onb-step"><span data-onbn="age" data-d="-1">\u2212</span><b>'+o.age+'</b><span data-onbn="age" data-d="1">+</span></div></div>'
     +'<div class="ed-row" style="margin-top:10px"><div class="ed-label">Weight</div>'
-    +'<div class="onb-step"><span data-onbn="wt" data-d="-5">\u2212</span><b>'+o.wt+' lb</b><span data-onbn="wt" data-d="5">+</span></div></div>'
+    +'<div class="onb-step"><span data-onbn="wt" data-d="-1">\u2212</span>'
+    +'<b><input type="number" inputmode="decimal" id="onbWt" min="60" max="500" step="0.1" value="'+o.wt+'"> lb</b>'
+    +'<span data-onbn="wt" data-d="1">+</span></div></div>'
     +'<div class="cue" style="padding:8px 0 0">Used only to pick safe starting weights for the warm-up ramps.</div></div>'
     +'<div class="daybtn onb-go'+(o.sex?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
@@ -6344,6 +6809,29 @@ function ONB_HTML(){
         +'<span class="onb-why">'+e[2]+'</span></div>'; }).join('')
     +'<div class="cue" style="padding:8px 0 0">This adds a couple of sets where you want them. It does not change the main lifts or how often each movement pattern is trained \u2014 that part stays balanced whatever you pick.</div></div>'
     +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
+
+
+  if(st==='priority'){
+    var pd=ONB_priorityDiag();
+    var LN={squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Overhead press'};
+    var autoLabel, autoWhy;
+    if(pd.meaningful){
+      autoLabel='Prioritize my '+LN[pd.weak].toLowerCase();
+      autoWhy='Your calibration puts it about '+Math.abs(pd.gap)+'% behind where your other lifts say it should be. The block gives it first billing: extra work at the same loads, and a second lighter exposure to own the pattern.';
+    } else {
+      autoLabel='Keep it balanced';
+      autoWhy='Your lifts are in healthy proportion - nothing is lagging enough to need first billing. Even work across the board.';
+    }
+    h+='<div class="block">'
+     +'<div class="onb-opt'+((o.weak||'auto')==='auto'?' on':'')+'" data-onbweak="auto">'+autoLabel
+       +'<span class="onb-why">'+autoWhy+'</span></div>'
+     +[['squat','Squat'],['bench','Bench'],['dead','Deadlift'],['ohp','Overhead press']].map(function(e){
+        return '<div class="onb-opt'+(o.weak===e[0]?' on':'')+'" data-onbweak="'+e[0]+'">Prioritize my '+e[1].toLowerCase()+' anyway'
+          +'<span class="onb-why">Your call - the block leans where you point it.</span></div>'; }).join('')
+     +'<div class="onb-opt'+(o.weak==='none'?' on':'')+'" data-onbweak="none">No priority - balanced block'
+       +'<span class="onb-why">Even attention everywhere.</span></div>'
+     +'<div class="cue" style="padding:8px 0 0">This is how this card was born: one lifter, one lagging lift, one block built to fix it.</div></div>'
+     +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
   if(st==='limits'){ h+='<div class="block">'+ONB_LIMITS.map(function(l){
       return '<div class="onb-opt'+(o.limits.indexOf(l.id)>-1?' on':'')+'" data-onblim="'+l.id+'">'+l.t+'</div>'; }).join('')
@@ -6413,6 +6901,7 @@ function ONB_WIRE(){
   q('[data-onbsex]',function(el){ o.sex=el.dataset.onbsex; save(); render(); });
   q('[data-onbexp]',function(el){ o.exp=el.dataset.onbexp; save(); render(); });
   q('[data-onbemph]',function(el){ o.emph=el.dataset.onbemph; save(); render(); });
+  q('[data-onbweak]',function(el){ o.weak=el.dataset.onbweak; save(); render(); });
   q('[data-onbwd]',function(el){
     var d=el.dataset.onbwd; if(!o.wd) o.wd=PG_defaultDays(o.days||4).slice();
     var i=o.wd.indexOf(d);
@@ -6424,7 +6913,13 @@ function ONB_WIRE(){
   q('[data-onblim]',function(el){ var id=el.dataset.onblim, i=o.limits.indexOf(id);
     if(i>-1) o.limits.splice(i,1); else o.limits.push(id); save(); render(); });
   q('[data-onbn]',function(el){ var k=el.dataset.onbn, d=+el.dataset.d;
-    o[k]=Math.max(k==='age'?13:80, Math.min(k==='age'?85:400, o[k]+d)); save(); render(); });
+    o[k]=Math.max(k==='age'?13:60, Math.min(k==='age'?85:500, Math.round((o[k]+d)*10)/10)); save(); render(); });
+  // Bodyweight is a MEASUREMENT: 122 means 122, never the nearest 5. Loads computed from it
+  // still plate-round downstream - measurements exact, prescriptions rounded.
+  var oW=document.getElementById('onbWt');
+  if(oW){ oW.onchange=function(){ var v=parseFloat(oW.value);
+    if(isFinite(v)) o.wt=Math.max(60, Math.min(500, Math.round(v*10)/10)); save(); render(); };
+    oW.onclick=function(ev){ ev.stopPropagation(); }; }
   q('[data-onbramp]',function(el){ var l=el.dataset.onbramp;
     o.ramp={lift:l, sets:[], est:ONB_seed(l), idx:0, next:null}; save(); render(); });
   q('[data-onbfb]',function(el){ if(!o.ramp) return; ONB_feedback(el.dataset.onbfb); });
