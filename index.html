@@ -26,7 +26,10 @@
   --shadow:0 1px 2px rgba(20,23,26,.05),0 12px 28px -18px rgba(20,23,26,.3);
   --p45:#2E5FA3; --p35:#E8C33A; --p25:#3E8E4F; --p10:#15181C; --p5:#CFD3D6;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+/* the one place raw text is meant to be long-pressed and copied - the backup/export fallback */
+textarea,input{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--chalk);
   font-family:ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN","Nunito",
     -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
@@ -501,11 +504,63 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 
 /* ===== PR banner ===== */
 .prbar{margin-top:14px;background:var(--green-soft);border:2px solid var(--green);border-radius:var(--r);
-  padding:16px;animation:pop .4s cubic-bezier(.2,.9,.25,1);}
+  padding:16px;animation:pop .4s cubic-bezier(.2,.9,.25,1);position:relative;overflow:visible;}
 .prttl{font-size:16px;font-weight:800;color:var(--green);letter-spacing:-.01em;}
 .prrow{font-size:14px;color:var(--chalk);margin-top:7px;font-weight:600;}
 .prrow span{color:var(--dim);font-weight:600;}
 .prdis{margin-top:12px;text-align:center;font-size:13px;font-weight:800;color:var(--green);cursor:pointer;padding:6px;}
+/* ===== celebrations ===== */
+.pr-fx{position:absolute;left:50%;top:26px;width:0;height:0;pointer-events:none;}
+.pr-fx i{position:absolute;left:0;top:0;width:5px;height:5px;border-radius:2px;background:var(--green);
+  transform:rotate(var(--a)) translateY(0) scale(1);opacity:0;
+  animation:prSpark 900ms cubic-bezier(.15,.85,.3,1) var(--t) forwards;}
+@keyframes prSpark{
+  0%{opacity:0;transform:rotate(var(--a)) translateY(0) scale(.4);}
+  18%{opacity:1;}
+  100%{opacity:0;transform:rotate(var(--a)) translateY(calc(var(--d) * -1)) scale(.5);}}
+.streak{display:inline-flex;align-items:center;gap:7px;padding:6px 12px 6px 8px;border-radius:999px;
+  background:var(--panel2);border:1px solid var(--line);margin-top:10px;}
+.stk-flame{position:relative;width:14px;height:18px;flex:0 0 auto;}
+.stk-flame span{position:absolute;left:50%;bottom:0;transform:translateX(-50%);border-radius:50% 50% 50% 50%/60% 60% 40% 40%;}
+.stk-f1{width:14px;height:18px;background:var(--amber);opacity:.35;animation:stkFlick 1.5s ease-in-out infinite;}
+.stk-f2{width:10px;height:13px;background:var(--amber);opacity:.7;animation:stkFlick 1.15s ease-in-out infinite reverse;}
+.stk-core{width:5px;height:7px;background:#FFF3D0;opacity:.9;animation:stkFlick .9s ease-in-out infinite;}
+@keyframes stkFlick{0%,100%{transform:translateX(-50%) scaleY(1) scaleX(1)}
+  35%{transform:translateX(-50%) scaleY(1.16) scaleX(.93)}70%{transform:translateX(-50%) scaleY(.92) scaleX(1.05)}}
+.streak .stk-n{font-size:15px;font-weight:800;color:var(--chalk);font-variant-numeric:tabular-nums;}
+.streak .stk-w{font-size:11.5px;font-weight:700;color:var(--dim);letter-spacing:.02em;}
+.streak.t2{border-color:color-mix(in srgb,var(--amber) 45%,var(--line));}
+.streak.t3{border-color:var(--amber);}
+.streak.t4{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber) inset,0 0 14px -4px var(--amber);}
+.streak.t3 .stk-flame,.streak.t4 .stk-flame{width:16px;height:21px;}
+.streak.t4 .stk-n{color:var(--amber);}
+.blockfx{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.82);display:flex;align-items:center;
+  justify-content:center;padding:22px;animation:bfxIn .35s ease both;}
+@keyframes bfxIn{from{opacity:0}to{opacity:1}}
+.bfx-card{position:relative;text-align:center;max-width:340px;animation:bfxRise .6s cubic-bezier(.2,1.3,.35,1) both;}
+@keyframes bfxRise{from{transform:translateY(16px) scale(.94);opacity:0}to{transform:none;opacity:1}}
+.bfx-rays{position:absolute;left:50%;top:44px;width:0;height:0;}
+.bfx-rays i{position:absolute;width:3px;height:26px;border-radius:2px;background:var(--amber);opacity:0;
+  transform-origin:50% 78px;transform:rotate(var(--a)) translateY(-78px) scaleY(.3);
+  animation:bfxRay 1.5s cubic-bezier(.2,.9,.3,1) var(--t) infinite;}
+@keyframes bfxRay{0%{opacity:0;transform:rotate(var(--a)) translateY(-58px) scaleY(.3)}
+  30%{opacity:.85}100%{opacity:0;transform:rotate(var(--a)) translateY(-104px) scaleY(1)}}
+.bfx-badge{position:relative;width:88px;height:88px;margin:0 auto 16px;border-radius:50%;color:var(--amber);
+  background:var(--panel2);border:2px solid var(--amber);display:flex;align-items:center;justify-content:center;
+  animation:bfxPulse 2s ease-in-out infinite;}
+.bfx-badge svg{width:46px;height:46px;}
+@keyframes bfxPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--amber) 45%,transparent)}
+  70%{box-shadow:0 0 0 16px transparent}}
+.bfx-ttl{font-size:26px;font-weight:800;color:var(--chalk);letter-spacing:-.02em;}
+.bfx-sub{font-size:14px;color:var(--dim);margin-top:8px;line-height:1.5;}
+.bfx-go{margin-top:20px;display:inline-block;padding:13px 30px;border-radius:14px;background:var(--amber);
+  color:var(--amber-ink);font-size:15px;font-weight:800;cursor:pointer;}
+.blockfx.still .bfx-card{animation:none;}
+@media (prefers-reduced-motion: reduce){
+  .stk-f1,.stk-f2,.stk-core{animation:none}
+  .bfx-badge{animation:none}
+  .bfx-card{animation:none}
+}
 /* ===== backup nag ===== */
 .onb-mark{display:flex;justify-content:center;margin:8px 0 18px;opacity:.95;}
 #bootSplash{position:fixed;inset:0;z-index:220;background:#171A1F;display:flex;align-items:center;justify-content:center;
@@ -719,13 +774,18 @@ td.c-n.now{font-weight:700;}
 .ra-b{min-width:52px;padding:12px 0;border-radius:12px;border:2px solid var(--amber-ink);background:transparent;
   color:var(--amber-ink);font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;}
 .ra-b:active{background:var(--amber-ink);color:var(--amber);}
-.rest-go,.rest-kill{position:relative;overflow:hidden;}
-.rest-go.holding::after,.rest-kill.holding::after{content:"";position:absolute;inset:0;
+.rest-go,.rest-kill,.wipe-fire{position:relative;overflow:hidden;}
+.rest-go.holding::after,.rest-kill.holding::after,.wipe-fire.holding::after{content:"";position:absolute;inset:0;
   background:rgba(0,0,0,.22);transform-origin:left;transform:scaleX(0);
   animation:holdFill var(--hd,650ms) linear forwards;animation-delay:var(--he,0ms);}
 @keyframes holdFill{from{transform:scaleX(0);}to{transform:scaleX(1);}}
 @media (prefers-reduced-motion: reduce){
-  .rest-go.holding::after,.rest-kill.holding::after{animation:none;transform:scaleX(1);opacity:.15;} }
+  .rest-go.holding::after,.rest-kill.holding::after,.wipe-fire.holding::after{animation:none;transform:scaleX(1);opacity:.15;} }
+.wipe-link{font-size:12.5px;color:var(--faint);text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:8px 4px;}
+.wipe-zone{border:1px solid var(--red-soft);}
+.wipe-fire{display:block;width:100%;padding:15px;border-radius:14px;border:2px solid var(--red);
+  background:var(--red-soft);color:var(--red);font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;}
+.wipe-fire.holding{background:var(--red);color:#fff;}
 .rest-lw small{font-size:13px;font-weight:700;opacity:.8;margin-left:4px;}
 .rest-plates{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:6px;opacity:.95;}
 .rest-cue{font-size:11px;font-style:italic;opacity:.8;margin-top:8px;line-height:1.45;max-width:300px;margin-left:auto;margin-right:auto;}
@@ -3223,6 +3283,9 @@ function wirePlan(){
   q('[data-volreset]',function(el){ el.onclick=function(){
     dayCodes().forEach(function(c){ var a=custList(c); for(var i=a.length-1;i>=0;i--){ if(a[i]&&a[i].vol) a.splice(i,1); } });
     save(); render(); }; });
+  q('[data-wipeopen]',function(el){ el.onclick=function(){ wipeArmed=true; render(); }; });
+  q('[data-wipecancel]',function(el){ el.onclick=function(){ wipeArmed=false; render(); }; });
+  q('[data-wipebackup]',function(el){ el.onclick=async function(){ await backupAll(); render(); }; });
 }
 
 
@@ -3434,9 +3497,95 @@ function recordHistory(){
   }
   return out;
 }
+// ===== CELEBRATIONS =====
+// Every one of these fires off something the athlete actually earned - a real PR against real
+// history, a real logged streak, a real finished block. Nothing fires on a timer or a guess.
+// All of it respects prefers-reduced-motion by falling back to the static version.
+function fxReduced(){
+  try{ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  catch(e){ return false; }
+}
+// --- the spark burst that plays over a new personal record ---
+function prSparksHTML(){
+  if(fxReduced()) return '';
+  var n=14, s='<div class="pr-fx" aria-hidden="true">';
+  for(var i=0;i<n;i++){
+    var ang=(360/n)*i + (i%2?7:-7);
+    var dist=38+((i*13)%26);
+    var delay=(i%5)*45;
+    s+='<i style="--a:'+ang+'deg;--d:'+dist+'px;--t:'+delay+'ms"></i>';
+  }
+  return s+'</div>';
+}
+// --- consistency streak: how many days in a row carry at least one logged session ---
+function streakDays(){
+  try{
+    if(!logKeys || !logKeys.length) return 0;
+    var days={};
+    logKeys.forEach(function(k){
+      var m=k.slice(LOGP.length).match(/^(\d{4}-\d{2}-\d{2})/);
+      if(m) days[m[1]]=true;
+    });
+    var today=localDate();
+    // a streak survives today being unlogged - it only breaks once a full day has passed unlogged
+    var cur=new Date(today+'T00:00:00');
+    if(!days[today]) cur.setDate(cur.getDate()-1);
+    var n=0;
+    for(var guard=0; guard<400; guard++){
+      var iso=new Date(cur.getTime()-cur.getTimezoneOffset()*60000).toISOString().slice(0,10);
+      if(!days[iso]) break;
+      n++; cur.setDate(cur.getDate()-1);
+    }
+    return n;
+  }catch(e){ return 0; }
+}
+function streakHTML(){
+  var n=streakDays();
+  if(n<2) return '';                        // one session is not yet a streak - don't cheapen it
+  var tier = n>=30? 4 : n>=14? 3 : n>=7? 2 : 1;
+  var word = n>=30? 'unbroken' : n>=14? 'rolling' : n>=7? 'building' : 'going';
+  return '<div class="streak t'+tier+'" data-streak="'+n+'">'
+   +'<span class="stk-flame" aria-hidden="true">'
+     +'<span class="stk-f1"></span><span class="stk-f2"></span><span class="stk-core"></span>'
+   +'</span>'
+   +'<span class="stk-n">'+n+'</span>'
+   +'<span class="stk-w">day'+(n===1?'':'s')+' '+word+'</span>'
+   +'</div>';
+}
+// --- finishing a whole block is the biggest thing that happens in this app ---
+function blockDoneCheck(){
+  try{
+    if(!PLAN || !PLAN.weeks) return;
+    if(S.week < PLAN.weeks) return;
+    var codes=PLAN.days.map(function(d){ return d.code; });
+    var all=codes.every(function(c){ return sessionLogged(PLAN.weeks, c); });
+    if(!all) return;
+    var tag='B'+cyc()+'W'+PLAN.weeks;
+    if(S.blockFxShown===tag) return;          // celebrate a finished block exactly once
+    S.blockFxShown=tag; S.blockFx=tag; save();
+  }catch(e){}
+}
+function blockFxHTML(){
+  if(!S.blockFx) return '';
+  var reduced=fxReduced();
+  var rays='';
+  if(!reduced){ for(var i=0;i<12;i++) rays+='<i style="--a:'+(i*30)+'deg;--t:'+((i%4)*70)+'ms"></i>'; }
+  return '<div class="blockfx'+(reduced?' still':'')+'" data-blockfxclose="1">'
+   +'<div class="bfx-card">'
+     +(reduced?'':'<div class="bfx-rays" aria-hidden="true">'+rays+'</div>')
+     +'<div class="bfx-badge" aria-hidden="true">'
+       +'<svg viewBox="0 0 40 40"><rect x="4" y="17" width="32" height="6" rx="3" fill="currentColor"/>'
+       +'<rect x="1" y="12" width="5" height="16" rx="2.5" fill="currentColor"/>'
+       +'<rect x="34" y="12" width="5" height="16" rx="2.5" fill="currentColor"/></svg>'
+     +'</div>'
+     +'<div class="bfx-ttl">Block complete</div>'
+     +'<div class="bfx-sub">Every session of every week \u2014 done. That is the whole point of the thing.</div>'
+     +'<div class="bfx-go" data-blockfxclose="1">Onward</div>'
+   +'</div></div>';
+}
 function prBannerHTML(){
   if(!S.prShow||!S.prShow.length) return '';
-  var h='<div class="prbar"><div class="prttl">\u2605 '+(S.prShow.length===1?'Personal record':'Personal records')+'</div>';
+  var h='<div class="prbar">'+prSparksHTML()+'<div class="prttl">\u2605 '+(S.prShow.length===1?'Personal record':'Personal records')+'</div>';
   S.prShow.slice(0,4).forEach(function(p){
     h+='<div class="prrow"><b>'+p.ex+'</b> \u00b7 '+p.kind+' '+p.val
       +' <span>(was '+p.prev+')</span></div>'; });
@@ -3516,6 +3665,43 @@ function installHTML(){
      ? 'Tap the Share button in Safari, then <b>Add to Home Screen</b>. It opens full screen with no browser bar, and works with no signal.'
      : 'Open your browser menu and choose <b>Add to Home screen</b> or <b>Install app</b>. It opens full screen and works with no signal.')
    +'</div><div class="ed-row"><div class="daybtn" data-noinstall="1" style="flex:1;color:var(--faint)">Got it, hide this</div></div></div>'; }
+function wipeHTML(){
+  // A quiet link at the very bottom of the plan tab, not a loud warning box greeting anyone -
+  // same lesson the backup line already learned. It only gets loud once opened.
+  if(!wipeArmed){
+    return '<div class="block" style="text-align:center;padding-top:2px">'
+     +'<span class="wipe-link" data-wipeopen="1">Start over on this phone</span></div>';
+  }
+  var last=S.lastBackup;
+  var backupLine=last
+   ? 'Last backup <b>'+last+'</b>.'
+   : '<span style="color:var(--amber);font-weight:700">You have never backed up this phone.</span>';
+  return '<div class="block wipe-zone">'
+   +'<h3 style="color:var(--red)">Start over</h3>'
+   +'<div class="cue" style="padding:0 0 8px">This permanently erases your plan, every logged session, and your '
+   +'settings from THIS PHONE. It does not touch a backup file you have already saved to Files or Notes \u2014 '
+   +'restore from that later if you change your mind. There is no undo.</div>'
+   +'<div class="cue" style="padding:0 0 10px">'+backupLine+'</div>'
+   +'<div class="ed-row" style="margin-bottom:10px">'
+     +'<div class="daybtn" data-wipebackup="1" style="flex:1">Back up first</div>'
+     +'<div class="daybtn" data-wipecancel="1" style="flex:0 0 auto;color:var(--faint)">Cancel</div>'
+   +'</div>'
+   +'<button class="wipe-fire" data-wipehold="1">Hold to erase everything</button>'
+   +'</div>';
+}
+async function wipeEverything(){
+  try{
+    if(storageOK){
+      var ks=await stList(LOGP);
+      for(var i=0;i<ks.length;i++){ if(ks[i]!==LOGP+'probe'){ try{ await stDel(ks[i]); }catch(e){} } }
+    }
+    await stDel(SKEY);
+  }catch(e){}
+  logCache={}; logKeys=[]; logOpen=null;
+  try{ alertToast('Erased \\u2014 starting fresh \\u2713'); }catch(e){}
+  setTimeout(function(){ try{ location.reload(); }catch(e){} }, 650);
+}
+
 
 
 // ============ FOCUS MODE ============
@@ -3715,6 +3901,7 @@ const SCHEMA_V = 2; // bump this whenever the saved-state shape changes, and add
 function esc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 let storageOK=null, logKeys=[], logOpen=null, logCache={};
 let armDel=null;
+let wipeArmed=false;   // start-over danger panel: closed by default, opened by an explicit tap
 let profEdit=false;   // profile shows as a composed identity; editing is an explicit mode
 let splitPending=null;   // training-split control: pending day count awaiting confirmation
 // Prescription-driving sections are LOCKED by default: an accidental brush on a max stepper
@@ -3727,6 +3914,7 @@ let restWOpen=false;  // rest-screen weight adjust: open stepper survives the pe
 // ~0.65s hold. State is wall-clock so the per-second repaint can't reset a hold in progress.
 let holdK=null, holdT0=0, holdTimer=null, holdFired=0, holdHinted=false;
 const HOLD_MS=650;
+const WIPE_MS=1800;   // deliberately longer than the in-workout 650ms holds - this one erases everything
 function holdCancel(){ holdK=null; if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; } try{ paintRest(true); }catch(e){} }
 let holdT=null;
 // tracks which countdown/GO beeps already fired for the current rest, so each sounds once.
@@ -4319,7 +4507,9 @@ async function saveSessionLog(quiet){
   try{
     await stSet(key, JSON.stringify(snap));
     delete logCache[key];
-    await refreshLogs(); render();
+    await refreshLogs();
+    try{ blockDoneCheck(); }catch(e){}   // AFTER the write + refresh, so the final session counts
+    render();
     if(!quiet) alertToast('Session saved \u00b7 '+S.when.date);
     return true;
   }catch(e){ if(!quiet) alertToast('Save failed'); return false; }
@@ -4408,6 +4598,8 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(!S.exHist) S.exHist={};
   if(!S.prs) S.prs=[];
   if(S.prShow===undefined) S.prShow=null;
+  if(S.blockFx===undefined) S.blockFx=null;
+  if(S.blockFxShown===undefined) S.blockFxShown=null;
   if(!S.hist) S.hist=null;
 
   if(!S.view) S.view='focus';
@@ -4486,7 +4678,7 @@ function renderInner(){
   if(S.day==='PLAN'){
     try{ h+=backupBarHTML(); }catch(e){}
     if(S.hist){ h+=histDetailHTML(S.hist); }
-    else { h+=printPickerHTML(); try{ h+=roadAheadHTML(false); }catch(e){} try{ h+=volumeHTML(); }catch(e){} h+=routineHTML(); h+=earlyCloseHTML(); h+=histListHTML(); h+=installHTML(); }
+    else { h+=printPickerHTML(); try{ h+=roadAheadHTML(false); }catch(e){} try{ h+=volumeHTML(); }catch(e){} h+=routineHTML(); h+=earlyCloseHTML(); h+=histListHTML(); h+=installHTML(); try{ h+=wipeHTML(); }catch(e){} }
     app.innerHTML=h; wire(); return;
   }
   if(S.day==='RATE'){
@@ -4704,6 +4896,7 @@ function renderInner(){
   try{ h+=acBannerHTML(); }catch(e){}
   try{ h+=fatigueHTML(); }catch(e){}
   try{ h+=prBannerHTML(); }catch(e){}
+  try{ h+=blockFxHTML(); }catch(e){}
   h+=deckHeadHTML();
   if(S.view==='deck'){ h+=deckHTML(); h+=dayUtilHTML(); app.innerHTML=h; wire(); wireFocus(); return; }
   d.exercises.forEach((ex,i)=>{
@@ -4833,6 +5026,7 @@ function renderInner(){
   h+='<div class="block"><h3>Session notes</h3><textarea id="notes" placeholder="Anything off? Pain, sleep, gear, substitutions.">'+esc(S.notes)+'</textarea></div>';
   h+='<div class="block"><h3 style="margin:0 0 8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700">Session logs <span class="stchip '+(storageOK===true?'ok':storageOK===false?'bad':'')+'">'
     +(storageOK===true?'Storage \u2713':storageOK===false?'Storage unavailable':'checking\u2026')+'</span></h3>'
+    +streakHTML()
     +'<div class="savelog" id="saveLog">Save session to log</div>'
     +'<div class="savelog" id="exportLogs">Export all logs</div>'
     +'<div class="savelog" id="backupBtn">Backup \u2192 file (all data)</div>'
@@ -4953,9 +5147,20 @@ function wire(){
   try{ wireOrder(); }catch(e){}
   try{ wirePlan(); }catch(e){}
   document.querySelectorAll('[data-prclose]').forEach(function(el){ el.onclick=function(){ S.prShow=null; save(); render(); }; });
+  document.querySelectorAll('[data-blockfxclose]').forEach(function(el){ el.onclick=function(){ S.blockFx=null; save(); render(); }; });
   document.querySelectorAll('[data-bkgo]').forEach(function(el){ el.onclick=function(){ backupAll(); }; });
   document.querySelectorAll('[data-bksnooze]').forEach(function(el){ el.onclick=function(){ S.backupSnooze=localDate(); save(); render(); }; });
   document.querySelectorAll('[data-noinstall]').forEach(function(el){ el.onclick=function(){ S.hideInstall=true; save(); render(); }; });
+  document.querySelectorAll('[data-wipehold]').forEach(function(el){
+    if(el.__wipeWired) return; el.__wipeWired=true;
+    var timer=null;
+    var start=function(ev){ ev.preventDefault(); el.classList.add('holding');
+      el.style.setProperty('--hd', WIPE_MS+'ms');
+      timer=setTimeout(function(){ timer=null; el.classList.remove('holding'); wipeEverything(); }, WIPE_MS); };
+    var cancel=function(){ if(timer){ clearTimeout(timer); timer=null; } el.classList.remove('holding'); };
+    el.addEventListener('pointerdown', start);
+    ['pointerup','pointercancel','pointerleave'].forEach(function(tp){ el.addEventListener(tp, cancel); });
+  });
   document.querySelectorAll('[data-hist]').forEach(function(el){ el.onclick=function(){ S.hist=el.dataset.hist; save(); render(); }; });
   document.querySelectorAll('[data-histclose]').forEach(function(el){ el.onclick=function(){ S.hist=null; save(); render(); }; });
   try{ paintFoot(); }catch(e){}
