@@ -1044,6 +1044,18 @@ td.c-n.now{font-weight:700;}
   .set:active,.savelog:active,.toggle:active,.chip:active,.tab:active,.daybtn:active,
   .ros-row:active,.fc:active,.fin-alt:active,button:active,[role="button"]:active{transform:none}
 }
+
+/* ---- logged-session lock ---- */
+.lockbar{display:flex;align-items:center;gap:9px;margin:0 0 10px;padding:11px 12px;
+  border:1px solid var(--line);border-radius:12px;background:var(--panel2);cursor:pointer;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;position:relative;}
+.lockbar .lk-ico{font-size:15px;}
+.lockbar .lk-txt{flex:1;font-size:12.5px;color:var(--dim);}
+.lockbar .lk-txt b{color:var(--chalk);}
+.lockbar .lk-act{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--amber);}
+.lockbar:active{transform:scale(.99);}
+#app.is-locked .ex .sets .set{opacity:.55;}
 </style>
 </head>
 <body>
@@ -1860,7 +1872,7 @@ var TOUR_STEPS=[
   b:'Sets log in order: only the breathing one accepts a tap, so a stray thumb can never log set 3 before set 1. Tap it when the set is done; tap a logged set to correct its reps. ADD gives you a bonus set; its UNDO takes it back.'},
  {sel:'[data-pain]', closest:'.ed-row', t:'The pain check',
   b:'None, ache, or real pain \u2014 answer per exercise. Flag pain and the card remembers the day on your calendar and watches the pattern. Two flags in ten days and it will say something.'},
- {sel:'[data-feel]', closest:'.ed-row', t:'Too heavy? Too light? Say so',
+ {sel:'[data-feelbtn]', closest:'.ed-row', t:'Too heavy? Too light? Say so',
   b:'One tap tells the card how the prescription felt. This is direct evidence \u2014 alongside your logged reps, it feeds the numbers that write next week.'},
  {sel:'.howto, .howto-min', t:'Form notes on every movement',
   b:'Setup, execution, and the safety lines for each exercise. If you switch coaching text to Minimal later, these fold to one quiet line \u2014 never gone, one tap away.'},
@@ -1898,7 +1910,7 @@ var TOUR_STEPS=[
   b:'Themes \u2014 including Iron, the card\u2019s own colours \u2014 fonts, and text size. And Coaching text: switch it to Minimal once you know the card, and the narration steps back while every number and safety line stays.'},
  {sel:'[data-jump]', closest:'.ex', go:'MAX', t:'Timer, sound and loading',
   b:'Pick the countdown voice and pitch, and tell the card your smallest plates \u2014 microplates make every prescription land on weights you can actually build.'},
- {sel:'#saveLog', closest:'.block', go:'MAX', t:'Session logs \u2014 how they work',
+ {sel:'#saveLog', closest:'.block', go:'@day', t:'Session logs \u2014 how they work',
   b:'Save session to log stamps today \u2014 every set, weight, rep and note \u2014 into a named entry you can reopen any time. Export all bundles the lot into one file for a coach or a spreadsheet. And the light beside the heading is the storage truth: if saving is ever off, the card says so instead of losing a rep.'},
  {sel:'[data-day="RATE"]', tap:1, go:'RATE', t:'RATE \u2014 what your sets are saying',
   b:'Every logged set becomes an estimate of what you could lift. This screen turns those into a rate per lift \u2014 pounds per week, building or sliding \u2014 with the evidence drawn out per session.'},
@@ -1914,12 +1926,40 @@ var TOUR_STEPS=[
   b:'Pick a day, then drag to reorder, swap a movement, or remove one \u2014 and one quiet line always leads back to the plan\u2019s original order.'},
  {sel:'.roadtbl', go:'PLAN', t:'The road ahead',
   b:'Eight blocks projected from today\u2019s numbers \u2014 where the rule takes you if you keep showing up. A projection of the rule, not a promise. The printable program carries the same tables in a clean sheet you can pin to a wall.'},
- {sel:'#backupBtn', tap:1, go:'PLAN', t:'Back up \u2014 the one habit',
+ {sel:'#backupBtn', tap:1, go:'@day', t:'Back up \u2014 the one habit',
   b:'Your history lives only on this phone. One tap on Back up saves everything to a file; Restore and Paste-a-backup bring it back anywhere. Add to Home Screen keeps your phone from ever clearing it. Weekly habit, nothing can take your log.'},
- {sel:'#tourT', go:'PLAN', t:'And I live right here',
+ {sel:'#tourT', go:'@day', t:'And I live right here',
   b:'Replay this walk any time \u2014 for yourself, or to hand the card to someone new.'},
  {sel:'#calcFab', tap:1, t:'Maths without leaving',
   b:'A calculator floats here for the moment you need 80% of something. It speaks percentages the way a lifter says them and rounds to real plates.'},
+ {sel:'.ana-chart', go:'PLAN', t:'Where the work actually lands',
+  b:'Every movement you are prescribed feeds this. The brighter a muscle, the more of your week goes '
+   +'through it \u2014 so a hole in your programming shows up as a dark patch rather than a number you have '
+   +'to go looking for.'},
+ {sel:'[data-anaview]', go:'PLAN', t:'Front, back, or both',
+  b:'Tap to zoom to one figure. Zoomed in, the chart\u2019s own anatomy labels become readable \u2014 handy '
+   +'if you are not sure which muscle a name refers to.'},
+ {sel:'[data-anasex]', go:'PLAN', t:'Male or female figure',
+  b:'Cosmetic only. It changes which body the map is drawn on, nothing about your program.'},
+ {sel:'.vol-row', go:'PLAN', t:'Sets per muscle, per week',
+  b:'The bars are the hard numbers behind the figure. The band is roughly where most people grow \u2014 '
+   +'10 to 20 hard sets a week. Under it and there may be room; well over it and recovery is usually '
+   +'the thing that breaks first.'},
+ {sel:'.vol-fix', go:'PLAN', t:'Fix a gap in one tap',
+  b:'When a muscle is short, the card offers a movement that fills it and adds it to the right day. '
+   +'Anything it added is tagged, so you can undo the lot without unpicking your routine by hand.'},
+ {sel:'.hw-btn', opt:1, t:'How do I actually do this?',
+  b:'Where a demo clip exists, a How button sits beside the movement. It plays the lift, the coaching '
+   +'cue, the muscles it trains \u2014 and your own weight and reps for today, so you are not translating '
+   +'a generic video into your session.'},
+ {sel:'#reportBtn', go:'@day', t:'Something wrong? Say so',
+  b:'Writes up what went wrong \u2014 the build, the screen you were on, your units, anything the card '
+   +'recorded failing \u2014 and hands it to your phone to send however you like. Your training data stays '
+   +'put unless you send a backup on purpose.'},
+ {sel:'#gbHost', t:'That is Gummy',
+  b:'He lives at the edge and peeks out now and then. Drag him to the middle of the screen and let go: '
+   +'he stands up and the muscles today\u2019s session trains light up through him. Drag sideways to turn '
+   +'him around, tap to send him home.'},
  {sel:null, t:'That is the tour \u2014 and the whole card.',
   b:'From here it watches your actual performance: hit your reps and loads climb; log honest effort and your numbers revise themselves from evidence. Train, log, and it gets sharper every week. Go.'}
 ];
@@ -1982,30 +2022,56 @@ try{ ['click','pointerdown','mousedown','touchstart','touchend'].forEach(functio
 function tourAvailable(){
   try{ return !(S.tour&&S.tour.done); }catch(e){ return false; }
 }
-function tourStart(){ S.tour={done:false}; TOUR={i:0, live:true, day0:S.day, view0:S.view}; save(); coachPaint(); }
+// The guide is a walk through a TRAINING day - most of what it points at only exists there.
+// Starting it from the You or Plan screen used to skip the whole opening run of steps, so it
+// moves to a training day first and puts you back where you were at the end.
+function tourStart(){
+  var back=S.day, backV=S.view;
+  try{
+    var codes=(typeof dayCodes==='function')? dayCodes() : [];
+    if(codes.length && codes.indexOf(S.day)<0){ S.day=codes[0]; S.view=null; }
+  }catch(e){ oops('tourStart',e); }
+  S.tour={done:false};
+  TOUR={i:0, live:true, day0:S.day, view0:S.view, back:back, backV:backV};
+  save(); render(); coachPaint();
+}
 function tourEnd(){
   try{ tourRestHide(); }catch(e){}
   try{ document.querySelectorAll('.coach-target').forEach(function(x){
     x.classList.remove('coach-target'); x.classList.remove('demo'); }); }catch(e){}
   S.tour={done:true}; TOUR.live=false;
-  try{ if(TOUR.day0!=null && S.day!==TOUR.day0){ S.day=TOUR.day0; } }catch(e){}
-  try{ if(TOUR.view0!=null && S.view!==TOUR.view0){ S.view=TOUR.view0; } }catch(e){}
+  try{ var bk=(TOUR.back!=null)? TOUR.back : TOUR.day0; if(bk!=null && S.day!==bk){ S.day=bk; } }catch(e){}
+  try{ var bv=(TOUR.backV!==undefined)? TOUR.backV : TOUR.view0; if(S.view!==bv){ S.view=bv; } }catch(e){}
   save(); try{ render(); }catch(e){} coachPaint();
 }
 function tourStep(){ return TOUR_STEPS[Math.max(0,Math.min(TOUR_STEPS.length-1,TOUR.i))]; }
-// walk forward or back, skipping any step whose target is not on this screen
+// Walk forward or back, skipping any step whose target genuinely is not there.
+// A step that declares go/view lives on ANOTHER screen, so it has to be navigated to BEFORE
+// asking whether its target exists - testing first silently dropped every one of them (the deck
+// steps, the backup step, the log step: 8 of 50 never appeared).
+function tourReachable(st){
+  if(!st.sel) return true;
+  if(document.querySelector(st.sel)) return true;
+  if(!st.go && !st.view) return false;
+  try{
+    var goTo=(st.go==='@day')? (TOUR.day0||(dayCodes&&dayCodes()[0])||S.day) : st.go;
+    if(goTo && S.day!==goTo){ S.day=goTo; render(); }
+    if(st.view!==undefined && S.view!==st.view){ S.view=st.view; render(); }
+    return !!document.querySelector(st.sel);
+  }catch(e){ return false; }
+}
 function tourMove(dir){
   var i=TOUR.i;
   for(var guard=0; guard<TOUR_STEPS.length; guard++){
     i+=dir;
     if(i<0){ i=0; break; }
     if(i>=TOUR_STEPS.length){ tourEnd(); return; }
-    var st=TOUR_STEPS[i];
-    if(!st.sel || document.querySelector(st.sel)) break;
+    if(tourReachable(TOUR_STEPS[i])) break;
   }
   TOUR.i=i;
   try{ var stG=TOUR_STEPS[i];
-    if(stG && stG.go && S.day!==stG.go){ S.day=stG.go; save(); render(); }   // the tour shows the room, not just the door
+    var goG=(stG&&stG.go==='@day')? (TOUR.day0||(dayCodes&&dayCodes()[0])||S.day) : (stG&&stG.go);
+    if(goG && S.day!==goG){ S.day=goG; save(); render(); }   // the tour shows the room, not just the door
     if(stG && stG.view && S.view!==stG.view){ S.view=stG.view; render(); }   // and opens the deck when a step lives there
     if(stG && stG.demo==='rest') tourRestShow(); else tourRestHide();
   }catch(e){}
@@ -2153,11 +2219,36 @@ function installBarHTML(){
      +'</div>';
   }catch(e){ return ''; }
 }
+// ---- a logged session is closed ----
+// Once you save the day it is history: the sets stop responding so a stray thumb in your pocket
+// cannot rewrite a finished session, and the debrief stops greeting you every time you look back
+// at it. The lock is visible and one tap opens it again - nothing is ever truly stuck.
+function dayKey(){ return cyc()+'|'+S.week+'|'+S.day; }
+function dayLocked(){ try{ return !!(S.locked && S.locked[dayKey()]); }catch(e){ return false; } }
+function dayLock(on){
+  try{ S.locked=S.locked||{};
+    if(on) S.locked[dayKey()]=true; else delete S.locked[dayKey()];
+    save();
+  }catch(e){ oops('dayLock',e); }
+}
+function lockBarHTML(){
+  try{
+    if(!dayLocked()) return '';
+    return '<div class="lockbar" data-unlock="1" role="button" tabindex="0"'
+      +' aria-label="This session is logged. Unlock to make changes">'
+      +'<span class="lk-ico" aria-hidden="true">\u{1F512}</span>'
+      +'<span class="lk-txt"><b>Logged</b> \u00b7 this session is closed</span>'
+      +'<span class="lk-act">Unlock</span></div>';
+  }catch(e){ return ''; }
+}
 function debriefKey(){ return cyc()+'|'+S.week+'|'+S.day; }
 function debriefHTML(){
   try{
     var p=sessionPct(); if(!p.total || p.done<p.total) return '';
+    // was a single key, so revisiting any earlier logged day greeted you all over again
     if(S.debriefDone===debriefKey()) return '';
+    try{ if(S.dbf && S.dbf[debriefKey()]) return ''; }catch(e){}
+    if(dayLocked()) return '';
     var d=dayObj(), ton=0, hit=0, tot=0, dev=0;
     d.exercises.forEach(function(ex,i){
       if(isOut(ex.name)) return;
@@ -3697,7 +3788,7 @@ var ANA_RG={
       abs:[[49.66,39.17,13.57,13.15]],
       biceps:[[24.2,29.98,7.07,6.23],[76.26,29.67,7.07,6.36]],
       quads:[[36.47,60.02,13.15,15.92],[63.3,59.71,13.15,15.92]],
-      calves:[[39.47,83.2,7.07,11.36],[60.53,83.2,7.07,11.36]]
+      calves:[[35.5,80,7.07,11.36],[64.5,80,7.07,11.36]]
     },
     back:{
       back:[[46.67,19.62,17.76,7.19],[35.21,27.7,13.01,14.31],[58.26,27,13.15,15.39]],
@@ -5190,6 +5281,10 @@ async function saveSessionLog(quiet){
     await stSet(key, JSON.stringify(snap));
     delete logCache[key];
     try{ frzSnap(S.week, S.day); }catch(e){ oops("saveSessionLog",e); }
+    // saving closes the day: the debrief stops greeting you and the sets stop responding
+    try{ var dk=cyc()+'|'+S.week+'|'+S.day;
+         S.dbf=S.dbf||{}; S.dbf[dk]=true;
+         S.locked=S.locked||{}; S.locked[dk]=true; }catch(e){ oops('lockOnSave',e); }
     if(String(S.notes||'').trim()){ S.noteStash=S.notes; S.noteStashKey=key; }
     S.notes='';
     save();
@@ -5292,7 +5387,9 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(S.froze===undefined) S.froze={};
   if(S.rptOpen===undefined) S.rptOpen=false;
   if(S.rptKind===undefined) S.rptKind='bug';
-  if(S.coachOwn===undefined) S.coachOwn=false;   // null = follow onboarding, else an explicit override
+  if(S.coachOwn===undefined) S.coachOwn=false;
+  if(S.locked===undefined) S.locked={};
+  if(S.dbf===undefined) S.dbf={};   // null = follow onboarding, else an explicit override
   if(S.blockFxShown===undefined) S.blockFxShown=null;
   if(!S.hist) S.hist=null;
 
@@ -5598,6 +5695,7 @@ function renderInner(){
   try{ h+=rirDrillHTML(); }catch(e){}
   try{ h+=acBannerHTML(); }catch(e){}
   try{ h+=fatigueHTML(); }catch(e){}
+  try{ h=lockBarHTML()+h; }catch(e){}
   try{ h+=prBannerHTML(); }catch(e){}
   try{ h+=blockFxHTML(); }catch(e){}
   try{ h+=howSheetHTML(); }catch(e){}
@@ -5862,6 +5960,8 @@ function wire(){
   document.querySelectorAll('[data-blockfxclose]').forEach(function(el){ el.onclick=function(){ S.blockFx=null; save(); render(); }; });
   try{ reportWire(); }catch(e){ oops('reportWire',e); }
   try{ rosterWire(); }catch(e){ oops('rosterWire',e); }
+  document.querySelectorAll('[data-unlock]').forEach(function(el){
+    el.onclick=function(){ dayLock(false); alertToast('Unlocked \u2014 changes will be saved again'); render(); }; });
   document.querySelectorAll('[data-how]').forEach(function(el){ el.onclick=function(ev){ ev.stopPropagation(); howEx=el.dataset.how; render(); }; });
   document.querySelectorAll('[data-howclose]').forEach(function(el){ el.onclick=function(ev){
     if(ev.target!==el) return; howEx=null; render(); }; });
@@ -6036,6 +6136,7 @@ function wire(){
   });
  document.querySelectorAll('.set[data-set]').forEach(el=>el.onclick=()=>{ if(el.dataset.set==null) return;
     ensureAudio();
+    if(dayLocked()){ alertToast('This session is logged \u2014 tap the lock to change it'); return; }
     if(el.dataset.lk){ alertToast('One at a time \u2014 log the glowing set first'); return; }
     const i=+el.dataset.ex, j=+el.dataset.set, ex=dayObj().exercises[i], st=exState(i,ex), s=st.sets[j];
     if(s.st==='pend'){s.st='hit';s.reps=null;s.rir=null;s.t=Date.now();st.open=-1;}
