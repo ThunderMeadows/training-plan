@@ -1,6 +1,6 @@
 // Cache-first for the app shell: once installed it opens instantly and works with no signal,
 // which matters in a gym basement. Bump CACHE when you deploy and old copies clear themselves.
-const CACHE = 'card-df90f8688a32';
+const CACHE = 'card-18704c0bfc23';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -27,6 +27,30 @@ self.addEventListener('fetch', e => {
         }
         return res;
       }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
+    );
+    return;
+  }
+  // how-to clips: cache-first and keep them. They never change once filmed, and a clip that
+  // has been watched once must still play in a gym basement with no signal.
+  // the clip LIST must stay fresh, or clips added later would never appear: network first,
+  // falling back to the cached copy only when offline.
+  if (e.request.url.indexOf('/clips/index.json') > -1) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy));
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+  if (e.request.url.indexOf('/clips/') > -1) {
+    e.respondWith(
+      caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy));
+        return res;
+      }).catch(() => hit))
     );
     return;
   }

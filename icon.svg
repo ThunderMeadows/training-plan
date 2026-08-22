@@ -9,13 +9,13 @@
   <!-- Mark 02, the blueprint barbell: the bar first, so it lives behind the outlined plates -->
   <line x1="12" y1="256" x2="500" y2="256" stroke="#F0ECE4" stroke-width="6"/>
   <!-- big plates, machined outline + inset bevel line -->
-  <rect x="92"  y="144" width="52" height="224" rx="22" fill="none" stroke="#E0A94C" stroke-width="11"/>
-  <rect x="105" y="157" width="26" height="198" rx="10" fill="none" stroke="#B08034" stroke-width="2.5"/>
-  <rect x="368" y="144" width="52" height="224" rx="22" fill="none" stroke="#E0A94C" stroke-width="11"/>
-  <rect x="381" y="157" width="26" height="198" rx="10" fill="none" stroke="#B08034" stroke-width="2.5"/>
+  <rect x="142" y="144" width="52" height="224" rx="22" fill="none" stroke="#E0A94C" stroke-width="11"/>
+  <rect x="155" y="157" width="26" height="198" rx="10" fill="none" stroke="#B08034" stroke-width="2.5"/>
+  <rect x="318" y="144" width="52" height="224" rx="22" fill="none" stroke="#E0A94C" stroke-width="11"/>
+  <rect x="331" y="157" width="26" height="198" rx="10" fill="none" stroke="#B08034" stroke-width="2.5"/>
   <!-- small plates outboard -->
-  <rect x="162" y="188" width="32" height="136" rx="14" fill="none" stroke="#E0A94C" stroke-width="7"/>
-  <rect x="318" y="188" width="32" height="136" rx="14" fill="none" stroke="#E0A94C" stroke-width="7"/>
+  <rect x="100" y="188" width="32" height="136" rx="14" fill="none" stroke="#E0A94C" stroke-width="7"/>
+  <rect x="380" y="188" width="32" height="136" rx="14" fill="none" stroke="#E0A94C" stroke-width="7"/>
   <!-- sleeve caps: soft chalk hardware -->
   <rect x="5"   y="243" width="14" height="26" rx="6" fill="#F0ECE4"/>
   <rect x="493" y="243" width="14" height="26" rx="6" fill="#F0ECE4"/>
