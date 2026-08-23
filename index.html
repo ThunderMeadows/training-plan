@@ -1055,7 +1055,58 @@ td.c-n.now{font-weight:700;}
 .lockbar .lk-act{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
   color:var(--amber);}
 .lockbar:active{transform:scale(.99);}
-#app.is-locked .ex .sets .set{opacity:.55;}
+
+/* ---- what's new ---- */
+.wn-wrap{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.76);display:flex;
+  align-items:flex-end;justify-content:center;animation:hwFade .2s ease both;}
+.wn-sheet{width:100%;max-width:520px;max-height:88vh;overflow:auto;background:var(--panel);
+  border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:10px 16px 18px;
+  animation:hwUp .28s cubic-bezier(.2,.9,.25,1) both;}
+.wn-title{font-size:20px;font-weight:800;color:var(--chalk);}
+.wn-sub{font-size:12.5px;color:var(--dim);margin-top:3px;}
+.wn-rel{margin-top:14px;}
+.wn-h{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);}
+.wn-list{margin:7px 0 0;padding-left:18px;}
+.wn-list li{font-size:14px;color:var(--chalk);line-height:1.55;margin-bottom:6px;}
+
+/* A locked day is read-only. Everything in the session is inert except the lock itself and the
+   navigation that gets you off the page - the guard below catches anything CSS misses. */
+#app.is-locked .ex,
+#app.is-locked .block,
+#app.is-locked textarea,
+#app.is-locked input,
+#app.is-locked select,
+#app.is-locked .savelog,
+#app.is-locked .toggle,
+#app.is-locked .drbtn{pointer-events:none;}
+#app.is-locked .ex,
+#app.is-locked .block{opacity:.72;}
+#app.is-locked .lockbar,
+#app.is-locked .tabrow,
+#app.is-locked .chiprow,
+#app.is-locked .weekrow{pointer-events:auto;opacity:1;}
+
+/* ---- photo, full size ---- */
+.avabig-wrap{position:fixed;inset:0;z-index:220;background:rgba(0,0,0,.88);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;
+  animation:hwFade .18s ease both;cursor:pointer;touch-action:manipulation;}
+.avabig{max-width:min(86vw,420px);max-height:64vh;width:auto;height:auto;object-fit:contain;
+  border-radius:20px;border:3px solid var(--amber);box-shadow:0 18px 50px rgba(0,0,0,.6);
+  animation:avaPop .3s cubic-bezier(.2,.9,.25,1) both;}
+@keyframes avaPop{from{transform:scale(.86);opacity:0}to{transform:scale(1);opacity:1}}
+.avabig-nm{font-size:19px;font-weight:800;color:var(--chalk);letter-spacing:-.01em;}
+.avabig-hint{font-size:11.5px;color:var(--dim);}
+.ava-mini,.ava{cursor:pointer;}
+@media (prefers-reduced-motion: reduce){ .avabig{animation:none} .avabig-wrap{animation:none} }
+
+/* ---- setup: the bar, loaded ---- */
+.onb-bar{margin:2px 0 8px;}
+.onb-bar svg{display:block;width:100%;height:auto;}
+.onb-bar-cap{font-size:11.5px;color:var(--dim);margin-top:2px;letter-spacing:.02em;}
+
+/* ---- adaptation ---- */
+.adapt-list{margin:6px 0 10px;padding-left:18px;}
+.adapt-list li{font-size:13.5px;color:var(--chalk);line-height:1.55;margin-bottom:6px;}
 </style>
 </head>
 <body>
@@ -2231,6 +2282,31 @@ function dayLock(on){
     save();
   }catch(e){ oops('dayLock',e); }
 }
+// Backstop for the read-only lock. CSS pointer-events covers the markup we know about; this
+// catches anything added later, and is what actually tells the athlete why nothing responded.
+function lockGuard(ev){
+  try{
+    if(!dayLocked()) return;
+    var t=ev.target;
+    if(!t || !t.closest) return;
+    if(t.closest('[data-unlock]') || t.closest('.tabrow') || t.closest('.chiprow')
+       || t.closest('.weekrow') || t.closest('#coachHost') || t.closest('.wn-wrap')
+       || t.closest('.rpt-wrap') || t.closest('.hw-wrap') || t.closest('#gbHost')
+       // celebrations sit on top of a day that has just been logged, so their dismiss
+       // controls must stay live or the athlete is stuck behind them
+       || t.closest('[data-blockfxclose]') || t.closest('.bfx-card') || t.closest('.bfx-go')
+       || t.closest('[data-prclose]') || t.closest('.pr-fx') || t.closest('.prdis')
+       || t.closest('.hifive-wrap') || t.closest('[data-hifive]')
+       || t.closest('.avabig-wrap')) return;   // the enlarged photo must always close
+    ev.stopPropagation();
+    if(ev.cancelable) ev.preventDefault();
+    if(ev.type==='click') alertToast('This session is logged \u2014 tap the lock to change it');
+  }catch(e){}
+}
+try{
+  document.addEventListener('click', lockGuard, {capture:true});
+  document.addEventListener('pointerdown', lockGuard, {capture:true});
+}catch(e){}
 function lockBarHTML(){
   try{
     if(!dayLocked()) return '';
@@ -2839,12 +2915,454 @@ function coachToggleHTML(){
     +'</div>';
 }
 
+// ===== YOUR FACE, BIGGER =====
+// Tap the photo anywhere it appears and it fills the screen. Small thing, but it is the one part
+// of the card that is actually you, and a thumbnail the size of a fingernail does not feel like
+// much. Only opens when a photo is set - blowing up two initials in a circle helps nobody.
+function avaBigHTML(){
+  try{
+    if(!S.avaBig || !S.avatar) return '';
+    var nm=(S.profileName||'').trim();
+    return '<div class="avabig-wrap" data-avabigclose="1" role="dialog" aria-label="Your photo">'
+      +'<img class="avabig" src="'+S.avatar+'" alt="'+esc(nm||'Your photo')+'">'
+      +(nm? '<div class="avabig-nm">'+esc(nm)+'</div>':'')
+      +'<div class="avabig-hint">Tap anywhere to close</div>'
+      +'</div>';
+  }catch(e){ return ''; }
+}
+function avaBigSync(){
+  try{
+    var id='avaBigHost', ex=document.getElementById(id);
+    var want=(S.avaBig && S.avatar);
+    if(!want){ if(ex) ex.remove(); return; }
+    if(!ex){ ex=document.createElement('div'); ex.id=id; document.body.appendChild(ex); }
+    ex.innerHTML=avaBigHTML();
+    ex.querySelectorAll('[data-avabigclose]').forEach(function(el){
+      el.onclick=function(){ S.avaBig=false; save(); render(); };
+    });
+  }catch(e){ oops('avaBigSync',e); }
+}
+function avaBigWire(){
+  avaBigSync();
+  document.querySelectorAll('[data-avabig]').forEach(function(el){
+    el.onclick=function(ev){
+      if(!S.avatar) return;                       // nothing to enlarge
+      if(el.id==='avaTap') return;                // in edit mode the circle picks a new photo
+      ev.stopPropagation(); S.avaBig=true; save(); render();
+    };
+  });
+  document.querySelectorAll('[data-avabigclose]').forEach(function(el){
+    el.onclick=function(){ S.avaBig=false; save(); render(); };
+  });
+}
+
+// ===== ADAPTATION =====
+// Three things the card previously noticed but never acted on. Each one is a rule with a stated
+// reason and a hard limit, not a model: the athlete can read exactly why a number moved, and undo
+// it. Nothing here fires silently, and nothing fires more than once a week.
+//
+// HONEST LIMITS, so nobody oversells this: it reads self-reported RIR and readiness at face value,
+// it has no per-muscle recovery model, and none of it is learned from data. It is a coach's
+// heuristics written down, which is what makes it inspectable.
+var AD_STALL_DROP=0.08;        // a stalled lift resets 8% - the standard 5/3/1-style back-off
+var AD_STALL_MIN_SESSIONS=3;   // three sessions of flat-or-falling before we touch anything
+var AD_STALL_COOLDOWN=21;      // days before the same lift can be reset again
+var AD_DEBT_DELOAD=6;          // recovery-debt score that earns an early deload
+var AD_VOL_STEP=1;             // sets added or removed per muscle per adaptation, never more
+var AD_VOL_MIN=8, AD_VOL_MAX=20;
+
+function adDays(a,b){
+  try{ return (new Date(b+'T12:00:00').getTime()-new Date(a+'T12:00:00').getTime())/86400000; }
+  catch(e){ return 999; }
+}
+// ---- 1. a stalled lift gets reset, not just reported ----
+function adStalled(){
+  var out=[];
+  try{
+    Object.keys(S.e1rmH||{}).forEach(function(k){
+      var h=(S.e1rmH[k]||[]).slice(-6);
+      if(h.length<AD_STALL_MIN_SESSIONS) return;
+      var last=h[h.length-1].v, prev=h[h.length-AD_STALL_MIN_SESSIONS].v;
+      if(last>prev) return;                                  // still climbing, leave it alone
+      var lastReset=(S.adLog||[]).filter(function(x){ return x.kind==='stall' && x.lift===k; }).pop();
+      if(lastReset && adDays(lastReset.d, shiftDate())<AD_STALL_COOLDOWN) return;
+      out.push({lift:k, from:prev, to:last, n:h.length});
+    });
+  }catch(e){ oops('adStalled',e); }
+  return out;
+}
+// ---- 2. fatigue, measured from what the athlete already told us ----
+// Readiness answers and near-failure grinding are the two honest signals here. This is a debt
+// counter, not a physiological model - it says "you have been running on empty", nothing more.
+function adRecoveryDebt(){
+  try{
+    var today=shiftDate(), debt=0, why=[];
+    var recent=(S.readyH||[]).filter(function(x){ return adDays(x.d, today)<=10; });
+    var red=recent.filter(function(x){ return x.s<3; }).length;
+    var amber=recent.filter(function(x){ return x.s>=3 && x.s<5; }).length;
+    if(red){ debt+=red*2; why.push(red+' day'+(red===1?'':'s')+' reporting badly recovered'); }
+    if(amber){ debt+=amber; why.push(amber+' day'+(amber===1?'':'s')+' short on sleep or beaten up'); }
+    // strength going backwards across MORE THAN ONE lift is the clearest systemic signal there is
+    var down=adStalledLifts();
+    if(down.length>=2){ debt+=3; why.push('strength flat or falling on '+down.length+' lifts at once'); }
+    return {debt:debt, why:why, red:red, amber:amber};
+  }catch(e){ oops('adRecoveryDebt',e); return {debt:0, why:[]}; }
+}
+function adStalledLifts(){
+  var out=[];
+  try{
+    Object.keys(S.e1rmH||{}).forEach(function(k){
+      var h=(S.e1rmH[k]||[]).slice(-3);
+      if(h.length<3) return;
+      if(h[2].v<=h[0].v) out.push(k);
+    });
+  }catch(e){}
+  return out;
+}
+// ---- 3. per-muscle volume drifts toward what is actually being tolerated ----
+// Only inside the evidence band, only one set at a time, and only when the signal is unambiguous.
+// How much training has actually been logged. Volume is the most invasive thing here - it
+// reshapes the program rather than nudging a number - so it needs real history behind it, not one
+// good week. A brand new athlete gets left completely alone.
+function adEvidence(){
+  try{
+    var n=0;
+    Object.keys(S.e1rmH||{}).forEach(function(k){ n+=(S.e1rmH[k]||[]).length; });
+    return n;
+  }catch(e){ return 0; }
+}
+var AD_VOL_MIN_EVIDENCE=8;
+function adVolumeDrift(){
+  var moves=[];
+  try{
+    if(!S.genPlan) return moves;                       // fixed templates are not ours to reshape
+    if(adEvidence()<AD_VOL_MIN_EVIDENCE) return moves; // too early to have an opinion
+    var v=plannedVolume(), debt=adRecoveryDebt();
+    var stalledSet={}; adStalledLifts().forEach(function(k){ stalledSet[k]=true; });
+    for(var m in v){
+      var sets=v[m];
+      if(!(sets>0)) continue;
+      if(debt.debt>=AD_DEBT_DELOAD && sets>AD_VOL_MIN){
+        moves.push({muscle:m, dir:-1, from:sets, why:'you are carrying fatigue'});
+      } else if(sets<12 && debt.debt<=1 && !Object.keys(stalledSet).length){
+        moves.push({muscle:m, dir:+1, from:sets, why:'recovering well and on the light side'});
+      }
+    }
+    moves=moves.slice(0,2);                            // never reshape a whole program at once
+  }catch(e){ oops('adVolumeDrift',e); }
+  return moves;
+}
+// ---- 4. every lift climbs at ITS OWN rate ----
+// A template gives everyone the same weekly percentage. Real lifters do not work that way: the
+// same person can add 5lb a week to a squat and half that to a press. This fits a slope through
+// the lift's own recent estimates and lets it climb at the rate IT has actually been climbing,
+// bounded hard so a lucky fortnight cannot run away with the programme.
+var AD_RATE_DAYS=56;           // roughly two blocks of evidence
+var AD_RATE_MIN_PTS=4;
+var AD_RATE_CAP=0.015;         // never more than 1.5% of the training max per week
+function adRate(lift){
+  try{
+    var today=shiftDate();
+    var H=(S.e1rmH&&S.e1rmH[lift]||[]).filter(function(x){
+      var a=adDays(x.d, today); return a>=0 && a<=AD_RATE_DAYS; });
+    if(H.length<AD_RATE_MIN_PTS) return null;
+    // least squares on (weeks ago, estimate) - slope is lb per week
+    var n=H.length, sx=0, sy=0, sxx=0, sxy=0;
+    H.forEach(function(p){
+      var x=-adDays(p.d, today)/7, y=p.v;
+      sx+=x; sy+=y; sxx+=x*x; sxy+=x*y; });
+    var den=(n*sxx - sx*sx);
+    if(Math.abs(den)<1e-9) return null;
+    var slope=(n*sxy - sx*sy)/den;
+    return Math.round(slope*10)/10;                 // lb per week
+  }catch(e){ oops('adRate',e); return null; }
+}
+function adRateMove(lift){
+  try{
+    var cur=(S.maxes||{})[lift]; if(!cur) return null;
+    var r=adRate(lift); if(r==null) return null;
+    if(r<=0) return null;                           // flat or falling is the stall rule's business
+    var cap=cur*AD_RATE_CAP;
+    var step=Math.min(r, cap);
+    var to=Math.round((cur+step)/5)*5;
+    if(to<=cur) return null;
+    return {lift:lift, from:cur, to:to, rate:r, capped:(r>cap)};
+  }catch(e){ return null; }
+}
+// ---- 5. coming back after time off ----
+// Strength does not vanish in a fortnight, but it does fade, and resuming at the old load is how
+// people get hurt on their first session back. Figures are deliberately conservative and the card
+// says plainly that they are an estimate to train through, not a measurement.
+function adLayoffDays(){
+  try{
+    var last=null;
+    (logKeys||[]).forEach(function(k){
+      var c=logCache[k]; if(c && c.date && (!last || c.date>last)) last=c.date; });
+    if(!last) return 0;
+    return Math.max(0, Math.round(adDays(last, shiftDate())));
+  }catch(e){ return 0; }
+}
+function adLayoffCut(days){
+  if(days<10) return 0;
+  if(days<=20) return 0.05;
+  if(days<=35) return 0.10;
+  return 0.15;
+}
+function adLayoff(){
+  try{
+    var d=adLayoffDays();
+    var cut=adLayoffCut(d);
+    if(!cut) return null;
+    var already=(S.adLog||[]).filter(function(x){ return x.kind==='layoff'; }).pop();
+    if(already && adDays(already.d, shiftDate())<d) return null;   // already handled this break
+    return {days:d, cut:cut};
+  }catch(e){ oops('adLayoff',e); return null; }
+}
+// ---- 6. why a lift stalled, not just that it did ----
+// The muscles each main lift leans on. When a lift stops moving and one of its drivers is
+// under-dosed, the honest answer is "you are not training the thing that limits it" - and adding
+// work there beats cutting the bar weight. This is the one piece a template cannot do for you.
+var AD_DRIVERS={
+  squat:['quads','glutes','back'],
+  bench:['chest','triceps','fdelt'],
+  dead: ['back','hams','glutes'],
+  ohp:  ['fdelt','sdelt','triceps']
+};
+var AD_WEAK_SETS=10;           // below the evidence band is where a driver becomes suspect
+function adWeakLink(lift){
+  try{
+    var drivers=AD_DRIVERS[lift]; if(!drivers) return null;
+    var v=plannedVolume(); if(!v) return null;
+    var weak=drivers.filter(function(m){ return (v[m]||0)<AD_WEAK_SETS; })
+                    .sort(function(a,b){ return (v[a]||0)-(v[b]||0); });
+    if(!weak.length) return null;
+    return {lift:lift, muscle:weak[0], sets:v[weak[0]]||0, others:weak.slice(1)};
+  }catch(e){ oops('adWeakLink',e); return null; }
+}
+
+// ---- the weekly pass ----
+function adaptRun(force){
+  try{
+    // Stall resets and fatigue deloads work off maxes and check-ins, which every card has, so
+    // they apply to a fixed template too. Only VOLUME drift needs a generated plan, because it
+    // reshapes the program rather than moving a number - that stays gated inside adVolumeDrift.
+    var today=shiftDate();
+    if(!force && S.adLast && adDays(S.adLast, today)<7) return null;   // once a week, at most
+    var acts=[];
+    // Coming back from a break is judged before anything else: every other signal is read against
+    // loads that are no longer true.
+    var lay=adLayoff();
+    if(lay){
+      Object.keys(S.maxes||{}).forEach(function(k){
+        var cur=S.maxes[k]; if(!cur) return;
+        var to=Math.round(cur*(1-lay.cut)/5)*5;
+        if(to>=cur) return;
+        S.maxes[k]=to;
+        acts.push({kind:'layoff', lift:k, from:cur, to:to, d:today, days:lay.days,
+          why:lay.days+' days away \u2014 easing back in rather than picking up where you left off'});
+      });
+    }
+    // Stalls next: a reset changes the loads everything else is judged against. But before cutting
+    // the bar weight, ask WHY - if a driver of that lift is under-dosed, the volume is the problem.
+    adStalled().forEach(function(s){
+      var cur=(S.maxes||{})[s.lift]; if(!cur) return;
+      var weak=adWeakLink(s.lift);
+      if(weak && !S.adWeakTried){
+        acts.push({kind:'weak', lift:s.lift, muscle:weak.muscle, sets:weak.sets, d:today,
+          why:esc(s.lift)+' stalled and your '+weak.muscle+' work is light at '+weak.sets
+             +' sets a week \u2014 feed that before cutting the bar'});
+        S.adWeakTried=true;                       // one cycle to act on it, then we back off anyway
+        return;
+      }
+      var to=Math.round(cur*(1-AD_STALL_DROP)/5)*5;
+      if(to>=cur) return;
+      S.maxes[s.lift]=to;
+      S.adWeakTried=false;
+      acts.push({kind:'stall', lift:s.lift, from:cur, to:to, d:today,
+        why:'three sessions without progress \u2014 backed off to build a run-up again'});
+    });
+    // Lifts that ARE moving climb at their own measured rate rather than a template's.
+    if(!lay){
+      Object.keys(S.maxes||{}).forEach(function(k){
+        if(acts.some(function(a){ return a.lift===k; })) return;   // already handled this lift
+        var mv=adRateMove(k); if(!mv) return;
+        S.maxes[k]=mv.to;
+        acts.push({kind:'rate', lift:k, from:mv.from, to:mv.to, rate:mv.rate, d:today,
+          why:'climbing about '+mv.rate+' '+uLbl()+' a week on your own numbers'
+             +(mv.capped?' (held to a safe step)':'')});
+      });
+    }
+    var debt=adRecoveryDebt();
+    if(debt.debt>=AD_DEBT_DELOAD && !S.adDeloadDue){
+      S.adDeloadDue=true;
+      acts.push({kind:'deload', d:today, debt:debt.debt,
+        why:'recovery debt: '+debt.why.join('; ')});
+    } else if(debt.debt<2 && S.adDeloadDue){
+      S.adDeloadDue=false;
+    }
+    adVolumeDrift().forEach(function(mv){
+      acts.push({kind:'volume', muscle:mv.muscle, dir:mv.dir, from:mv.from, d:today, why:mv.why});
+    });
+    if(acts.length){
+      try{ if(S.genPlan) applyMaxesToPlan(); }catch(e){}
+      S.adLog=(S.adLog||[]).concat(acts).slice(-30);
+      S.adNew=acts.length;
+      S.adLast=today;
+      save();
+      return acts;
+    }
+    S.adLast=today; save();
+    return null;
+  }catch(e){ oops('adaptRun',e); return null; }
+}
+// undo the most recent pass, for anyone who disagrees with it
+function adaptUndo(){
+  try{
+    var log=S.adLog||[]; if(!log.length) return;
+    var d=log[log.length-1].d;
+    var batch=log.filter(function(x){ return x.d===d; });
+    batch.slice().reverse().forEach(function(a){
+      if((a.kind==='stall'||a.kind==='rate'||a.kind==='layoff') && S.maxes && a.from) S.maxes[a.lift]=a.from;
+      if(a.kind==='weak') S.adWeakTried=false;
+      if(a.kind==='deload') S.adDeloadDue=false;
+    });
+    S.adLog=log.filter(function(x){ return x.d!==d; });
+    S.adNew=0;
+    try{ if(S.genPlan) applyMaxesToPlan(); }catch(e){}
+    save();
+  }catch(e){ oops('adaptUndo',e); }
+}
+function adaptHTML(){
+  try{
+    var log=S.adLog||[];
+    if(!log.length && !S.adDeloadDue) return '';
+    var d=log.length? log[log.length-1].d : null;
+    var batch=log.filter(function(x){ return x.d===d; });
+    var LN={squat:'Back Squat', bench:'Bench Press', dead:'Deadlift', ohp:'Overhead Press'};
+    var rows=batch.map(function(a){
+      if(a.kind==='stall') return '<li><b>'+esc(LN[a.lift]||a.lift)+'</b> '+WV(a.from)+' \u2192 '
+        +WV(a.to)+' '+uLbl()+' \u2014 '+esc(a.why)+'</li>';
+      if(a.kind==='deload') return '<li><b>Deload earned early</b> \u2014 '+esc(a.why)+'</li>';
+      if(a.kind==='volume') return '<li><b>'+esc(a.muscle)+'</b> '
+        +(a.dir>0?'room for another set':'one set lighter')+' \u2014 '+esc(a.why)+'</li>';
+      if(a.kind==='rate') return '<li><b>'+esc(LN[a.lift]||a.lift)+'</b> '+WV(a.from)+' \u2192 '
+        +WV(a.to)+' '+uLbl()+' \u2014 '+esc(a.why)+'</li>';
+      if(a.kind==='layoff') return '<li><b>'+esc(LN[a.lift]||a.lift)+'</b> '+WV(a.from)+' \u2192 '
+        +WV(a.to)+' '+uLbl()+' \u2014 '+esc(a.why)+'</li>';
+      if(a.kind==='weak') return '<li><b>Likely cause</b> \u2014 '+esc(a.why)+'</li>';
+      return '';
+    }).join('');
+    return '<div class="block adapt"><h3>What the card changed</h3>'
+      +'<div class="cue" style="padding:0 0 6px">Adjusted from your own logged sets and check-ins. '
+      +'Every change is listed with its reason \u2014 if you disagree, put it back.</div>'
+      +'<ul class="adapt-list">'+rows+'</ul>'
+      +(S.adDeloadDue? '<div class="cue" style="color:var(--amber);padding:6px 0 0">'
+         +'A deload is recommended this week rather than waiting for the calendar.</div>':'')
+      +'<div class="savelog" id="adaptUndoBtn">Put it back</div></div>';
+  }catch(e){ return ''; }
+}
+function adaptWire(){
+  var b=document.getElementById('adaptUndoBtn');
+  if(b) b.onclick=function(){ adaptUndo(); alertToast('Reverted'); render(); };
+}
+
+// ===== WHAT'S NEW =====
+// The service worker already serves the page network-first, so a deploy reaches a phone on the
+// next open. This is the other half: telling people what changed. Entries are newest-first; on
+// boot the card shows everything added since the build they last saw. Someone opening the card
+// for the first time gets nothing - a changelog is meaningless before you have used the thing.
+// TO CUT A RELEASE: add an entry at the TOP with a NEW `build:` tag (a date works well).
+// That tag identifies the RELEASE and is what tells a returning card it has something to say.
+// It is deliberately NOT the BUILD constant: BUILD names the CARD ('v59' vs 'c17'), both cards
+// ship the same release, and BUILD is declared further down the file - referencing it here
+// throws on load and takes the whole card with it.
+var WHATSNEW=[
+  {build:'2026.08.22', date:'2026-08-22', title:'Sessions close when you log them', items:[
+    'Logging a session now locks it. A stray thumb cannot rewrite a day you have finished.',
+    'Tap the lock on a closed day to reopen it \u2014 nothing is ever stuck.',
+    'The high five stops greeting you every time you look back at a completed day.',
+    'Session notes clear once saved, so Monday\u2019s note stays out of Wednesday\u2019s report.',
+    'Editing your plan no longer rewrites sessions you already finished.',
+    'A muscle map on the Plan tab shows where your week\u2019s work actually lands, with sets per muscle underneath.',
+    'Buttons respond immediately \u2014 the old tap delay is gone.',
+    'Report a problem or ask a question straight from the card.'
+  ]}
+];
+function whatsNewPending(){
+  try{
+    if(!WHATSNEW.length) return [];
+    if(!S.seenBuild) return [];                 // brand new here: nothing to catch up on
+    if(S.seenBuild===WHATSNEW[0].build) return [];
+    var out=[];
+    for(var i=0;i<WHATSNEW.length;i++){
+      if(WHATSNEW[i].build===S.seenBuild) break;
+      out.push(WHATSNEW[i]);
+    }
+    return out;
+  }catch(e){ return []; }
+}
+function whatsNewHTML(){
+  try{
+    if(!S.wnOpen || whatsNewBusy()) return '';
+    var rel=whatsNewPending();
+    if(!rel.length) return '';
+    var body=rel.map(function(r){
+      return '<div class="wn-rel"><div class="wn-h">'+esc(r.title)+'</div>'
+        +'<ul class="wn-list">'+r.items.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>';
+    }).join('');
+    return '<div class="wn-wrap" data-wnbg="1">'
+     +'<div class="wn-sheet" role="dialog" aria-label="What changed in this update">'
+       +'<div class="hw-grip" aria-hidden="true"></div>'
+       +'<div class="wn-title">The card was updated</div>'
+       +'<div class="wn-sub">Here is what changed since you last opened it.</div>'
+       +body
+       +'<div class="hw-done" data-wndone="1">Got it</div>'
+     +'</div></div>';
+  }catch(e){ return ''; }
+}
+function whatsNewDismiss(){
+  try{ S.wnOpen=false; S.seenBuild=WHATSNEW.length? WHATSNEW[0].build : BUILD; save(); }
+  catch(e){ oops('whatsNewClose',e); }
+  render();
+}
+function whatsNewWire(){
+  document.querySelectorAll('[data-wndone]').forEach(function(el){
+    el.onclick=function(ev){ ev.stopPropagation(); whatsNewDismiss(); };
+  });
+  document.querySelectorAll('[data-wnbg]').forEach(function(el){
+    el.onclick=function(ev){ if(ev.target===el) whatsNewDismiss(); };
+  });
+}
+function whatsNewBusy(){
+  // Never interrupt the walkthrough or onboarding. The tour installs a capture-phase guard that
+  // swallows every tap, so a sheet shown on top of it cannot be dismissed - the user would be
+  // trapped. A changelog can wait for the next open; a trap cannot be undone.
+  try{
+    if(typeof TOUR!=='undefined' && TOUR && TOUR.live) return true;
+    if(S.tour && S.tour.done===false) return true;
+    if(typeof ONB_ACTIVE==='function' && ONB_ACTIVE()) return true;
+    if(typeof coachIdle==='function' && coachIdle()) return true;
+  }catch(e){}
+  return false;
+}
+function whatsNewBoot(){
+  try{
+    if(!S.seenBuild){ S.seenBuild=WHATSNEW.length? WHATSNEW[0].build : BUILD; save(); return; }
+    if(whatsNewBusy()) return;
+    if(whatsNewPending().length){ S.wnOpen=true; render(); }
+  }catch(e){ oops('whatsNewBoot',e); }
+}
+
 // ===== SEND A REPORT =====
 // There is no server behind this card, so nothing can be "submitted" anywhere. What the card CAN
 // do is assemble everything useful into one block of text and hand it to the phone: the native
 // share sheet, an email draft, or the clipboard. The athlete then sends it however they already
 // talk to their coach. Set REPORT_TO before handing the card out and the email route is one tap.
-var REPORT_TO='';            // e.g. 'coach@example.com' - leave empty to offer share/copy only
+// WHO REPORTS COME TO. Set these before handing the card to anyone; leave either blank to hide
+// that button. Email must be a plain address (it builds a mailto: link). Phone must be a plain
+// number, digits and + only - it builds an sms: link, so '555-0100' and '+15555550100' both work.
+var REPORT_TO='manuel.g.grajeda@outlook.com';            // e.g. 'jerry@example.com'
+var REPORT_SMS='+15202346160';           // e.g. '+15555550100'
 var REPORT_KINDS=[['bug','Something looks wrong'],['question','I have a question'],['idea','A suggestion']];
 function reportBundle(kind, msg){
   var L=[];
@@ -2890,10 +3408,22 @@ function reportHTML(){
      +'<div class="rpt-acts">'
        +'<span class="savelog" id="rptShare">Share\u2026</span>'
        +(REPORT_TO? '<span class="savelog" id="rptMail">Email it</span>':'')
+       +(REPORT_SMS? '<span class="savelog" id="rptSms">Text it</span>':'')
        +'<span class="savelog" id="rptCopy">Copy to clipboard</span>'
      +'</div>'
      +'<div class="hw-done" data-rptclose="1">Close</div>'
    +'</div></div>';
+}
+// The links are built here rather than inline so they can be checked without a browser actually
+// navigating. iOS wants sms:number&body=, Android wants sms:number?body= - '?' is the safer
+// default, and the worst case is the message app opens with the number and an empty body.
+function reportMailHref(body, kind){
+  return 'mailto:'+REPORT_TO
+    +'?subject='+encodeURIComponent('Training card report \u00b7 '+(kind||'bug'))
+    +'&body='+encodeURIComponent(body||'');
+}
+function reportSmsHref(body){
+  return 'sms:'+REPORT_SMS+'?body='+encodeURIComponent(body||'');
 }
 function reportWire(){
   document.querySelectorAll('[data-rptkind]').forEach(function(el){
@@ -2917,11 +3447,13 @@ function reportWire(){
   };
   var mail=document.getElementById('rptMail');
   if(mail) mail.onclick=function(){
-    try{
-      var subj='Training card report \u00b7 '+(S.rptKind||'bug');
-      location.href='mailto:'+REPORT_TO+'?subject='+encodeURIComponent(subj)
-        +'&body='+encodeURIComponent(text());
-    }catch(e){ oops('reportMail',e); rptCopy(text()); }
+    try{ location.href=reportMailHref(text(), S.rptKind); }
+    catch(e){ oops('reportMail',e); rptCopy(text()); }
+  };
+  var sms=document.getElementById('rptSms');
+  if(sms) sms.onclick=function(){
+    try{ location.href=reportSmsHref(text()); }
+    catch(e){ oops('reportSms',e); rptCopy(text()); }
   };
   var cp=document.getElementById('rptCopy');
   if(cp) cp.onclick=function(){ rptCopy(text(), cp); };
@@ -3892,7 +4424,7 @@ function volumeHTML(){
       : '<div class="cue" style="padding:0 0 8px;color:var(--green)">Every muscle sits in the productive range for your current routine.</div>';
     var nAdded=0; dayCodes().forEach(function(c){ (custList(c)||[]).forEach(function(x){ if(x&&x.vol) nAdded++; }); });
     var reset=nAdded? '<div class="vol-reset" data-volreset="1">\u21ba Reset '+nAdded+' added movement'+(nAdded>1?'s':'')+'</div>' : '';
-    return head+summ+anatomyHTML()+'<div class="vol-wrap">'+rows+'</div>'+reset+'</div>';
+    return head+summ+adaptHTML()+anatomyHTML()+'<div class="vol-wrap">'+rows+'</div>'+reset+'</div>';
   }catch(e){ return ''; }
 }
 function routineHTML(){
@@ -5290,6 +5822,8 @@ async function saveSessionLog(quiet){
     save();
     await refreshLogs();
     try{ blockDoneCheck(); }catch(e){ oops("saveSessionLog",e); }   // AFTER the write + refresh, so the final session counts
+    // the evidence for adaptation just landed, so weigh it now
+    try{ adaptRun(); }catch(e){ oops('adaptRun',e); }
     render();
     if(!quiet) alertToast('Session saved \u00b7 '+S.when.date);
     return true;
@@ -5389,6 +5923,13 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(S.rptKind===undefined) S.rptKind='bug';
   if(S.coachOwn===undefined) S.coachOwn=false;
   if(S.locked===undefined) S.locked={};
+  if(S.wnOpen===undefined) S.wnOpen=false;
+  if(S.avaBig===undefined) S.avaBig=false;
+  if(S.adLog===undefined) S.adLog=[];
+  if(S.adLast===undefined) S.adLast=null;
+  if(S.adDeloadDue===undefined) S.adDeloadDue=false;
+  if(S.adWeakTried===undefined) S.adWeakTried=false;
+  if(S.seenBuild===undefined) S.seenBuild=null;
   if(S.dbf===undefined) S.dbf={};   // null = follow onboarding, else an explicit override
   if(S.blockFxShown===undefined) S.blockFxShown=null;
   if(!S.hist) S.hist=null;
@@ -5455,7 +5996,7 @@ function renderInner(){
   }
   const d=dayObj(); const app=document.getElementById('app');
   let h='<header class="hdr-id">'
-    +(S.avatar? '<img class="ava-mini" src="'+S.avatar+'" alt="">' : '<span class="hdr-mark">'+brandMark(84)+'</span>')
+    +(S.avatar? '<img class="ava-mini" src="'+S.avatar+'" alt="Your photo \u2014 tap to enlarge" data-avabig="1" role="button" tabindex="0">' : '<span class="hdr-mark">'+brandMark(84)+'</span>')
     +'<div class="hdr-tx"><div class="eyebrow">'+PLAN.block+'</div><h1>Training Card'
     +(S.profileName? ' <span class="hdr-nm">\u00b7 '+esc(S.profileName)+'</span>':'')+'</h1>'
       +'<div class="sub">Starts '+PLAN.start+' \u00b7 loads as of '+PLAN.builtOn+' \u00b7 '+BUILD+'</div></div></header>';
@@ -5497,7 +6038,8 @@ function renderInner(){
     h+='<div class="sub" style="margin-top:8px">'+COPY.profileHeading+'</div>';
     h+=(function(){
         var initials=esc(((S.profileName||'').trim().split(/\s+/).map(function(x){return x[0]||'';}).join('').slice(0,2).toUpperCase())||'\u25CB');
-        var circle=function(cls){ return '<div class="'+cls+'"'+(profEdit?' id="avaTap" title="Tap to change the photo"':'')+'>'
+        var circle=function(cls){ return '<div class="'+cls+'"'+(profEdit?' id="avaTap" title="Tap to change the photo"'
+            :(S.avatar?' data-avabig="1" role="button" tabindex="0" title="Tap to see it full size"':''))+'>'
           +(S.avatar? '<img src="'+S.avatar+'" alt="">':'<span class="ava-init">'+initials+'</span>')+'</div>'; };
         if(profEdit){
           return '<div class="profcard pc-edit"><div class="ava-row">'+circle('ava')
@@ -5700,6 +6242,7 @@ function renderInner(){
   try{ h+=blockFxHTML(); }catch(e){}
   try{ h+=howSheetHTML(); }catch(e){}
   try{ h+=reportHTML(); }catch(e){}
+  try{ h+=whatsNewHTML(); }catch(e){}
   try{ h=rosterBanner()+h; }catch(e){}
   h+=deckHeadHTML();
   if(S.view==='deck'){ h+=deckHTML(); h+=dayUtilHTML(); app.innerHTML=h; wire(); wireFocus(); return; }
@@ -5958,7 +6501,18 @@ function wire(){
   try{ wirePlan(); }catch(e){}
   document.querySelectorAll('[data-prclose]').forEach(function(el){ el.onclick=function(){ S.prShow=null; save(); render(); }; });
   document.querySelectorAll('[data-blockfxclose]').forEach(function(el){ el.onclick=function(){ S.blockFx=null; save(); render(); }; });
+  try{ var appL=document.getElementById('app');
+       if(appL) appL.classList.toggle('is-locked', dayLocked());
+       // pointer-events does not stop typing into a field, so say so explicitly
+       if(appL) appL.querySelectorAll('textarea,input,select').forEach(function(el){
+         if(el.closest && el.closest('.lockbar')) return;
+         if(dayLocked()){ el.setAttribute('readonly','readonly'); el.setAttribute('aria-disabled','true'); el.disabled=(el.tagName==='SELECT'); }
+         else { el.removeAttribute('readonly'); el.removeAttribute('aria-disabled'); if(el.tagName==='SELECT') el.disabled=false; }
+       }); }catch(e){ oops('lockClass',e); }
   try{ reportWire(); }catch(e){ oops('reportWire',e); }
+  try{ whatsNewWire(); }catch(e){ oops('whatsNewWire',e); }
+  try{ avaBigWire(); }catch(e){ oops('avaBigWire',e); }
+  try{ adaptWire(); }catch(e){ oops('adaptWire',e); }
   try{ rosterWire(); }catch(e){ oops('rosterWire',e); }
   document.querySelectorAll('[data-unlock]').forEach(function(el){
     el.onclick=function(){ dayLock(false); alertToast('Unlocked \u2014 changes will be saved again'); render(); }; });
@@ -7814,6 +8368,9 @@ try{
   }
 }catch(e){}
 load().then(async()=>{
+  // must run AFTER the saved state is in, or S.seenBuild is still empty and every
+  // returning user looks like a first-timer
+  setTimeout(function(){ try{ whatsNewBoot(); }catch(e){ oops('whatsNewBoot',e); } }, 60);
   // a plan built by onboarding supersedes the shipped template
   try{ if(S.genPlan && S.genPlan.days && S.genPlan.days.length){
     PLAN=S.genPlan;
@@ -8252,14 +8809,28 @@ function ONB_ACTIVE(){ try{
   if(S.genPlan && S.genPlan.days && ONB_STEPS[o.step]!=='review') return false;
   return true;
 }catch(e){ return false; } }
-function ONB_r5(x){ return Math.max(45, Math.round(x/5)*5); }
-function ONB_r5(x){ return Math.max(45, Math.round(x/5)*5); }
+function ONB_r5(x){
+  // Snap to something that can actually go on the bar: 45 plus pairs of plates, i.e. tens.
+  // Round UP rather than to nearest, so the coarser grid never makes a ramp step SMALLER
+  // than intended - rounding down cost an extra set on lifters whose seed was far too low.
+  if(x<=45) return 45;
+  return Math.max(45, Math.ceil((x-45)/10)*10+45);
+}
+
 function ONB_seed(l){ var o=ONB();
   return o.wt*(ONB_BWM[l][o.exp||'some'])*((o.sex==='f')?0.72:1); }
 function ONB_step(){ var R=ONB().ramp; return ONB_SCHED[Math.min(R.idx||0, ONB_SCHED.length-1)]; }
 function ONB_next(l){ var R=ONB().ramp; if(!R) return ONB_r5(ONB_seed(l)*ONB_SCHED[0].p);
   if(R.next) return R.next;
-  return ONB_r5(R.est*ONB_step().p); }
+  var w=ONB_r5(R.est*ONB_step().p);
+  // Weights snap to what a bar can actually hold, which is a 10lb grid. Two rungs of the ramp can
+  // therefore round to the SAME weight - and repeating a set teaches nothing and costs the lifter
+  // a set. Always move up at least one notch.
+  try{
+    var last=R.sets.length? R.sets[R.sets.length-1].w : 0;
+    if(last && w<=last) w=last+10;
+  }catch(e){}
+  return w; }
 function ONB_reps(){ var R=ONB().ramp; return R? ONB_step().r : 5; }
 function ONB_feedback(fb){
   var o=ONB(), R=o.ramp; if(!R) return;
@@ -8440,6 +9011,23 @@ function ONB_HTML(){
       h+='<div class="block" style="text-align:center">'
        +'<div class="eyebrow">'+L.n+' \u00b7 set '+(o.ramp.sets.length+1)+'</div>'
        +'<div class="onb-load">'+w+'<span> lb \u00d7 '+rp+'</span></div>'
+       // Show the bar loaded. Being told "185 x 5" and being shown which plates to slide on are
+       // different asks - the second one you can just copy, which is the point during setup.
+       +(function(){
+          try{
+            if(!/squat|bench|dead|ohp/.test(o.ramp.lift)) return '';
+            var r=wuBarSVG(w, 76);
+            if(!r || !r.svg) return '';
+            return '<div class="onb-bar">'+r.svg
+              +'<div class="onb-bar-cap">'
+              +(r.unmatched
+                 ? 'closest you can load with standard plates'
+                 : (r.plates && r.plates.length
+                    ? 'each side: '+r.plates.join(' + ')
+                    : 'just the bar'))
+              +'</div></div>';
+          }catch(e){ return ''; }
+        })()
        +'<div class="cue" style="padding:2px 0 10px">'+L.cue+' Do '+({1:'one rep',2:'two reps',3:'three reps',5:'five reps'}[rp]||rp+' reps')+', rack it, then answer honestly.</div>'
        +'<div style="font-weight:800;font-size:15px;margin-bottom:6px">How many MORE reps could you have done?</div>'
        +(heavy? '<div class="cue" style="padding:0 0 10px;color:var(--amber)"><b>Rest 2-3 minutes before this one.</b> Rushing the heavy sets is what makes the number wrong.</div>':'')
