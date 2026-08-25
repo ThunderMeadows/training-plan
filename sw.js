@@ -1,6 +1,6 @@
 // Cache-first for the app shell: once installed it opens instantly and works with no signal,
 // which matters in a gym basement. Bump CACHE when you deploy and old copies clear themselves.
-const CACHE = 'card-v61b-c19b-flat';
+const CACHE = 'card-v61k-c19k';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -19,8 +19,15 @@ self.addEventListener('fetch', e => {
     // NETWORK-FIRST for the page itself: a deploy shows up on the very next open.
     // The cache is the offline fallback, not the front door - cache-first here is how
     // an update can hide behind a stale copy indefinitely.
+    // Race the network against a short clock: on a slow or flaky connection, iOS sits on the
+    // resume snapshot until this fetch settles - an untimed fetch can pin a stale screenshot
+    // (whatever was last on screen) over a frozen-looking app for 30+ seconds. 3.5s and the
+    // cached copy takes over; the fresh deploy still lands on the next good-signal open.
     e.respondWith(
-      fetch(e.request).then(res => {
+      Promise.race([
+        fetch(e.request),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('sw-timeout')), 3500))
+      ]).then(res => {
         if (res && res.status === 200) {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, copy));
