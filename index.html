@@ -950,7 +950,26 @@ td.c-n.now{font-weight:700;}
 @keyframes gbBlink{0%,93.0%{transform:scaleY(0)}94.2%{transform:scaleY(1.05)}
   95.4%{transform:scaleY(0)}96.6%{transform:scaleY(1.05)}97.8%,100%{transform:scaleY(0)}}
 #gbHost.gb-pose .gb-r.on{opacity:var(--i,.9);animation:gbPulse 1.8s ease-in-out infinite;}
-@keyframes gbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+/* Docked, the visible sliver keeps a soft steady ember - so the feature advertises itself
+   every time he peeks out. The full breathing pulse stays reserved for pose mode. */
+#gbHost.gb-docked .gb-r.on{opacity:calc(var(--i,.9)*.85);}
+/* Pose = spotlight. The artwork is ALREADY a golden lightbulb at near-peak brightness, so no
+   additive glow can read against it - screen blending has no headroom left to add. Dim the
+   candy while posed and the trained muscles punch through by contrast: lights down, muscles
+   lit. Docked stays undimmed - the wow is reserved for pulling him out. */
+#gbHost.gb-pose .gb-base,
+#gbHost.gb-pose .gb-lids,
+#gbHost.gb-pose .gb-tail{filter:brightness(.58) saturate(.88);}
+.gb-base,.gb-lids,.gb-tail{transition:filter .45s ease;}
+@keyframes gbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.16)}}
+.gb-hint{position:fixed;left:44px;z-index:79;max-width:210px;padding:10px 13px;
+  border-radius:var(--r-sm,12px);background:var(--panel,#23262B);
+  border:1px solid var(--amber,#E8A33D);color:var(--chalk,#EDEDE8);
+  font-size:12.5px;font-weight:700;line-height:1.35;box-shadow:0 6px 20px rgba(0,0,0,.4);
+  animation:gbHintIn .5s ease both;}
+.gb-hint::before{content:"";position:absolute;left:-7px;top:50%;margin-top:-7px;
+  border:7px solid transparent;border-left:0;border-right-color:var(--amber,#E8A33D);}
+@keyframes gbHintIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
 /* Parked at the edge he leans out every few seconds, has a look around, and tucks back in.
    A CSS animation outranks the inline transform the physics loop writes, so this only plays
    while docked - the moment he is grabbed the class comes off and the springs take over. */
@@ -1137,7 +1156,7 @@ td.c-n.now{font-weight:700;}
 #app.is-locked .lockbar,
 #app.is-locked .tabrow,
 #app.is-locked .chiprow,
-#app.is-locked .weekrow{pointer-events:auto;opacity:1;}
+#app.is-locked .weekhead{pointer-events:auto;opacity:1;}
 
 /* A previewed future session is look-don't-touch: same inert layer as a logged day.
    Only the preview bar (Back to today) and navigation stay live. Day-agnostic .lockfree
@@ -1156,7 +1175,7 @@ td.c-n.now{font-weight:700;}
 #app.is-preview .prevbar,
 #app.is-preview .tabrow,
 #app.is-preview .chiprow,
-#app.is-preview .weekrow{pointer-events:auto;opacity:1;}
+#app.is-preview .weekhead{pointer-events:auto;opacity:1;}
 
 /* ---- photo, full size ---- */
 .avabig-wrap{position:fixed;inset:0;z-index:220;background:rgba(0,0,0,.88);display:flex;
@@ -2569,13 +2588,26 @@ function lockGuard(ev){
     if(!dayLocked() && !pv) return;
     var t=ev.target;
     if(!t || !t.closest) return;
+    // UNCONDITIONALLY exempt, above every branch: things that float OVER the session are
+    // never part of the day being locked. Gummy (field-caught frozen twice), and every
+    // fixed overlay outside #app - the install sheet (field-caught as an inescapable
+    // modal on a gated preview), the floating calculator, the storage and error bars,
+    // and the boot ident's tap-to-skip. Locking any of these traps the athlete behind
+    // a modal or silences a warning. Third bug in this family - hence one rule, on top.
+    if(t.closest('#gbHost') || t.closest('.gb-hint')
+       || t.closest('#a2hsSheet') || t.closest('.calcfab') || t.closest('.calcpanel')
+       || t.closest('#errBar') || t.closest('.stbar') || t.closest('#bootSplash')
+       // the footer is deck NAVIGATION (prev / next exercise, jump to deck) - it moves the
+       // athlete's eyes, never their data. Reviewing a logged day and browsing a preview
+       // both NEED it; the lock matrix caught it dead in both states.
+       || t.closest('.footer')) return;
     if(pv && !dayLocked()){
       // FUTURE PREVIEW: total lockdown. Only navigation off the page, the preview bar, and
       // overlays floating above the session (walkthrough, what's-new, report, enlarged photo)
       // stay live. The day-agnostic .lockfree utilities - cardio and bodyweight - edit TODAY's
       // data and stay live on a logged-day review, but a preview is browsing, not training.
       if(t.closest('.prevbar') || t.closest('.tabrow') || t.closest('.chiprow')
-         || t.closest('.weekrow') || t.closest('#coachHost') || t.closest('.wn-wrap')
+         || t.closest('.weekhead') || t.closest('#coachHost') || t.closest('.wn-wrap')
          || t.closest('.rpt-wrap') || t.closest('.hw-wrap') || t.closest('.avabig-wrap')) return;
       ev.stopPropagation();
       if(ev.cancelable) ev.preventDefault();
@@ -2583,7 +2615,7 @@ function lockGuard(ev){
       return;
     }
     if(t.closest('[data-unlock]') || t.closest('.tabrow') || t.closest('.chiprow')
-       || t.closest('.weekrow') || t.closest('#coachHost') || t.closest('.wn-wrap')
+       || t.closest('.weekhead') || t.closest('#coachHost') || t.closest('.wn-wrap')
        || t.closest('.rpt-wrap') || t.closest('.hw-wrap') || t.closest('#gbHost')
        // celebrations sit on top of a day that has just been logged, so their dismiss
        // controls must stay live or the athlete is stuck behind them
@@ -2893,6 +2925,19 @@ function restHoldBtn(cls, attr, label){
   if(holding){ var elp=Date.now()-holdT0; el+=' style="--hd:'+HOLD_MS+'ms;--he:-'+elp+'ms"'; }
   return el+'>'+label+'</button>';
 }
+// One word on WHY this number: rests differ per movement class now, and a timer that
+// changes length without explanation reads as a bug. Named, it reads as coaching.
+function restWhy(b){
+  try{
+    var d=(typeof effDay==='function')? effDay():dayObj();
+    var ex=d.exercises[b.exi]; if(!ex) return '';
+    if(isMain(ex)) return ' \u00b7 main lift';
+    var c=(typeof exRestClass==='function')? exRestClass(ex) : null;
+    if(c==='short') return ' \u00b7 core / hold';
+    if(c==='iso') return ' \u00b7 isolation';
+    return '';
+  }catch(e){ return ''; }
+}
 function restBody(b,e,go){
   var r=restSetRef(b);
   var reps=r? ((r.s.reps!=null)? r.s.reps : r.tgt) : null;
@@ -2901,7 +2946,7 @@ function restBody(b,e,go){
   var over=go? fmtDur(e-b.target*1000) : null; // once past GO, how long they've been sitting
   var h='<div class="rest-in">'
    +'<div class="rest-clock mono">'+(go?'GO':fmtDur(rem))+'</div>'
-   +'<div class="rest-cap">'+(go? '+'+over+' past the bell \u00b7 rested '+fmtDur(e)+' total':'REST \u00b7 '+fmtDur(b.target*1000)+' prescribed')+'</div>'
+   +'<div class="rest-cap">'+(go? '+'+over+' past the bell \u00b7 rested '+fmtDur(e)+' total':'REST \u00b7 '+fmtDur(b.target*1000)+' prescribed'+restWhy(b))+'</div>'
    +'<div class="rest-next">'+restNextInfo(b,true)+'</div>'
    +restNextLoaded(b)
    +(go? '' : '<button class="rest-ext" data-restext="30">+30s this rest</button>')
@@ -2925,6 +2970,14 @@ function restBody(b,e,go){
     if(tgt.kind==='set'){
       var nm=''; try{ if(tgt.i!==b.exi){ var d2=(typeof effDay==='function')? effDay():dayObj();
         nm=(tgt.st.sub||d2.exercises[tgt.i].name); } }catch(x){}
+      // A timed hold cannot be "done" from the rest screen - it has to be CLOCKED. The old
+      // button would log a plank as prescribed without timing it, and actually starting the
+      // clock meant Minimise, then hunt for Start hold. One plain tap now closes the rest
+      // and starts the hold clock - a tap, not a hold-to-fire, because starting a clock is
+      // not destructive and the athlete is about to get into position, not pocket the phone.
+      var hx=null; try{ var dh=(typeof effDay==='function')? effDay():dayObj(); hx=dh.exercises[tgt.i]; }catch(x){}
+      if(hx && /max hold/i.test(String(exReps(hx))))
+        return '<button class="rest-go" data-reststart="1">\u23F1 Start hold '+(nm? '\u2014 '+esc(nm)+' ':'')+'\u00b7 set '+(tgt.j+1)+'</button>';
       return restHoldBtn('rest-go','data-restnext','\u2713 Did '+(nm? esc(nm)+' ':'')+'set '+(tgt.j+1)+' \u2014 hold to log'); }
     if(tgt.kind==='ex') return restHoldBtn('rest-go','data-restnext','Next exercise \u2192 hold');
     return restHoldBtn('rest-go','data-restnext','Day done \u2014 hold to clear'); })();
@@ -2993,6 +3046,17 @@ function wireRest(){
     if((n=hit('data-restrep'))){ restEditReps(b,+n.dataset.restrep); return; }
     if((n=hit('data-restrir'))){ restSetRir(b,+n.dataset.restrir); return; }
     if(hit('data-restgrind')){ restToggleGrind(b); return; }
+    if(hit('data-reststart')){
+      // One tap: the rest ends by choice, the hold clock is already running, and the card
+      // lands on the exercise - get into position, the seconds are counting.
+      var tgs=restNextTarget(b);
+      if(tgs && tgs.kind==='set'){
+        S.restDismiss=b.t; stopScheduled();
+        if(tgs.i!==focusIdx()) S.focus=tgs.i;
+        ensureAudio(); holdT={i:tgs.i, t0:Date.now()};
+        save(); paintRest(true); render();
+      }
+      return; }
     if(hit('data-restnext')||hit('data-restkill')){
       // taps don't fire these anymore - holds do. A click right after a completed hold is
       // the pointer sequence finishing; anything else gets one gentle hint.
@@ -4225,18 +4289,31 @@ function gbPose(){
   var c=gbCenter(); GB.tx=c.x; GB.ty=c.y;
   var h=GB.host; h.classList.remove('gb-docked'); h.classList.add('gb-stand','gb-pose');
   gbViewSync();
-  var R=gummyRegions(), max=0, kk; for(kk in R) if(R[kk]>max) max=R[kk];
-  h.querySelectorAll('.gb-r').forEach(function(el){
-    var v=R[el.getAttribute('data-gr')]||0;
-    if(max>0 && v>0.5){ el.classList.add('on'); el.style.setProperty('--i', (0.5+0.5*Math.min(1, v/max)).toFixed(2)); }
-    else { el.classList.remove('on'); el.style.removeProperty('--i'); }
-  });
+  gbLight();
+  if(typeof S!=='undefined' && S && !S.gbSeen){ S.gbSeen=1; try{ save(); }catch(e){} }  // discovered - retire the hint for good
+  try{ var _gh=document.getElementById('gbHint'); if(_gh) _gh.remove(); }catch(e){}
   gbWake();
+}
+// Which of today's muscles glow, at what intensity. Shared by dock AND pose: the docked
+// sliver at the screen edge now advertises the feature instead of hiding it. Before this,
+// the glow only existed in pose mode - a user who never dragged him out never saw it,
+// which is why nobody knew the feature existed.
+function gbLight(){
+  try{
+    if(!GB.host) return;
+    var R=gummyRegions(), max=0, kk; for(kk in R) if(R[kk]>max) max=R[kk];
+    GB.host.querySelectorAll('.gb-r').forEach(function(el){
+      var v=R[el.getAttribute('data-gr')]||0;
+      if(max>0 && v>0.5){ el.classList.add('on'); el.style.setProperty('--i', (0.75+0.25*Math.min(1, v/max)).toFixed(2)); }
+      else { el.classList.remove('on'); el.style.removeProperty('--i'); }
+    });
+  }catch(e){}
 }
 function gbDock(){
   GB.mode='dock'; GB.stand=false; GB.spin=0; GB.spinT=0; GB.spinV=0; GB.sx=1;
   var d0=gbDockPos(); GB.tx=d0.x; GB.ty=d0.y;
   if(GB.host){ GB.host.classList.remove('gb-pose','gb-stand'); gbViewSync(); }
+  gbLight();                                   // today's muscles stay lit on the docked sliver
   gbWake();
 }
 function gbLayers(){
@@ -4256,7 +4333,7 @@ function gbLayers(){
       lids+='<ellipse class="gb-lid" cx="'+(e[0]/100*im.w).toFixed(1)+'" cy="'+(e[1]/100*im.h).toFixed(1)+'" '
         +'rx="'+(e[2]/100*im.w/2).toFixed(1)+'" ry="'+(e[3]/100*im.h/2).toFixed(1)+'" fill="'+e[4]+'"/>';
     });
-    var blur=(im.w*0.05).toFixed(1);
+    var blur=(im.w*0.035).toFixed(1);   // tighter = hotter: the wide blur was smearing the energy away
     out+='<div class="gb-view'+(view==='front'?' on':'')+'" data-gbv="'+view+'" '
       +'style="--gbimg:url('+"'"+im.u+"'"+')">'
       +'<div class="gb-base"></div>'
@@ -4264,12 +4341,20 @@ function gbLayers(){
         ? '<div class="gb-tail" style="--gbtail:url('+"'"+GB_TAIL.u+"'"+');'
           +'transform-origin:'+GB_TAIL.ox+'% '+GB_TAIL.oy+'%"></div>' : '')
       +'<div class="gb-glow"><svg viewBox="0 0 '+im.w+' '+im.h+'" preserveAspectRatio="xMidYMid meet" aria-hidden="true">'
+        // Ember, not ice: the glow screen-blends OVER orange candy, and cyan screened over
+        // orange cancels out to a pale smudge that reads as a shiny spot, not a lit muscle.
+        // Warm white -> amber -> orange reads as heat from inside the gummy - and speaks the
+        // card's established language: amber glow = live (same as the active set).
+        // Screen blend over bright candy compresses everything toward pale - so the glow
+        // needs ENERGY, not just hue: white-hot core, saturated shoulders, and the region
+        // set is drawn twice below for double luminance.
         +'<defs><radialGradient id="gbGlow"><stop offset="0" stop-color="#FFFFFF"/>'
-          +'<stop offset=".5" stop-color="#8FE9FF" stop-opacity=".9"/>'
-          +'<stop offset="1" stop-color="#4FC8FF" stop-opacity="0"/></radialGradient>'
+          +'<stop offset=".35" stop-color="#FFD34D" stop-opacity=".95"/>'
+          +'<stop offset=".7" stop-color="#FF7A1A" stop-opacity=".6"/>'
+          +'<stop offset="1" stop-color="#FF3D00" stop-opacity="0"/></radialGradient>'
         +'<filter id="gbB'+view+'" x="-40%" y="-40%" width="180%" height="180%">'
         +'<feGaussianBlur stdDeviation="'+blur+'"/></filter></defs>'
-        +'<g filter="url(#gbB'+view+')">'+sh+'</g></svg></div>'
+        +'<g filter="url(#gbB'+view+')">'+sh+sh+'</g></svg></div>'
       +(lids? '<div class="gb-lids"><svg viewBox="0 0 '+im.w+' '+im.h+'" preserveAspectRatio="xMidYMid meet" aria-hidden="true">'+lids+'</svg></div>' : '')
       +'</div>';
   });
@@ -4284,6 +4369,19 @@ function gummyInit(){
     h.innerHTML=gbLayers();
     document.body.appendChild(h); GB.host=h;
     var d0=gbDockPos(); GB.px=GB.tx=d0.x; GB.py=GB.ty=d0.y; GB.sx=1; gbApply(); h.classList.add('gb-docked');
+    gbLight();                                  // glowing from the first frame, docked or not
+    // One-time discovery hint from the bear himself, retired forever the first time he's
+    // posed. Reappears on each open until then: a feature nobody finds may as well not exist.
+    try{
+      if(typeof S!=='undefined' && S && !S.gbSeen && !document.getElementById('gbHint')){
+        var gh=document.createElement('div'); gh.id='gbHint'; gh.className='gb-hint lockfree';
+        gh.textContent='Pull me to the middle \u2014 today\u2019s muscles glow';
+        gh.style.top=Math.round((window.innerHeight||600)*0.56+40)+'px';
+        gh.onclick=function(){ try{ gh.remove(); }catch(e){} };
+        document.body.appendChild(gh);
+        setTimeout(function(){ try{ var el=document.getElementById('gbHint'); if(el) el.remove(); }catch(e){} },12000);
+      }
+    }catch(e){}
     var down=window.PointerEvent?'pointerdown':'mousedown';
     var move=window.PointerEvent?'pointermove':'mousemove';
     var up=window.PointerEvent?'pointerup':'mouseup';
@@ -5981,7 +6079,34 @@ function exSets(ex){ const g=goalDef();
   if(g&&g.accSets&&numericReps(ex)) return g.accSets;
   return ex.sets; }
 function exReps(ex){ const g=goalDef(); if(!g) return ex.reps; return isMain(ex)? g.reps : (numericReps(ex)? g.accReps : ex.reps); }
-function exRest(ex){ const g=goalDef(); if(!g) return ex.rest; return isMain(ex)? g.restMain : g.restAcc; }
+// ===== REST, TAILORED TO THE MOVEMENT =====
+// The goal used to define exactly two rests: main and accessory - which handed a plank the
+// same clock as a barbell row. Third layer: the fractional volume table already knows what
+// each movement IS. One muscle at full credit = isolation (recovers in 60-90s); several =
+// compound (needs the full accessory rest); core, carries and timed holds shortest of all.
+// These are CAPS on the goal's accessory rest, never raises - an endurance goal's 1:00
+// accessories stay 1:00 everywhere. The +30s button remains the athlete's override.
+function exRestClass(ex){
+  try{
+    if(/max hold/i.test(String(exReps(ex)))) return 'short';          // timed holds
+    var r=libRow((ex&&ex.name)||''); var grp=r? r[1] : null;
+    if(grp==='core'||grp==='carry') return 'short';
+    var mm=(typeof volMuscles==='function')? volMuscles(ex.name) : null;
+    if(mm){ var ks=Object.keys(mm);
+      // ANY single-muscle credit is isolation - Shrugs carry back:.5 and are still shrugs
+      if(ks.length===1) return (ks[0]==='abs')? 'short' : 'iso'; }
+    if(grp==='arms') return 'iso';
+  }catch(e){}
+  return null;                                                        // compound accessory
+}
+function restCap(pref, cap){ try{ return (restSecs(pref)<=restSecs(cap))? pref : cap; }catch(e){ return pref; } }
+function exRest(ex){ const g=goalDef(); if(!g) return ex.rest;
+  if(isMain(ex)) return g.restMain;
+  var cls=exRestClass(ex);
+  if(cls==='short') return restCap(g.restAcc,'1:00');
+  if(cls==='iso')   return restCap(g.restAcc,'1:30');
+  return g.restAcc;
+}
 function readyScore(){ if(!S.ready) return null;
   const r=S.ready; let s=0;
   s += r.sleep>=7?2 : r.sleep>=6?1 : 0;
@@ -6303,12 +6428,32 @@ function save(){ try{
   var payload=JSON.stringify(S);
   stSet(curSKEY(), payload);
 }catch(e){ try{ __logErr('save',e.message,'',0,0,e); }catch(x){} } }
+var AC_tries=0;   // resume attempts since the context last ran - three strikes and we rebuild
+function audioNuke(){ try{ var a=AC; AC=null; AC_tries=0;
+  if(a && a.state!=='closed'){ var p=a.close(); if(p&&p.catch) p.catch(function(){}); }
+}catch(e){ AC=null; } }
 function ensureAudio(){ try{
   const Ctor=window.AudioContext||window.webkitAudioContext;
-  if(!AC && Ctor) AC=new Ctor();
-  if(AC && AC.state==='closed'){ AC=Ctor? new Ctor() : null; } // iOS can kill the context outright
+  if(AC && AC.state==='closed') AC=null;               // iOS can kill the context outright
+  // A context that repeatedly refuses to resume is wedged (iOS 'interrupted' after a phone
+  // call, Siri, the camera, a route change) - and one that survives an interruption can come
+  // back playing DISTORTED while still reporting 'running'. Both cures are the same: throw
+  // it away and build fresh. Every beep is re-bookable from scratch, so this costs nothing.
+  if(AC && AC.state!=='running' && AC_tries>=3) audioNuke();
+  if(!AC && Ctor){ AC=new Ctor(); AC_tries=0;
+    try{ AC.onstatechange=function(){ try{
+      if(typeof S!=='undefined' && S && S.debug) oops('audio-state', (AC? AC.state:'gone'));
+      if(AC && AC.state==='running'){ AC_tries=0; return; }
+      // Leaving 'running' freezes the audio clock: everything booked against it will fire at
+      // the wrong wall time (or never). Dump the queue - the next tick or tap re-books the
+      // remaining countdown against a fresh clock. This is why a mid-rest suspension used to
+      // kill the beeps for good: the stale queue passed the already-booked check forever.
+      stopScheduled();
+    }catch(e){} }; }catch(e){}
+  }
   // iOS adds an 'interrupted' state (screen lock, app switch, phone call) on top of 'suspended'
   if(AC && (AC.state==='suspended'||AC.state==='interrupted')){
+    AC_tries++;
     const p=AC.resume(); if(p&&p.catch) p.catch(function(){}); // rejection here is routine on iOS, never an error
   }
 }catch(e){} }
@@ -6345,12 +6490,13 @@ function toneAt(freq, dur, when, gain, type){
     g.gain.setValueAtTime(0.0001, when);
     g.gain.exponentialRampToValueAtTime(Math.max(0.001,gain), when+0.012); // soft attack, no click
     g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
+    o.onended=function(){ try{ o.disconnect(); }catch(e){} try{ g.disconnect(); }catch(e){} };
     o.start(when); o.stop(when+dur+0.03);
     return {osc:o, gain:g};
   }catch(e){ return null; }
 }
 function stopScheduled(){
-  try{ schedB.nodes.forEach(function(n){ try{ n.osc.stop(0); }catch(e){} try{ n.osc.disconnect(); }catch(e){} }); }catch(e){}
+  try{ schedB.nodes.forEach(function(n){ try{ n.osc.stop(0); }catch(e){} try{ n.osc.disconnect(); }catch(e){} try{ n.gain.disconnect(); }catch(e){} }); }catch(e){}
   schedB={key:null, nodes:[]};
 }
 function scheduleRestBeeps(b){
@@ -6386,8 +6532,25 @@ function scheduleRestBeeps(b){
 // On the way back from a lock/background, the audio clock has drifted from wall time: throw away
 // anything queued and let the next tick re-book it against a fresh clock.
 try{ document.addEventListener('visibilitychange',function(){ if(!document.hidden){ ensureAudio(); stopScheduled();
+  // If the resume didn't land, don't nurse a wedged context - rebuild on the next tap. A
+  // context created INSIDE a gesture is also the one iOS unlocks most reliably.
+  setTimeout(function(){ try{ if(AC && AC.state!=='running') audioNuke(); }catch(e){} },400);
   try{ paintRest(false); paintBars(); }catch(e){} } }); }catch(e){}
-try{ document.addEventListener('touchstart',function(){ ensureAudio(); },{passive:true}); }catch(e){}
+// Wake audio on ANY tap - and if a rest is live, book its beeps HERE, inside the gesture.
+// The old touchstart-only unlock left one gap: the context suspends while the phone lies on
+// the bench mid-rest, the tick's schedule call bails on the sleeping context, and nothing
+// wakes it until the next touch - which is the tap logging the NEXT set. From the athlete's
+// seat: countdowns randomly missing. pointerup/click are also where iOS honors resume() most
+// reliably; touchstart alone historically wasn't enough on some versions.
+function audioWake(){ try{
+  audioReady(function(){ try{
+    var b=(typeof lastCompletion==='function')? lastCompletion():null;
+    if(b && S.sound && S.restDismiss!==b.t && Date.now()-b.t < b.target*1000) scheduleRestBeeps(b);
+  }catch(e){} });
+}catch(e){} }
+try{ ['touchstart','touchend','pointerup','click'].forEach(function(ev){
+  document.addEventListener(ev, audioWake, {passive:true});
+}); }catch(e){}
 async function wlAcquire(){ try{ if(navigator.wakeLock){ wlSent=await navigator.wakeLock.request('screen'); wlSent.addEventListener('release',()=>{ wlSent=null; }); return true; } }catch(e){} return false; }
 document.addEventListener('visibilitychange',()=>{ if(S.wl && document.visibilityState==='visible' && !wlSent) wlAcquire(); });
 function arm(key){ armDel=key; render(); setTimeout(function(){ try{ if(armDel===key){armDel=null;render();} }catch(e){ try{__logErr('armTimer',e.message,'arm',0,0,e);}catch(x){} } },4000); }
@@ -7246,7 +7409,19 @@ function wire(){
   });
   document.querySelectorAll('[data-backlive]').forEach(el=>el.onclick=()=>{
     try{ syncToNext(); }catch(e){}
-    try{ var nx=nextSession(); if(nx){ S.day=nx.code; S.week=nx.week; } }catch(e){}
+    try{
+      var nx=nextSession();
+      if(nx && loggedToday() && nx.week===S.week && nx.code===S.day){
+        // GATED PREVIEW: the next session IS this page, just locked until tomorrow -
+        // jumping to nextSession() would land right back here. "Today" is the session
+        // already banked, so return to review it instead of looping.
+        var p=curLOGP(), t=String(shiftDate());
+        var k=(logKeys||[]).filter(function(x){ return x.indexOf(p+t+'-')===0; }).sort().pop();
+        var m=k? k.slice(p.length).match(/-([A-Za-z]+)-W(\d+)B(\d+)$/) : null;
+        if(m && (+m[3])===cyc()){ S.day=m[1]; S.week=+m[2]; S.focus=0; S.lastTDay=m[1]; save(); render(); return; }
+      }
+      if(nx){ S.day=nx.code; S.week=nx.week; }
+    }catch(e){}
     S.focus=firstOpenFocus(); save(); render();
   });
   document.querySelectorAll('[data-resave]').forEach(el=>el.onclick=()=>{ resaveVisitedLog(); });
@@ -7499,7 +7674,11 @@ function restGaps(sets){
   return out;
 }
 function restSecs(str){ if(!str) return 90; const p=String(str).split(':');
-  var base=(+p[0])*60+(+p[1]||0);
+  // 'm:ss' is the house format. A bare number is ambiguous - the audit found '90' would parse
+  // as 90 MINUTES. No live data path writes one today, but a parser should not be a landmine:
+  // a bare number >= 30 reads as seconds, under 30 as minutes ('2' still means 2:00).
+  var base=(p.length===1)? ((+p[0]||0)>=30? (+p[0]||0) : (+p[0]||0)*60)
+                         : (+p[0])*60+(+p[1]||0);
   return Math.max(30, base+(S.restAdj||0));   // athlete's global adjustment, never under 30s
 }
 // ===== TRANSITION GAUGE =====
