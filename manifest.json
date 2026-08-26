@@ -1,6 +1,6 @@
 {
  "name": "Training Card",
- "short_name": "Training Car",
+ "short_name": "Training Card",
  "start_url": "./index.html",
  "scope": "./",
  "display": "standalone",
