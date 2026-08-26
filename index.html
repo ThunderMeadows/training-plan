@@ -3750,6 +3750,55 @@ function hifiveChord(){
     });
   }catch(e){}
 }
+// ===== CARDIO, DAY-TRUE =====
+// The live cardio widget is TODAY's tool: one global timer, one config. Rendered on a
+// visited day it showed today's clock ticking inside a past session - field-caught as
+// "cardio is stuck on the most recent day". A visited day now reports the cardio that
+// was saved WITH that day's log, read-only; a future preview shows no cardio at all
+// (nothing true exists yet); the live widget renders only on the live session.
+var vcPend={};
+// Shared reader for everything day-true: the log saved WITH the day on screen, fetched
+// lazily into logCache with a re-render when it lands. Cardio, notes and bodyweight all
+// read from this one source instead of today's globals.
+function visitedLogRef(){
+  try{
+    var suffix='-'+S.day+'-W'+S.week+'B'+cyc();
+    var key=(logKeys||[]).filter(function(k){ return k.endsWith(suffix); }).sort().pop();
+    if(!key) return {c:null, missing:true};
+    var c=logCache[key];
+    if(!c && !vcPend[key]){ vcPend[key]=1;
+      stGet(key).then(function(v){ try{ logCache[key]=v? JSON.parse(v):{}; }catch(e){ logCache[key]={}; }
+        delete vcPend[key]; try{ render(); }catch(e){} }).catch(function(){ delete vcPend[key]; });
+    }
+    return {c:c||null, missing:false};
+  }catch(e){ return {c:null, missing:true}; }
+}
+function vdBlock(title, body){
+  return '<div class="block"><h3>'+title+'</h3>'
+    +'<div class="cue" style="padding:0">'+esc(body).replace(/\n/g,'<br>')+'</div></div>';
+}
+function visitedCardioHTML(){
+  var r=visitedLogRef();
+  if(r.missing) return vdBlock('Cardio that day','None logged with this session.');
+  if(!r.c) return vdBlock('Cardio that day','\u2026');
+  var m=String(r.c.report||'').match(/^Cardio: (.*)$/m);
+  return vdBlock('Cardio that day',(m&&m[1]&&m[1]!=='none')? m[1] : 'None logged with this session.');
+}
+function visitedNotesHTML(){
+  var r=visitedLogRef();
+  if(r.missing) return vdBlock('Notes that day','None written with this session.');
+  if(!r.c) return vdBlock('Notes that day','\u2026');
+  // notes run from 'Notes: ' to the legend line the report always ends with
+  var rep=String(r.c.report||'').replace(/\n\(\u2713 =[\s\S]*$/,'');
+  var m=rep.match(/^Notes: ([\s\S]*)$/m);
+  return vdBlock('Notes that day', m? m[1] : 'None written with this session.');
+}
+function visitedBWHTML(){
+  var r=visitedLogRef();
+  var d=(r.c&&r.c.date)||null, hit=null;
+  try{ if(d) (S.weightLog||[]).forEach(function(x){ if(x.d===d) hit=x; }); }catch(e){}
+  return vdBlock('Bodyweight that day', hit? (WV1(hit.w)+' '+uLbl()+' \u00b7 logged '+hit.d) : 'Not logged that day.');
+}
 function cardioBlockHTML(){
   // extracted verbatim from the session render so the focused Adjust screen can reuse it
   var h='';
@@ -9461,7 +9510,11 @@ function renderInner(){
     +'<div class="toggle'+(S.unit==='kg'?' on':'')+'" id="unitT">'+(S.unit==='kg'?'Units: kg':'Units: lb')+'</div>'
     +'</span>'
     +'</div></div>';
-  h+='<div class="block lockfree"><h3>Bodyweight</h3>'
+  // day-true: the bodyweight TOOL (log / trend / history) belongs to today. A visited day
+  // reports the weight logged ON that date; a preview shows nothing. Full editor stays on YOU.
+  if(typeof isVisiting==='function' && isVisiting()) h+=visitedBWHTML();
+  else if((typeof isPreviewing==='function') && isPreviewing()) {}
+  else h+='<div class="block lockfree"><h3>Bodyweight</h3>'
     +(function(){ const st=wlStats();
       let top='<div class="cardio-row"><input type="number" step="0.1" inputmode="decimal" id="bwIn" class="dtin" style="max-width:110px" placeholder="'+uLbl()+'" value="'+(st&&st.last?WV1(st.last.w):'')+'">'
         +'<input type="date" id="bwDate" class="dtin" value="'+localDate()+'">'
@@ -9499,8 +9552,11 @@ function renderInner(){
    +'<div class="toggle" id="cxAdd">Add</div></div>'
    +'<div style="font-size:11px;color:var(--dim);margin-top:6px">Sets x reps here are the block1 default - an active goal preset overrides them like any accessory. Customs ride the report. Removing one deletes its logged sets for this week.</div>'
    +'</div>';
-  h+=cardioBlockHTML();
-  h+='<div class="block"><h3>Session notes</h3><textarea id="notes" placeholder="Anything off? Pain, sleep, gear, substitutions.">'+esc(S.notes)+'</textarea></div>';
+  if(typeof isVisiting==='function' && isVisiting()) h+=visitedCardioHTML();
+  else if(!((typeof isPreviewing==='function') && isPreviewing())) h+=cardioBlockHTML();
+  if(typeof isVisiting==='function' && isVisiting()) h+=visitedNotesHTML();
+  else if(!((typeof isPreviewing==='function') && isPreviewing()))
+    h+='<div class="block"><h3>Session notes</h3><textarea id="notes" placeholder="Anything off? Pain, sleep, gear, substitutions.">'+esc(S.notes)+'</textarea></div>';
   h+='<div class="block"><h3 style="margin:0 0 8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700">Session logs <span class="stchip '+(storageOK===true?'ok':storageOK===false?'bad':'')+'">'
     +(storageOK===true?'Storage \u2713':storageOK===false?'Storage unavailable':'checking\u2026')+'</span></h3>'
     +streakHTML()
