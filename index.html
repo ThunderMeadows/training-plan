@@ -8,8 +8,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Session Card">
 <meta name="theme-color" content="#1F4FD8" id="themeColor">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%231F4FD8'/><rect x='34' y='86' width='124' height='20' rx='8' fill='%23fff'/><rect x='26' y='68' width='20' height='56' rx='7' fill='%23fff'/><rect x='146' y='68' width='20' height='56' rx='7' fill='%23fff'/><rect x='12' y='78' width='14' height='36' rx='5' fill='%23fff' opacity='.75'/><rect x='166' y='78' width='14' height='36' rx='5' fill='%23fff' opacity='.75'/></svg>">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%231F4FD8'/><rect x='34' y='86' width='124' height='20' rx='8' fill='%23fff'/><rect x='26' y='68' width='20' height='56' rx='7' fill='%23fff'/><rect x='146' y='68' width='20' height='56' rx='7' fill='%23fff'/><rect x='12' y='78' width='14' height='36' rx='5' fill='%23fff' opacity='.75'/><rect x='166' y='78' width='14' height='36' rx='5' fill='%23fff' opacity='.75'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%23171A1F'/><line x1='8' y1='96' x2='184' y2='96' stroke='%23F0ECE4' stroke-width='4'/><rect x='53' y='54' width='20' height='84' rx='9' fill='none' stroke='%23E0A94C' stroke-width='6'/><rect x='119' y='54' width='20' height='84' rx='9' fill='none' stroke='%23E0A94C' stroke-width='6'/><rect x='37' y='70' width='12' height='51' rx='5' fill='none' stroke='%23E0A94C' stroke-width='4'/><rect x='143' y='70' width='12' height='51' rx='5' fill='none' stroke='%23E0A94C' stroke-width='4'/><rect x='3' y='91' width='6' height='10' rx='2.5' fill='%23F0ECE4'/><rect x='183' y='91' width='6' height='10' rx='2.5' fill='%23F0ECE4'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%23171A1F'/><line x1='8' y1='96' x2='184' y2='96' stroke='%23F0ECE4' stroke-width='4'/><rect x='53' y='54' width='20' height='84' rx='9' fill='none' stroke='%23E0A94C' stroke-width='6'/><rect x='119' y='54' width='20' height='84' rx='9' fill='none' stroke='%23E0A94C' stroke-width='6'/><rect x='37' y='70' width='12' height='51' rx='5' fill='none' stroke='%23E0A94C' stroke-width='4'/><rect x='143' y='70' width='12' height='51' rx='5' fill='none' stroke='%23E0A94C' stroke-width='4'/><rect x='3' y='91' width='6' height='10' rx='2.5' fill='%23F0ECE4'/><rect x='183' y='91' width='6' height='10' rx='2.5' fill='%23F0ECE4'/></svg>">
 <title>Training Card</title>
 <style>
 :root{
@@ -4743,15 +4743,18 @@ function coachPaint(){
 // in-page banner remains as the ongoing reminder.
 function a2hsPlatform(){
   var ua=''; try{ ua=navigator.userAgent||''; }catch(e){}
-  if(isIOS()){
-    if(/CriOS|FxiOS|EdgiOS|OPT\//.test(ua)) return 'ios-other';
-    if(/iPhone|iPod/.test(ua)) return 'ios-safari';                       // every iOS UA says "like Mac OS X"
-    return 'ipad-safari';                                                  // iPad, or iPadOS posing as Macintosh
-  }
+  // Android is decided BEFORE any iOS heuristic: a UA that says Android is Android,
+  // whatever else it also claims. The reverse order is how an Android phone got iPhone
+  // steps in the field (desktop-mode UA looked like a Mac with a touchscreen).
   if(/Android/i.test(ua)){
     if(/SamsungBrowser/i.test(ua)) return 'android-samsung';
     if(/Chrome\//.test(ua)) return 'android-chrome';
     return 'android-other';
+  }
+  if(isIOS()){
+    if(/CriOS|FxiOS|EdgiOS|OPT\//.test(ua)) return 'ios-other';
+    if(/iPhone|iPod/.test(ua)) return 'ios-safari';                       // every iOS UA says "like Mac OS X"
+    return 'ipad-safari';                                                  // iPad, or iPadOS posing as Macintosh
   }
   return 'desktop';
 }
@@ -4854,6 +4857,13 @@ function isInstalled(){
 }
 function isIOS(){
   try{ var ua=navigator.userAgent||'';
+    // Field-caught on a friend's Android: desktop-mode browsers spoof a Mac UA, and the
+    // Mac+touch heuristic (meant for iPadOS posing as a Mac) read them as iPads - so an
+    // Android phone was handed iPhone install steps. Two hard discriminators come first:
+    // a UA that says Android is Android, and navigator.userAgentData means Chromium,
+    // which no iOS browser has - they are all WebKit.
+    if(/Android/i.test(ua)) return false;
+    if(navigator.userAgentData) return false;
     if(/iPad|iPhone|iPod/.test(ua)) return true;
     return /Mac/.test(ua) && 'ontouchend' in document;                   // iPadOS reports as Mac
   }catch(e){ return false; }

@@ -1,7 +1,8 @@
 // Cache-first for the app shell: once installed it opens instantly and works with no signal,
 // which matters in a gym basement. Bump CACHE when you deploy and old copies clear themselves.
-const CACHE = 'card-v61y-c19y';
-const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './apple-touch-icon.png'];
+const CACHE = 'card-v61z-c19z';
+const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './apple-touch-icon.png',
+  './icon-192.png', './icon-512.png', './icon-maskable-192.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
