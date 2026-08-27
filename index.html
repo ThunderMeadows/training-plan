@@ -1004,6 +1004,21 @@ td.c-n.now{font-weight:700;}
 .set.tset{cursor:default;}
 .set.tset.up{animation:none;box-shadow:none;opacity:.8;}
 .set.tset.lk{opacity:.45;}
+/* bodyweight prescription panel */
+.bw-panel{margin:0 12px 10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;}
+.bw-h{font-size:14px;font-weight:800;color:var(--chalk);}
+.bw-rng{font-size:11.5px;font-weight:700;color:var(--faint);}
+.bw-s{font-size:11.5px;color:var(--dim);line-height:1.5;margin-top:3px;}
+.bw-up{margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:12px;color:var(--amber);line-height:1.5;}
+.bw-row{display:flex;gap:8px;align-items:center;}
+.bw-btn{padding:8px 13px;font-size:12px;}
+.bw-re{font-size:11px;font-weight:700;color:var(--faint);cursor:pointer;text-decoration:underline;}
+/* the rotation, shown on the choice itself */
+.rot-strip{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:9px;}
+.rot-chip{border:1px solid var(--line);border-radius:7px;padding:3px 7px;font-size:10.5px;
+  font-weight:700;color:var(--dim);white-space:nowrap;}
+.onb-opt.on .rot-chip{border-color:var(--amber);color:var(--amber);}
+.rot-ar{color:var(--faint);font-size:10px;}
 /* week chips: every week visible, every week one tap away */
 .wk-strip{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 7px;}
 .wk-chip{padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--faint);
@@ -5427,6 +5442,8 @@ function restWhy(b){
     var c=(typeof exRestClass==='function')? exRestClass(ex) : null;
     if(c==='short') return ' \u00b7 core / hold';
     if(c==='iso') return ' \u00b7 isolation';
+    if(c==='main-ish') return ' \u00b7 hard bodyweight';
+    if(isBodyweightEx(ex)) return ' \u00b7 bodyweight';
     return '';
   }catch(e){ return ''; }
 }
@@ -5443,7 +5460,7 @@ function restBody(b,e,go){
    +restNextLoaded(b)
    +(go? '' : '<button class="rest-ext" data-restext="30">+30s this rest</button>')
    +((S.breathe&&!go)? breathRing() : '');
-  if(r && /max hold/i.test(String(exReps(r.ex)))){
+  if(r && isHoldEx(r.ex)){
     // a hold's number is SECONDS - the rest screen speaks its language: no reps, no RIR,
     // just the clocked time (fixable if the stop was late) and the grind flag
     h+='<div class="rest-edit">'
@@ -5480,7 +5497,7 @@ function restBody(b,e,go){
       // and starts the hold clock - a tap, not a hold-to-fire, because starting a clock is
       // not destructive and the athlete is about to get into position, not pocket the phone.
       var hx=null; try{ var dh=(typeof effDay==='function')? effDay():dayObj(); hx=dh.exercises[tgt.i]; }catch(x){}
-      if(hx && /max hold/i.test(String(exReps(hx))))
+      if(hx && isHoldEx(hx))
         return '<button class="rest-go" data-reststart="1">\u23F1 Start hold '+(nm? '\u2014 '+esc(nm)+' ':'')+'\u00b7 set '+(tgt.j+1)+'</button>';
       return restHoldBtn('rest-go','data-restnext','\u2713 Did '+(nm? esc(nm)+' ':'')+'set '+(tgt.j+1)+' \u2014 hold to log'); }
     if(tgt.kind==='ex') return restHoldBtn('rest-go','data-restnext','Next exercise \u2192 hold');
@@ -7390,7 +7407,7 @@ function rebuildSplit(days){
     if(typeof generatePlan!=='function' || !S.onb) return;
     days=Math.max(3, Math.min(7, days|0));
     var o=S.onb; o.days=days;
-    var plan=generatePlan({maxes:S.maxes||{}, goal:o.goal||'general', days:days,
+    var plan=generatePlan({maxes:S.maxes||{}, goal:o.goal||'general', days:days, mins:o.mins||null,
       limits:o.limits||[], emphasis:o.emph||'balanced', weak:o.weak||'auto',
       weekdays:(o.wd&&o.wd.length===days)? o.wd : null,   // old picks do not fit a new day count
       res:o.res||{}, prefs:o.prefs||{}});
@@ -7405,10 +7422,11 @@ function splitControlHTML(){
   try{
     if(typeof generatePlan!=='function' || !S.genPlan || !S.onb) return '';
     var cur=(PLAN.days&&PLAN.days.length)||(S.onb.days||3);
-    var chips=[3,4,5,6,7].map(function(n){ return '<div class="chip'+(n===cur?' on':'')+'" data-splitset="'+n+'">'+n+'</div>'; }).join('');
+    var chips=PG_STRUCTS.map(function(sT){ return '<div class="chip'+(sT.days===cur?' on':'')+'" data-splitset="'+sT.days+'">'+sT.name+'</div>'; }).join('');
     var h='<div class="block"><h3>Training split</h3>'
      +'<div class="chiprow" style="flex-wrap:wrap">'+chips+'</div>'
-     +'<div class="cue" style="padding:8px 0 0">How many sessions you rotate through before it repeats \u2014 you rest whenever you leave a gap. Six is push/pull/legs twice; seven adds a lighter arms &amp; core day.</div>';
+     +'<div class="rot-strip" style="margin-top:8px">'+PG_rotationPreview(cur).map(function(r){ return '<span class="rot-chip">'+esc(r)+'</span>'; }).join('<span class="rot-ar">\u2192</span>')+'<span class="rot-ar">\u21ba</span></div>'
+     +'<div class="cue" style="padding:8px 0 0">The order your sessions run in. Train as often as you like \u2014 the card advances when you finish a session and loops back to the start.</div>';
     if(splitPending && splitPending!==cur){
       h+='<div style="border:1px solid var(--amber);border-radius:12px;padding:12px;margin-top:10px">'
        +'<div class="cue" style="padding:0">Rebuild your program as a <b>'+splitPending+'-day</b> split? Your maxes, goal and priorities carry over; the movements are regenerated'
@@ -8696,9 +8714,146 @@ function exReps(ex){ const g=goalDef(); if(!g) return ex.reps; return isMain(ex)
 // compound (needs the full accessory rest); core, carries and timed holds shortest of all.
 // These are CAPS on the goal's accessory rest, never raises - an endurance goal's 1:00
 // accessories stay 1:00 everywhere. The +30s button remains the athlete's override.
+// ===== BODYWEIGHT TRAINING =====
+// A barbell progresses by load. Bodyweight cannot - the weight IS the athlete - so the
+// engine's whole percentage-of-a-max machinery has nothing to bite on, and everyone got the
+// same 3x12 whether they can do eight push-ups or sixty. The fix is the same trick used for
+// the bar, run on the only number that means anything here: the athlete's own max reps.
+//   test once -> prescribe a percentage of it -> RIR autoregulates the day
+// Bodyweight is also not one category: a push-up moves ~65% of you, a pull-up moves 100%,
+// so the same tag covers wildly different loads. Percentages of a PERSONAL max handle that
+// automatically - no table of assumptions required.
+// The screen for it: untested movements ask for one honest set to failure; tested ones show
+// the prescription and where the number came from; outgrown ones offer the next rung.
+function bwPanelHTML(i, ex){
+  try{
+    if(!isBodyweightEx(ex) || isHoldEx(ex)) return '';
+    if(typeof dayLocked==='function' && dayLocked()) return '';
+    var p=bwPrescribe(ex);
+    if(!p){
+      return '<div class="bw-panel" data-bwask="'+i+'">'
+        +'<div class="bw-h">How many can you do?</div>'
+        +'<div class="bw-s">One honest set to failure, once. Every '+esc(ex.name)+' prescription after this is a percentage of that number \u2014 the same way the bar works off a tested max.</div>'
+        +'<div class="bw-row"><span class="daybtn bw-btn" data-bwtest="'+i+'" role="button" tabindex="0">Log a max set</span></div></div>';
+    }
+    var up=bwOutgrown(i, ex), nx=up? bwNextRung(ex.name):null;
+    return '<div class="bw-panel">'
+      +'<div class="bw-h">'+p.target+' reps <span class="bw-rng">(range '+p.lo+'\u2013'+p.hi+')</span></div>'
+      +'<div class="bw-s">'+Math.round(p.pct*100)+'% of your tested max of '+p.max+'. Stop at the top of the range with a rep or two left \u2014 the range moves when your max does.</div>'
+      +(nx? '<div class="bw-up">You are topping this out. <b>'+esc(nx)+'</b> is the next step up \u2014 same movement, more of your weight on it.'
+           +'<div class="bw-row" style="margin-top:8px"><span class="daybtn bw-btn" data-bwup="'+i+'" data-bwnext="'+esc(nx)+'" role="button" tabindex="0">Move up to '+esc(nx)+'</span></div></div>' : '')
+      +'<div class="bw-row" style="margin-top:8px"><span class="bw-re" data-bwtest="'+i+'" role="button" tabindex="0">Re-test max</span></div>'
+      +'</div>';
+  }catch(e){ return ''; }
+}
+function isBodyweightEx(ex){
+  try{
+    if(!ex) return false;
+    if(ex.bw===true) return true;
+    if(ex.loadNum!=null && ex.loadNum>0) return false;
+    var r=libRow((ex&&ex.name)||'');
+    if(r && (r[2]==='bodyweight' || r[5]==='bw')) return true;
+    return /^\s*(bodyweight|bw)\s*$/i.test(String(ex.load||''));
+  }catch(e){ return false; }
+}
+// percentage of tested max reps, by goal. Endurance sits highest because that IS the quality
+// being trained; strength sits lowest because low reps near failure is what makes it hard
+// when you cannot add plates.
+var BW_PCT={strength:0.50, power:0.45, hypertrophy:0.65, endurance:0.80, cut:0.70, build:0.65, block1:0.65};
+function bwMaxFor(name){ try{ return (S.bwMax&&S.bwMax[name])? +S.bwMax[name].reps : null; }catch(e){ return null; } }
+function bwSetMax(name, reps){ try{ S.bwMax=S.bwMax||{};
+  S.bwMax[name]={reps:+reps, d:shiftDate()}; save(); }catch(e){} }
+function bwGoalPct(){ try{
+  // the goal lives on the profile, same source goalDef() reads - not a loose S.goal
+  var g=(S.profile&&S.profile.goal)||'general';
+  return BW_PCT[g]!=null? BW_PCT[g] : 0.65;
+}catch(e){ return 0.65; } }
+// The prescription: a target rep count and a working range around it.
+function bwPrescribe(ex){
+  try{
+    var mx=bwMaxFor(ex.name);
+    if(!mx || mx<1) return null;                       // untested - the card asks first
+    var t=Math.max(1, Math.round(mx*bwGoalPct()));
+    var lo=Math.max(1, Math.round(t*0.85)), hi=Math.max(lo+1, Math.round(t*1.15));
+    return {max:mx, target:t, lo:lo, hi:hi, pct:bwGoalPct()};
+  }catch(e){ return null; }
+}
+// Progression ladder: reps first, then LEVERAGE, then external load. Topping the range is
+// the signal to move up a rung - the card offers it rather than waiting to be asked.
+var BW_LADDER={
+  'Push-Ups':['Incline Push-Ups','Push-Ups','Hand-Release Push-Ups','Feet-Elevated Push-Ups','Deficit Push-Ups','Archer Push-Ups','One-Arm Push-Up Progression'],
+  'Hand-Release Push-Ups':['Push-Ups','Hand-Release Push-Ups','Feet-Elevated Push-Ups','Deficit Push-Ups'],
+  'Pull-Ups':['Assisted Pull-Ups','Negative Pull-Ups','Pull-Ups','Weighted Pull-Ups'],
+  'Chin-Ups':['Assisted Chin-Ups','Negative Chin-Ups','Chin-Ups','Weighted Chin-Ups'],
+  'Dips':['Bench Dips','Dips','Weighted Dips'],
+  'Bodyweight Squat':['Bodyweight Squat','Split Squat','Bulgarian Split Squat','Pistol Squat Progression'],
+  'Inverted Row':['Inverted Row','Feet-Elevated Inverted Row','Single-Arm Inverted Row'],
+  'Glute Bridge':['Glute Bridge','Single-Leg Glute Bridge','Hip Thrust'],
+  'Back Extension':['Back Extension','Weighted Back Extension']
+};
+function bwNextRung(name){
+  try{
+    var L=BW_LADDER[name]; if(!L) return null;
+    var i=L.indexOf(name); if(i<0 || i>=L.length-1) return null;
+    return L[i+1];
+  }catch(e){ return null; }
+}
+// Has the athlete out-grown this movement? Two sessions at or above the top of the range,
+// logged at low RIR, means the leverage - not the rep count - is what should change next.
+function bwOutgrown(i, ex){
+  try{
+    var p=bwPrescribe(ex); if(!p) return false;
+    // the index is passed in: dayObj() rebuilds its exercise array (customs, subs), so
+    // indexOf() on a fresh object returns -1 and the state lookup silently missed
+    var st=exState(i, ex);
+    if(!st) return false;
+    var top=st.sets.filter(function(s){ return s.st!=='pend' && s.reps!=null && +s.reps>=p.hi; });
+    return top.length>=2 && !!bwNextRung(ex.name);
+  }catch(e){ return false; }
+}
+// ===== IS THIS A TIMED HOLD? ONE RULE, ONE PLACE =====
+// This test used to be nine copies of /max hold/ scattered across the card, so a plank
+// prescribed any other way - "45s", "30-60 sec", "1:00 hold", or just named Side Plank -
+// got NO clock, NO Start hold button, and reps-and-weight language on the rest screen.
+// Field-caught on the Training Card, where plans are written by whoever is coaching.
+// Now: any time-based prescription counts, plus known isometrics by name.
+var HOLD_NAMES=/\b(plank|side plank|wall ?sit|dead ?hang|bar hang|l-?sit|hollow (body )?hold|superman hold|glute bridge hold|iso ?hold|isometric|copenhagen|handstand hold|chin-?up hold|static hold)\b/i;
+function isHoldEx(ex){
+  try{
+    if(!ex) return false;
+    var r=String(exReps(ex)||'');
+    if(/max hold|isometric|for time|hold$/i.test(r)) return true;      // "max hold", "... hold"
+    if(/\bhold\b/i.test(r) && !/\brep/i.test(r)) return true;          // "1:00 hold", "hold 45"
+    if(/^\s*\d+\s*(s|sec|secs|seconds)\b/i.test(r)) return true;       // "45s", "30 sec"
+    if(/^\s*\d+\s*[-\u2013]\s*\d+\s*(s|sec|secs|seconds)\b/i.test(r)) return true; // "30-60s"
+    if(/^\s*\d+:\d\d\s*$/.test(r)) return true;                       // "1:00"
+    if(HOLD_NAMES.test(String(ex.name||''))) return true;              // named isometric
+    return false;
+  }catch(e){ return false; }
+}
+// If the prescription names a target time, surface it. Returns seconds or null.
+function holdTarget(ex){
+  try{
+    var r=String(exReps(ex)||'');
+    var m=r.match(/(\d+):(\d\d)/);            if(m) return (+m[1])*60+(+m[2]);
+    m=r.match(/(\d+)\s*[-\u2013]\s*(\d+)\s*(?:s|sec|secs|seconds)\b/i); if(m) return +m[2];
+    m=r.match(/(\d+)\s*(?:s|sec|secs|seconds)\b/i); if(m) return +m[1];
+    return null;
+  }catch(e){ return null; }
+}
 function exRestClass(ex){
   try{
-    if(/max hold/i.test(String(exReps(ex)))) return 'short';          // timed holds
+    if(isHoldEx(ex)) return 'short';                                   // timed holds
+    // Bodyweight rests on what the set actually costs, not on the absence of equipment.
+    // A set of 40 push-ups is a high-rep compound and genuinely metabolic - cutting its rest
+    // degrades the next set. A hard low-rep set (pull-ups at 5) recovers like a main lift.
+    if(isBodyweightEx(ex)){
+      var bp=bwPrescribe(ex);
+      var t=bp? bp.target : defReps(ex);
+      if(t>=25) return null;                                           // compound accessory rest
+      if(t>=12) return null;
+      return 'main-ish';                                               // low reps = heavy for them
+    }
     var r=libRow((ex&&ex.name)||''); var grp=r? r[1] : null;
     if(grp==='core'||grp==='carry') return 'short';
     var mm=(typeof volMuscles==='function')? volMuscles(ex.name) : null;
@@ -8721,6 +8876,8 @@ function exRest(ex){ const g=goalDef();
   var cls=exRestClass(ex);
   if(cls==='short') return restCap(base,'1:00');
   if(cls==='iso')   return restCap(base,'1:30');
+  // a low-rep bodyweight set is that athlete's heavy work - give it main-lift rest
+  if(cls==='main-ish') return (g? g.restMain : (ex.rest||'3:00'));
   return base;
 }
 function readyScore(){ if(!S.ready) return null;
@@ -9713,12 +9870,24 @@ function renderInner(){
     h+='<div class="ex" data-ex="'+i+'"><div class="ex-head">'
       +'<div class="ex-name">'+esc(dispName)+howBtnHTML(dispName)+(subbed?' <span class="subtag">SUB</span>':'')+(ex.custom?' <span class="subtag">CUSTOM</span>':'')
       +((ssOn||ssPrev)? ' <span class="subtag">'+(ssOn?'SS \u2193':'SS \u2191')+'</span>':'')+'</div>'
-      +(ex.subs && ex.subs.length
-        ? '<select class="dtin swapsel" data-swap="'+i+'">'
+      +(function(){
+        // A substitute already sitting in this session would prescribe the same lift twice -
+        // the generator guarantees it never ships that way, so the swap menu must not offer
+        // a route back to it. Names in use elsewhere today are filtered out; the athlete's
+        // own current pick always stays visible so the menu never loses its selection.
+        if(!(ex.subs && ex.subs.length)) return '';
+        var inUse={};
+        try{ (effDay? effDay():dayObj()).exercises.forEach(function(o2,oi){
+          if(oi===i) return;
+          var st2=exState(oi,o2); inUse[(st2&&st2.sub)||o2.name]=1;
+        }); }catch(e){}
+        var opts=ex.subs.filter(function(s){ return !inUse[s] || st.sub===s; });
+        if(!opts.length) return '';
+        return '<select class="dtin swapsel" data-swap="'+i+'">'
           +'<option value=""'+(subbed?'':' selected')+'>'+esc(ex.name)+' (planned)</option>'
-          +ex.subs.map(s=>'<option value="'+s+'"'+(st.sub===s?' selected':'')+'>'+s+'</option>').join('')
-          +'</select>'
-        : '')
+          +opts.map(s=>'<option value="'+s+'"'+(st.sub===s?' selected':'')+'>'+s+'</option>').join('')
+          +'</select>';
+      })()
       +(function(){var t=trainsFor(st.sub||ex.name);return t?'<div class="trains">'+t+'</div>':'';})()
       +'<div class="target-label">'+(subbed?'Put this on the bar — tap to set':'Put this on the bar'+(numeric?' — tap to adjust':''))+'</div>'
       +'<div class="ex-rx">'
@@ -9755,7 +9924,7 @@ function renderInner(){
         if(S.uiMode==='min' && !howtoOpen[i])
           return '<div class="howto-min" data-howto="'+i+'">Form notes \u203a</div>';
         return '<div class="howto"'+(S.uiMode==='min'?' data-howto="'+i+'"':'')+'><div class="k">How to do it</div><p>'+t+'</p></div>'; })()
-      +(function(){ var hEx=/max hold/i.test(String(exReps(ex)));
+      +(function(){ var hEx=isHoldEx(ex);
         if(hEx && !dayLocked()) return '<div class="exnote" style="padding:0 0 6px">Timed sets \u2014 \u201CStart hold\u201D runs the clock, \u201CStop\u201D logs the seconds. Tap a finished set to fix its time.</div>';
         return (tw().sets<6 && !dayLocked())? '<div class="exnote" style="padding:0 0 6px">Tap the glowing set when it\u2019s done \u2014 tap it again if it didn\u2019t go to plan.</div>' : ''; })()
       +'<div class="sets">'
@@ -9766,7 +9935,7 @@ function renderInner(){
         // TIMED HOLDS are the exception: a hold set may only enter the log through the
         // clock, so the pills are scoreboard only - tapping one points at Start hold
         // instead of logging anything (field request: no buttons that shouldn't be pressed).
-        var hEx=/max hold/i.test(String(exReps(ex)));
+        var hEx=isHoldEx(ex);
         var firstPend=-1; st.sets.forEach(function(s2,k){ if(firstPend<0 && s2.st==='pend') firstPend=k; });
         return st.sets.map((s,j)=>{
           const v0=s.st==='pend'?(j+1):(s.st==='hit'?'✓':(s.reps!=null?s.reps:'±')); const v=(s.st!=='pend'&&s.g)? v0+'!' : v0;
@@ -9786,7 +9955,8 @@ function renderInner(){
       +'<div class="set" data-addset="'+i+'" role="button" tabindex="0" aria-label="Add a set to '+esc(dispName)+'" style="opacity:.78"><div class="n">ADD</div><div class="v mono">+</div></div>'
       +((st.sets.length && st.sets[st.sets.length-1].added && st.sets[st.sets.length-1].st==='pend')? '<div class="set" data-subset="'+i+'" style="opacity:.55"><div class="n">UNDO</div><div class="v mono">\u2212</div></div>':'')
       +'</div>'
-      +(/max hold/i.test(String(exReps(ex)))? holdHTML(i):'')
+      +(isHoldEx(ex)? holdHTML(i):'')
+      +bwPanelHTML(i, ex)
       + setEditorHTML(i,ex,st)
       +'</div>';
   });
@@ -9897,7 +10067,7 @@ function setEditorHTML(i, ex, st){
   const s=st.sets[st.open];
   // A hold edits in its own unit: seconds, five at a time, no RIR (meaningless for a max
   // hold). The reps machinery below stays for everything else.
-  const hEx=/max hold/i.test(String(exReps(ex)));
+  const hEx=isHoldEx(ex);
   const reps=s.reps!=null? s.reps: (hEx? 0 : defReps(ex));
   return '<div class="editor open" data-ed="'+i+'">'
     +'<div class="ed-row"><div class="ed-label">Set '+(st.open+1)+(hEx?' seconds':' reps')+'</div>'
@@ -10265,6 +10435,30 @@ function wire(){
     const L=st.sets[st.sets.length-1];
     if(L && L.added && L.st==='pend'){ st.sets.pop(); save(); render(); }
   });
+ // max-rep test: one prompt, one number, and every future prescription follows from it
+ document.querySelectorAll('[data-bwtest]').forEach(function(el){ el.onclick=function(){
+   try{
+     var i=+el.dataset.bwtest, ex=dayObj().exercises[i]; if(!ex) return;
+     var cur=bwMaxFor(ex.name);
+     var v=prompt('Max '+ex.name+' \u2014 one set to failure, good form only.\n\nHow many did you get?', cur? String(cur):'');
+     if(v==null) return;
+     var n=parseInt(String(v).replace(/[^0-9]/g,''),10);
+     if(!isFinite(n) || n<1){ alertToast('Enter a rep count'); return; }
+     if(n>200){ alertToast('That is above what the card will track'); return; }
+     bwSetMax(ex.name, n);
+     var p=bwPrescribe(ex);
+     alertToast('Max '+n+' logged \u2014 working sets now '+(p? p.lo+'\u2013'+p.hi:'set')+' reps');
+     render();
+   }catch(e){}
+ }; });
+ // auto-suggested progression: accept it and the harder variation becomes today's movement
+ document.querySelectorAll('[data-bwup]').forEach(function(el){ el.onclick=function(){
+   try{
+     var i=+el.dataset.bwup, nx=el.dataset.bwnext, ex=dayObj().exercises[i]; if(!ex||!nx) return;
+     var st=exState(i,ex); st.sub=nx; st.open=-1;
+     save(); alertToast(nx+' it is \u2014 test a max set when you are fresh'); render();
+   }catch(e){}
+ }; });
  document.querySelectorAll('[data-tset]').forEach(el=>el.onclick=()=>{ alertToast('Timed set \u2014 \u201CStart hold\u201D runs the clock'); });
  document.querySelectorAll('.set[data-set]').forEach(el=>el.onclick=()=>{ if(el.dataset.set==null) return;
     ensureAudio();
@@ -10857,7 +11051,9 @@ function recordPerf(){ const d=dayObj(); if(!S.lastPerf) S.lastPerf={};
     const reps=done.map(s=> s.st==='hit'? defReps(ex): (s.reps!=null? s.reps:'?')).join(',');
     S.lastPerf[nm]={d:S.when.date, w:(typeof w==='number'? w:null), r:reps}; }); }
 function holdHTML(i){ const on=holdT&&holdT.i===i;
-  return '<div class="ed-row" style="padding:0 12px 10px;margin-top:0"><div class="ed-label" style="width:auto">Hold</div>'
+  var _tg=null; try{ _tg=holdTarget(dayObj().exercises[i]); }catch(e){}
+  return '<div class="ed-row" style="padding:0 12px 10px;margin-top:0"><div class="ed-label" style="width:auto">Hold'
+   +(_tg? ' <span class="mono" style="color:var(--faint);font-weight:700">target '+_tg+'s</span>':'')+'</div>'
    +'<span class="mono"'+(on?' id="holdClock"':'')+' style="font-size:22px;font-weight:800;'+(on?'color:var(--amber)':'color:var(--faint)')+'">'+(on? fmtDur(Date.now()-holdT.t0):'0:00')+'</span>'
    +'<div class="toggle'+(on?' on':'')+'" data-hold="'+i+'">'+(on?'Stop \u00b7 log secs':'Start hold')+'</div></div>'; }
 function absWeek(){ const s=new Date(PLAN.start+'T12:00:00'); const n=new Date(shiftDate()+'T12:00:00');
@@ -11355,16 +11551,19 @@ function restNextInfo(b, omitW){
     const pj=pst.sets.findIndex(s=>s.st==='pend');
     if(pj>-1){ const pnum=pst.sub? true : pex.loadNum!=null;
       const pw=pst.sub? pst.w : (pnum? curLoad(pex,pst): null);
-      if(/max hold/i.test(String(exReps(pex)))) return 'SUPERSET \u2014 now: '+(pst.sub||pex.name)+' hold \u00b7 set '+(pj+1);
+      if(isHoldEx(pex)) return 'SUPERSET \u2014 now: '+(pst.sub||pex.name)+' hold \u00b7 set '+(pj+1);
       return 'SUPERSET \u2014 now: '+(pst.sub||pex.name)+' set '+(pj+1)+' x '+defReps(pex)+((pw!=null&&!omitW)? ' \u2014 '+pw+' lb':''); }
   }
   const nj=b.j+1;
   if(nj>=st.sets.length){ return b.label+' - last set done. Next exercise when ready.'; }
   const ns=st.sets[nj];
-  if(/max hold/i.test(String(exReps(ex)))){
-    // hold sets talk in seconds: show the session's best so far as the target to beat
+  if(isHoldEx(ex)){
+    // hold sets talk in seconds: a prescribed target if the plan names one, otherwise the
+    // session's best so far as the number to beat
     var best=0; st.sets.forEach(function(s2){ if(s2.st!=='pend' && s2.reps!=null && +s2.reps>best) best=+s2.reps; });
-    return b.label+' - next: hold set '+(nj+1)+(best>0? ' \u2014 beat '+best+'s' : ' \u2014 max effort, clocked');
+    var tgtS=holdTarget(ex);
+    return b.label+' - next: hold set '+(nj+1)
+      +(tgtS? ' \u2014 target '+tgtS+'s' : (best>0? ' \u2014 beat '+best+'s' : ' \u2014 max effort, clocked'));
   }
   const reps=(ns && ns.reps!=null)? ns.reps : defReps(ex);
   const rir=firstInt(ex.rir,2);
@@ -12043,7 +12242,7 @@ load().then(async()=>{
         ramp:null, res:{}};
       var pm=PRESET.maxes||null;
       if(pm){
-        S.genPlan=generatePlan({maxes:pm, goal:S.onb.goal, days:S.onb.days,
+        S.genPlan=generatePlan({maxes:pm, goal:S.onb.goal, days:S.onb.days, mins:S.onb.mins||null,
           limits:S.onb.limits, emphasis:S.onb.emph, weekdays:S.onb.wd, weak:S.onb.weak||'auto',
           res:(S.onb.res||{}), prefs:(S.onb.prefs||{})});
         PLAN=S.genPlan; S.maxes=Object.assign({}, S.genPlan.maxes);
@@ -12216,6 +12415,51 @@ function PG_pick(name, limits){
 function PG_mainSpec(m){ return (typeof m==='string')? {l:m, light:false} : m; }
 var PG_LIGHT=0.87;      // second exposure runs at ~87% of the heavy day's percentages
 
+// ===== STRUCTURES, NOT DAY COUNTS =====
+// "How many days a week can you train?" described an engine this card no longer has: the
+// split rotates when the athlete trains, and weeks advance on the calendar independently.
+// So frequency is not a setup question at all - a 3-day rotation trained six times a week
+// is simply two passes. What actually has to be chosen is the SHAPE of the rotation, and
+// there are only three that matter (plus a body-part split for bodybuilders). The athlete
+// picks a thing they can see, not a number they have to predict about their own future.
+var PG_STRUCTS=[
+  {id:'fullbody', days:3, name:'Full body',
+   sub:'Every session trains your whole body.',
+   why:'The most forgiving choice. Miss a session and you have still trained everything. Best if your week is unpredictable, or you are early on.'},
+  {id:'upperlower', days:4, name:'Upper / Lower',
+   sub:'Alternates upper-body and lower-body days.',
+   why:'The middle ground: more work per muscle than full body, still fine if you only get in a couple of times some weeks.'},
+  {id:'ppl', days:6, name:'Push / Pull / Legs',
+   sub:'Pressing, then pulling, then legs \u2014 twice through.',
+   why:'The most volume per muscle group. Worth it if you train often; if you only get in twice a week, full body will beat it.'},
+  {id:'bodypart', days:5, name:'Body part',
+   sub:'A dedicated day per region.',
+   why:'Bodybuilding style. Pick it if you already know you want it.'}
+];
+function PG_structFor(days){ for(var i=0;i<PG_STRUCTS.length;i++) if(PG_STRUCTS[i].days===days) return PG_STRUCTS[i];
+  return PG_STRUCTS[1]; }
+// What the rotation actually looks like - shown on the choice itself, so nobody picks blind.
+function PG_rotationPreview(days){
+  try{ var t=PG_TEMPLATES[days]||[]; return t.map(function(d){ return d.title.replace(/ - /g,' \u00b7 '); }); }
+  catch(e){ return []; }
+}
+// Session length is the question frequency was standing in for: it decides how much fits
+// in a day. Trim accessories (never the main lifts) until the day fits the budget.
+var PG_TIME=[{m:30,ex:4},{m:45,ex:5},{m:60,ex:7},{m:90,ex:9}];
+function PG_exCap(mins){ for(var i=0;i<PG_TIME.length;i++) if(PG_TIME[i].m===mins) return PG_TIME[i].ex; return 99; }
+function PG_fitTime(days, mins){
+  var cap=PG_exCap(mins); if(cap>=99) return days;
+  return days.map(function(d){
+    if(!d.exercises || d.exercises.length<=cap) return d;
+    var mains=[], acc=[];
+    d.exercises.forEach(function(e){ (e.barbell||e.maxKey)? mains.push(e) : acc.push(e); });
+    var keep=mains.concat(acc).slice(0, Math.max(cap, mains.length));   // mains are never cut
+    // preserve the plan's own ordering
+    var order={}; d.exercises.forEach(function(e,i){ order[e.name]=i; });
+    keep.sort(function(a,b){ return (order[a.name]||0)-(order[b.name]||0); });
+    return {code:d.code, title:d.title, exercises:keep};
+  });
+}
 var PG_TEMPLATES={
   3:[ {code:'A', title:'Full Body - A', mains:['squat','bench'], acc:['Cable Rows','Lateral Raises','Plank']},
       {code:'B', title:'Full Body - B', mains:['dead','ohp'],    acc:['Lat Pulldown','Hammer Curls','Hanging Leg Raises']},
@@ -12361,6 +12605,37 @@ var PG_EMPHASIS={
  glutes:  {region:'Lower', add:[['Glute Bridge','Walking Lunges'],['Romanian Deadlift']]},
  back:    {region:'Upper', add:[['Cable Rows','Straight-Arm Pulldown'],['Lat Pulldown','Face Pulls']]}
 };
+// ===== NO LIFT TWICE IN THE SAME SESSION =====
+// Field-caught: picking "Leg Press" as your squat pattern lands it on a day that already
+// programs Leg Press as an accessory, so the session prescribed the same movement twice.
+// The emphasis step guards against this; the preference swap did not, and neither would any
+// future path. This is the backstop - it runs last, over whatever every other step produced,
+// so the guarantee holds no matter how the day was assembled. A duplicate is swapped for the
+// first alternative from its own substitution list that the day does not already contain;
+// if there is no clean alternative, it is dropped rather than prescribed twice.
+function PG_dedupe(days, maxes){
+  return days.map(function(d){
+    var seen={}, out=[];
+    (d.exercises||[]).forEach(function(ex){
+      var n=ex.name;
+      if(!seen[n]){ seen[n]=1; out.push(ex); return; }
+      var subs=(ex.subs||[]), alt=null;
+      for(var i=0;i<subs.length;i++){ if(!seen[subs[i]]){ alt=subs[i]; break; } }
+      if(!alt) return;                                   // nothing clean to offer - drop it
+      var built=null;
+      try{ built=PG_ex(alt, maxes, {sch:{reps:ex.reps, rir:ex.rir, pct:null, sets:ex.sets}, limits:[],
+        note:'Swapped in for '+n+' \u2014 that movement is already in this session.'}); }catch(e){}
+      if(!built){                                        // fall back to a safe copy
+        built={}; for(var k in ex) if(Object.prototype.hasOwnProperty.call(ex,k)) built[k]=ex[k];
+        built.name=alt; built.maxKey=null; built.pct=null; built.wk=null;  // percentages belonged to the old lift
+        built.note='Swapped in for '+n+' \u2014 that movement is already in this session.';
+      }
+      built.subs=subs.filter(function(s){ return s!==alt; });
+      seen[alt]=1; out.push(built);
+    });
+    return {code:d.code, title:d.title, exercises:out};
+  });
+}
 function PG_applyEmphasis(days, emph, maxes){
   var E=PG_EMPHASIS[emph]; if(!E||!E.add.length) return days;
   // candidates are days matching the region (full-body plans match everything), shortest first,
@@ -12506,6 +12781,8 @@ function generatePlan(cfg){
     return {code:t.code, title:t.title + (diag.weak && heavyMains.indexOf(diag.weak)>-1 ? ' \u2605' : ''), exercises:list};
   });
   days=PG_applyEmphasis(days, cfg.emphasis||'balanced', maxes);
+  days=PG_dedupe(days, maxes);                     // backstop: never the same lift twice in a session
+  if(cfg.mins) days=PG_fitTime(days, cfg.mins);
   var out={
     block:'Starter Block - '+({strength:'Strength',muscle:'Muscle',lean:'Lean Out',general:'General Fitness'}[goal]||'General')
       +(diag.weak? ' \u00b7 '+({squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Press'}[diag.weak])+' Priority':''),
@@ -12551,7 +12828,7 @@ var ONB_BWM={squat:{new:.75,some:1.25,vet:1.75}, bench:{new:.50,some:.90,vet:1.3
 // Five reps only while it is genuinely light; singles near the top. Total work stays about 14 reps.
 var ONB_SCHED=[{p:.40,r:5},{p:.60,r:3},{p:.75,r:2},{p:.85,r:1},{p:.92,r:1}];
 var ONB_ORDER=['squat','bench','dead','ohp'];
-var ONB_STEPS=['welcome','goal','body','experience','schedule','emphasis','limits','prefs','calibrate','priority','review'];
+var ONB_STEPS=['welcome','goal','body','experience','schedule','length','emphasis','limits','prefs','calibrate','priority','review'];
 
 // The card's founding move, offered to everyone: it was built because a coach looked at one
 // lifter's numbers and said "your squat is behind - we fix that first." After calibration
@@ -12681,7 +12958,7 @@ function ONB_HTML(){
   var o=ONB(), st=ONB_STEPS[o.step], h='';
   var done=ONB_ORDER.filter(function(l){ return !!o.res[l]; }).length;
   h+='<header>'+((o.step>0 && st!=='review')?'<div class="onb-back" data-onbback="1" role="button" tabindex="0" aria-label="Back to the previous question">\u2190 Back</div>':'')+'<div class="eyebrow">Setup</div><h1>'+({welcome:'Let\u2019s build your program.',goal:'What are you training for?',
-      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',prefs:'Pick your movements.',priority:'Your numbers say something.',weekdays:'Which days can you train?',schedule:'How often can you train?',limits:'Anything to work around?',
+      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',prefs:'Pick your movements.',priority:'Your numbers say something.',weekdays:'Which days can you train?',schedule:'How do you want your sessions arranged?',length:'How long is a session for you?',limits:'Anything to work around?',
       calibrate:'Find your starting weights',review:'Ready to go.'}[st])+'</h1></header>';
 
   if(st==='welcome'){
@@ -12730,10 +13007,24 @@ function ONB_HTML(){
     +'<div class="cue" style="padding:8px 0 0">This only sets where the warm-up ramp starts. Guess low if you are unsure - the ramp corrects itself either way.</div></div>'
     +'<div class="daybtn onb-go'+(o.exp?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
-  if(st==='schedule'){ h+='<div class="block"><div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +[3,4,5,6,7].map(function(d){ return '<div class="onb-opt'+(o.days===d?' on':'')+'" data-onbdays="'+d+'" style="flex:1 1 28%;min-width:58px;text-align:center">'+d+' days</div>'; }).join('')
-    +'</div><div class="cue" style="padding:8px 0 0">Pick what you will actually do, not what sounds impressive \u2014 these are sessions you rotate through, and you rest whenever you leave a gap. Six is push/pull/legs twice; the seventh adds a lighter arms &amp; core day.</div></div>'
+  if(st==='schedule'){
+    // Show the actual rotation on every option. Nobody picks a training structure well
+    // from an abstract number; everybody can read "Push, Pull, Legs, twice through".
+    h+='<div class="block">'+PG_STRUCTS.map(function(sT){
+      var rot=PG_rotationPreview(sT.days);
+      return '<div class="onb-opt'+(o.days===sT.days?' on':'')+'" data-onbstruct="'+sT.days+'">'+sT.name
+        +'<span class="onb-why">'+sT.sub+' '+sT.why+'</span>'
+        +'<div class="rot-strip">'+rot.map(function(r,i){ return '<span class="rot-chip">'+esc(r)+'</span>'; }).join('<span class="rot-ar">\u2192</span>')
+        +'<span class="rot-ar">\u21ba</span></div>'
+        +'</div>'; }).join('')
+    +'<div class="cue" style="padding:8px 0 0">This is the order your sessions run in, not a weekly timetable. Train as often as you like \u2014 the card moves to the next session whenever you finish one, and loops back to the start. Weeks advance on the calendar either way.</div></div>'
     +'<div class="daybtn onb-go'+(o.days?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
+
+  if(st==='length'){ h+='<div class="block"><div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +PG_TIME.map(function(t){ return '<div class="onb-opt'+(o.mins===t.m?' on':'')+'" data-onbmins="'+t.m+'" style="flex:1 1 40%;min-width:74px;text-align:center">'+t.m+' min'
+      +'<span class="onb-why" style="text-align:center">about '+t.ex+' exercises</span></div>'; }).join('')
+    +'</div><div class="cue" style="padding:8px 0 0">How long you realistically have once you are actually in the gym. This sets how much fits in a session \u2014 the main lifts always stay, accessories are trimmed to fit. You can change it later.</div></div>'
+    +'<div class="daybtn onb-go'+(o.mins?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='weekdays'){
     var sel=o.wd||PG_defaultDays(o.days||4);
@@ -12910,6 +13201,11 @@ function ONB_WIRE(){
     else { o.wd.shift(); o.wd.push(d); }          // replace the oldest pick rather than refusing
     save(); render(); });
   q('[data-onbdays]',function(el){ o.days=+el.dataset.onbdays; o.wd=PG_defaultDays(o.days).slice(); save(); render(); });
+  // structure choice: the number of sessions in the rotation IS the structure (3 full body,
+  // 4 upper/lower, 5 body part, 6 push/pull/legs), so it sets o.days - which is what the
+  // generator reads. Weekday picks are cleared: the rotation is not a weekly timetable.
+  q('[data-onbstruct]',function(el){ o.days=+el.dataset.onbstruct; o.wd=null; save(); render(); });
+  q('[data-onbmins]',function(el){ o.mins=+el.dataset.onbmins; save(); render(); });
   q('[data-onbpref]',function(el){ o.prefs=o.prefs||{};
     o.prefs[el.dataset.onbpref]=el.dataset.prefname; save(); render(); });
   q('[data-onblim]',function(el){ var id=el.dataset.onblim, i=o.limits.indexOf(id);
@@ -12946,7 +13242,7 @@ function ONB_buildRaw(){
   var o=ONB();
   o.goal=o.goal||'general'; o.days=o.days||3; o.exp=o.exp||'new';
   o.emph=o.emph||'balanced'; o.weak='auto'; o.limits=o.limits||[]; o.res=o.res||{};
-  var plan=generatePlan({maxes:Object.assign({}, ONB_RAW_MAXES), goal:o.goal, days:o.days,
+  var plan=generatePlan({maxes:Object.assign({}, ONB_RAW_MAXES), goal:o.goal, days:o.days, mins:o.mins||null,
     limits:o.limits, emphasis:o.emph, weak:'auto', weekdays:null,   // this path never asks
     res:o.res||{}, prefs:o.prefs||{}});
   S.genPlan=plan; PLAN=plan;
@@ -12962,7 +13258,7 @@ function ONB_build(){
   // Every field the generator reads is passed here, explicitly, even where the value is null.
   // Omitting one does not fail loudly - it silently discards an answer the athlete gave, which
   // is how the preference, the below-the-bar swaps AND the priority lift all went missing.
-  var plan=generatePlan({maxes:maxes, goal:o.goal, days:o.days||4, limits:o.limits,
+  var plan=generatePlan({maxes:maxes, goal:o.goal, days:o.days||4, mins:o.mins||null, limits:o.limits,
     emphasis:o.emph||'balanced', weekdays:(o.wd&&o.wd.length===(o.days||4))? o.wd : null,
     weak:o.weak||'auto', res:o.res||{}, prefs:o.prefs||{}});
   S.genPlan=plan; PLAN=plan;
