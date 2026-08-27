@@ -594,6 +594,38 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 .why-k{color:var(--amber);font-weight:800;font-size:11px;letter-spacing:.06em;min-width:78px;padding-top:1px;}
 .why-v{flex:1;font-size:12.5px;line-height:1.5;color:var(--dim);}
 .intro-card{border:1px solid var(--amber);border-radius:14px;padding:14px;margin:10px 0;}
+.start-cue{font-size:12px;line-height:1.55;color:var(--dim);padding:6px 0 2px;}
+/* ===== Start: one page, nothing else on it ===== */
+.st-wrap{max-width:560px;margin:0 auto;padding:22px 18px 60px;min-height:100vh;}
+.st-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.st-mark svg{display:block;}
+.st-prog{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);}
+.st-bar{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:26px;}
+.st-bar i{display:block;height:100%;background:var(--amber);transition:width .35s ease;}
+.st-h1{font-size:clamp(27px,7.4vw,38px);font-weight:900;line-height:1.1;letter-spacing:-.02em;margin-bottom:10px;}
+.st-cue{font-size:15px;line-height:1.55;color:var(--dim);margin-bottom:18px;}
+.st-target{font-size:17px;font-weight:800;margin:18px 0 8px;}
+.st-target b{color:var(--amber);}
+.st-note{font-size:13px;line-height:1.6;color:var(--faint);margin-bottom:16px;}
+.st-note b{color:var(--chalk);}
+.st-sets{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 20px;}
+.st-pill{min-width:74px;text-align:center;padding:12px 10px;border-radius:12px;border:1px solid var(--line);
+  font-size:13px;font-weight:800;color:var(--faint);}
+.st-pill.on{border-color:var(--amber);color:var(--amber);}
+.st-go{display:block;width:100%;font:inherit;font-size:16px;font-weight:800;padding:18px;border-radius:14px;
+  border:0;background:var(--amber);color:var(--amber-ink,#14171B);cursor:pointer;margin-bottom:14px;}
+.st-go:focus-visible{outline:3px solid var(--chalk);outline-offset:2px;}
+.st-row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:6px;}
+.st-link{font:inherit;font-size:13px;font-weight:700;color:var(--faint);background:none;border:0;
+  text-decoration:underline;cursor:pointer;padding:8px 2px;}
+.st-fin .st-h1{color:var(--amber);}
+.st-restbig{font-size:clamp(54px,17vw,92px);font-weight:900;line-height:1;text-align:center;letter-spacing:-.03em;}
+.st-restcap{text-align:center;font-size:14px;line-height:1.55;color:var(--dim);margin-top:12px;max-width:340px;margin-left:auto;margin-right:auto;}
+.st-restnext{text-align:center;font-size:13px;font-weight:800;color:var(--amber);margin-top:14px;}
+body.start-mode .footer,body.start-mode .tabrow,body.start-mode .chiprow,
+body.start-mode .weekhead,body.start-mode .dots,body.start-mode .calcfab{display:none !important;}
+body.start-mode{background:var(--bg);}
+.start-cue b{color:var(--chalk);}
 .intro-h{font-size:15px;font-weight:800;color:var(--chalk);margin-bottom:4px;}
 .intro-s{font-size:12.5px;color:var(--dim);line-height:1.5;}
 .hdr-mark{flex:0 0 auto;display:flex;align-items:center;opacity:.92;}
@@ -1013,6 +1045,8 @@ td.c-n.now{font-weight:700;}
 .bw-row{display:flex;gap:8px;align-items:center;}
 .bw-btn{padding:8px 13px;font-size:12px;}
 .bw-re{font-size:11px;font-weight:700;color:var(--faint);cursor:pointer;text-decoration:underline;}
+.bw-in{width:94px;padding:9px 11px;border-radius:10px;border:1px solid var(--amber);background:transparent;
+  color:var(--chalk);font-family:inherit;font-size:16px;font-weight:800;-webkit-appearance:none;}
 /* the rotation, shown on the choice itself */
 .rot-strip{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:9px;}
 .rot-chip{border:1px solid var(--line);border-radius:7px;padding:3px 7px;font-size:10.5px;
@@ -3681,6 +3715,26 @@ function restEditReps(b,delta){
   r.s.st='dev';                       // an explicit number is a deviation from "as prescribed"
   save(); paintRest(true);
 }
+// Typing beats tapping past a point. The number itself is the control.
+function restTypeReps(b){
+  // in-place input on the rest screen. paintRest() runs every second, so it is told to
+  // leave the panel alone while this input has focus (see the guard in paintRest).
+  try{
+    var r=restSetRef(b); if(!r) return;
+    var host=document.querySelector('#restTick .rest-val'); if(!host) return;
+    var cur=(r.s.reps!=null)? r.s.reps : r.tgt;
+    host.innerHTML='<input class="bw-in" style="width:84px" type="number" inputmode="numeric" pattern="[0-9]*" value="'+cur+'">';
+    var f=host.querySelector('input'); if(!f) return;
+    REST_TYPING=true; f.focus(); try{ f.select(); }catch(e){}
+    var commit=function(){
+      var n=parseInt(String(f.value||'').replace(/[^0-9]/g,''),10);
+      if(isFinite(n) && n>=0){ r.s.reps=Math.min(500,n); r.s.st='dev'; save(); }
+      REST_TYPING=false; paintRest(true);
+    };
+    f.onblur=commit;
+    f.onkeydown=function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); commit(); } };
+  }catch(e){ REST_TYPING=false; }
+}
 function restSetRir(b,v){
   var r=restSetRef(b); if(!r) return;
   r.s.rir=v; if(r.s.st==='hit'&&r.s.reps==null) r.s.reps=r.tgt;
@@ -5442,12 +5496,14 @@ function restWhy(b){
     var c=(typeof exRestClass==='function')? exRestClass(ex) : null;
     if(c==='short') return ' \u00b7 core / hold';
     if(c==='iso') return ' \u00b7 isolation';
+    if(isStartMode()) return '';
     if(c==='main-ish') return ' \u00b7 hard bodyweight';
     if(isBodyweightEx(ex)) return ' \u00b7 bodyweight';
     return '';
   }catch(e){ return ''; }
 }
 function restBody(b,e,go){
+  if(isStartMode()) return restBodyStart(b,e,go);
   var r=restSetRef(b);
   var reps=r? ((r.s.reps!=null)? r.s.reps : r.tgt) : null;
   var rir=r? r.s.rir : null;
@@ -5475,10 +5531,11 @@ function restBody(b,e,go){
   } else if(r){
     h+='<div class="rest-edit">'
      +'<div class="rest-lab">'+(r.st.sub||r.ex.name)+' \u00b7 set '+(b.j+1)+' \u2014 fix it here if the number was different</div>'
-     +'<div class="rest-row"><span class="rest-k">Reps</span>'
-     +'<button class="rest-step" data-restrep="-1">\u2212</button>'
-     +'<span class="rest-val mono">'+reps+'</span>'
-     +'<button class="rest-step" data-restrep="1">+</button></div>'
+     +(function(){ var stp=repStep(reps);
+       return '<div class="rest-row"><span class="rest-k">Reps</span>'
+       +'<button class="rest-step" data-restrep="-'+stp+'"'+(stp>1?' style="font-size:17px"':'')+'>\u2212'+(stp>1?stp:'')+'</button>'
+       +'<span class="rest-val mono" data-reptype="1" role="button" tabindex="0" style="cursor:pointer;text-decoration:underline dotted">'+reps+'</span>'
+       +'<button class="rest-step" data-restrep="'+stp+'"'+(stp>1?' style="font-size:17px"':'')+'>+'+(stp>1?stp:'')+'</button></div>'; })()
      +ghostRow(reps, (rir!=null? rir : (function(){ var m=String(r.ex.rir||'').match(/\d/); return m? +m[0] : null; })()))
      +'<div class="rest-row"><span class="rest-k">Reps left</span><span class="rest-rir">'
      +[0,1,2,3,4].map(function(v){ return '<button class="rr'+(rir===v?' on':'')+'" data-restrir="'+v+'">'+v+'</button>'; }).join('')
@@ -5508,8 +5565,11 @@ function restBody(b,e,go){
    +'</div></div>';
   return h;
 }
+var REST_TYPING=false;
 function paintRest(force){
   var el=document.getElementById('restTick'); if(!el) return;
+  // a number being typed must survive the once-a-second repaint
+  if(REST_TYPING && !force) return;
   if(el.dataset && el.dataset.tourDemo==='1' && TOUR && TOUR.live) return;   // the demo owns the screen mid-tour
   var b=lastCompletion();
   if(!b||Date.now()-b.t>6*3600000||S.restDismiss===b.t){ stopScheduled(); el.style.display='none'; el.className='restchip'; return; }
@@ -5527,6 +5587,24 @@ function paintRest(force){
       +'<span class="mini-next">'+restNextInfo(b)+'</span>'
       +'<span class="mini-open">Open</span></div>'
     : restBody(b,e,go);
+}
+// A beginner does not need to fix reps, rate proximity to failure, or press-and-hold a
+// button mid-rest. They need to know they are resting, roughly how long, and how to get on
+// with it. Everything else on the full rest screen is noise to them.
+function restBodyStart(b,e,go){
+  var left=Math.max(0, Math.ceil((b.target*1000-e)/1000));
+  var nm=''; try{ var d=dayObj(); var tgt=restNextTarget(b);
+    if(tgt && tgt.kind==='set'){ var st=exState(tgt.i,d.exercises[tgt.i]);
+      nm=(st&&st.sub)||d.exercises[tgt.i].name; } }catch(x){}
+  return '<div class="rest-inner">'
+    +'<div class="st-restbig mono">'+(go? 'GO' : fmtDur(left*1000))+'</div>'
+    +'<div class="st-restcap">'+(go
+        ? 'Rested. Take the next set when you are ready.'
+        : 'Rest. This is part of the session \u2014 you are supposed to.')+'</div>'
+    +(nm? '<div class="st-restnext">Next: '+esc(nm)+'</div>' : '')
+    +'<button class="st-go" data-restkill="1" style="max-width:320px;margin:18px auto 0">'
+      +(go? 'Back to the session' : 'Skip the rest')+'</button>'
+    +'</div>';
 }
 function wireRest(){
   var el=document.getElementById('restTick'); if(!el) return;
@@ -5564,6 +5642,10 @@ function wireRest(){
           st3.w=Math.max(0, base3+(+n.dataset.rwe)*stp3); save(); paintRest(true); } }catch(e){}
       return; }
     if(hit('data-rwadj')){ restWOpen=!restWOpen; paintRest(true); return; }
+    if(hit('data-reptype')){ restTypeReps(b); return; }
+    if(isStartMode() && hit('data-restkill')){
+      // plain tap in Start: hold-to-fire is a gesture a first-timer will not discover
+      S.restDismiss=b.t; stopScheduled(); save(); paintRest(true); render(); return; }
     if((n=hit('data-restrep'))){ restEditReps(b,+n.dataset.restrep); return; }
     if((n=hit('data-restrir'))){ restSetRir(b,+n.dataset.restrir); return; }
     if(hit('data-restgrind')){ restToggleGrind(b); return; }
@@ -6261,7 +6343,7 @@ function adaptWire(){
 // for the first time gets nothing - a changelog is meaningless before you have used the thing.
 // TO CUT A RELEASE: add an entry at the TOP with a NEW `build:` tag (a date works well).
 // That tag identifies the RELEASE and is what tells a returning card it has something to say.
-// It is deliberately NOT the BUILD constant: BUILD names the CARD ('v62' vs 'c20'), both cards
+// It is deliberately NOT the BUILD constant: BUILD names the CARD ('v63' vs 'c21'), both cards
 // ship the same release, and BUILD is declared further down the file - referencing it here
 // throws on load and takes the whole card with it.
 var WHATSNEW=[
@@ -7096,6 +7178,181 @@ function whyHTML(){
     +'</div>';
 }
 // First run only: one card, above the session, gone forever once real work is banked.
+// After a couple of months the beginner is not a beginner: they know what the movements feel
+// like. Start hands them to the full card with their history intact - it is a front door,
+// not a walled garden. Offered once, dismissable, never nagged.
+// ===== THE START SCREEN =====
+// Everything a beginner needs and nothing else: which movement, what it looks like, what to
+// do, and one button. No tabs, no week, no charts, no navigation to get lost in.
+function startDay(){ try{ return dayObj(); }catch(e){ return {exercises:[]}; } }
+function startDone(){                       // how many movements are finished
+  try{
+    var d=startDay(), n=0;
+    d.exercises.forEach(function(ex,i){
+      var st=exState(i,ex);
+      if(st.sets.every(function(s){ return s.st!=='pend'; })) n++;
+    });
+    return n;
+  }catch(e){ return 0; }
+}
+function startScreenHTML(){
+  try{
+    var d=startDay(), ex0=d.exercises||[];
+    if(!ex0.length) return '<div class="st-wrap"><div class="st-h1">Nothing to train here.</div></div>';
+    var done=startDone(), total=ex0.length;
+    if(done>=total) return startFinishHTML(total);
+
+    var i=Math.max(0, Math.min(total-1, focusIdx()));
+    var st=exState(i, ex0[i]);
+    // Auto-advance to the first unfinished movement ONLY when the athlete has not deliberately
+    // stepped back to look at one. Without this, "Previous movement" bounced straight forward.
+    if(!S.stHeld && st.sets.every(function(s){ return s.st!=='pend'; })){
+      for(var k=0;k<total;k++){ var s2=exState(k,ex0[k]);
+        if(s2.sets.some(function(s){ return s.st==='pend'; })){ i=k; st=s2; break; } }
+    }
+    var ex=ex0[i], nm=st.sub||ex.name;
+    var setsN=st.sets.length, doneN=st.sets.filter(function(s){ return s.st!=='pend'; }).length;
+    var allSets=doneN>=setsN;
+    var hold=isHoldEx(ex);
+    var w=null; try{ w=(st.w!=null)? st.w : (ex.loadNum!=null? curLoad(ex,st) : null); }catch(e){}
+
+    return '<div class="st-wrap">'
+      +'<div class="st-top"><span class="st-mark">'+brandMark(58)+'</span>'
+        +'<span class="st-prog">Movement '+(i+1)+' of '+total+'</span></div>'
+      +'<div class="st-bar"><i style="width:'+Math.round((done/total)*100)+'%"></i></div>'
+
+      +'<div class="st-h1">'+esc(nm)+'</div>'
+      +(ex.cue? '<div class="st-cue">'+esc(ex.cue)+'</div>' : '')
+
+      +(hold
+        ? '<div class="st-sets">'+st.sets.map(function(s,j){
+            return '<span class="st-pill'+(s.st!=='pend'?' on':'')+'">'+(s.reps!=null? s.reps+'s' : 'Set '+(j+1))+'</span>'; }).join('')+'</div>'
+          +'<div class="st-note">Hold it as long as you can with good form. The clock counts for you \u2014 start it, hold, then stop.</div>'
+          +holdHTML(i)
+          +(holdT && holdT.i===i ? '' : '<div class="st-note" style="margin-top:-4px">Tap <b>Start hold</b> above when you are in position.</div>')
+        : '<div class="st-target">'+(w!=null? '<b class="mono">'+WV(w)+'</b> '+uLbl()+' \u00b7 ' : '')
+            +'<b>'+esc(String(exReps(ex)))+'</b> reps \u00b7 set '+Math.min(doneN+1,setsN)+' of '+setsN+'</div>'
+          +'<div class="st-note">Pick a weight you could do about <b>three more reps</b> with. Not sure? Go lighter.</div>'
+          +'<div class="st-sets">'+st.sets.map(function(s,j){
+              return '<span class="st-pill'+(s.st!=='pend'?' on':'')+'">'+(s.st!=='pend'? '\u2713' : 'Set '+(j+1))+'</span>'; }).join('')+'</div>'
+          +(allSets? '' : '<button class="st-go" data-stdone="'+i+'">I finished this set</button>')
+        )
+
+      +(allSets
+        ? '<button class="st-go" data-stnext="'+i+'">'+((i+1<total)? 'Next movement \u2192' : 'Finish session')+'</button>'
+        : '')
+      // the weight editor and the how-to sheet are borrowed from the full card - they have to
+      // be RENDERED here too. "Change weight" was flipping a flag nothing was drawing.
+      +weightEditorHTML(i, ex, st)
+      +'<div class="st-row">'
+        +'<button class="st-link" data-how="'+esc(nm)+'">Show me how</button>'
+        +((w!=null||st.sub)? '<button class="st-link" data-stwt="'+i+'">'+(st.wopen?'Done':'Change weight')+'</button>' : '')
+        +(i>0? '<button class="st-link" data-stback="'+i+'">\u2039 Previous movement</button>' : '')
+      +'</div>'
+      +'</div>'
+      + (function(){ try{ return howSheetHTML(); }catch(e){ return ''; } })();
+  }catch(e){ oops('startScreen',e); return '<div class="st-wrap"><div class="st-h1">Give that another tap.</div></div>'; }
+}
+function startFinishHTML(total){
+  var mins=Math.max(12, Math.round(total*4.5));
+  var nx=null; try{ nx=nextSession(); }catch(e){}
+  return '<div class="st-wrap st-fin">'
+    +'<div class="st-top"><span class="st-mark">'+brandMark(58)+'</span></div>'
+    +'<div class="st-h1">Session done.</div>'
+    +'<div class="st-cue">You trained your whole body. About '+mins+' minutes.</div>'
+    +'<div class="st-note" style="margin-top:14px">Sore in a day or so is normal, and it fades after the first few sessions. '
+      +'Eat something with protein, drink water, and rest tomorrow.</div>'
+    +'<button class="st-go" data-stsave="1">Save this session</button>'
+    +(nx? '<div class="st-note" style="margin-top:12px">Next up: <b>'+esc(nx.code)+'</b> \u2014 whenever you are ready.</div>' : '')
+    // the end of a session is the right moment to offer the full card - never mid-workout
+    +(function(){ try{ return gradHTML(); }catch(e){ return ''; } })()
+    // ...and a quiet door that is ALWAYS there. The earned offer above appears once; this
+    // never disappears, so "Not yet" is not a locked door and nobody has to wait for 24
+    // sessions to decide they want more.
+    +(function(){ try{ return (gradHTML()? '' :
+        '<div class="st-row" style="margin-top:26px">'
+        +'<button class="st-link" data-gradgo="1">Switch to the full card</button></div>'); }catch(e){ return ''; } })()
+    +'</div>';
+}
+function startWire(){
+  function q(sel,fn){ document.querySelectorAll(sel).forEach(function(el){ el.onclick=function(){ try{ fn(el); }catch(e){ oops('startWire',e); } }; }); }
+  // Start bypasses wire(), so anything borrowed from the full card has to be wired here too.
+  // The rest overlay was the second thing to catch this: it appeared after a logged set and
+  // none of its buttons responded, because every one of its handlers lives in wireRest().
+  try{ wireRest(); }catch(e){ oops('startWireRest',e); }
+  try{ paintRest(true); }catch(e){}
+  // The hold clock is borrowed - a plank still logs from the clock and nowhere else.
+  q('[data-hold]', function(b){
+    var i=+b.dataset.hold;
+    if(holdT && holdT.i===i){
+      var ex=startDay().exercises[i], st=exState(i,ex);
+      var secs=Math.max(1,Math.round((Date.now()-holdT.t0)/1000));
+      var j=st.sets.findIndex(function(s){ return s.st==='pend'; });
+      if(j>-1){ var s=st.sets[j]; s.st='dev'; s.reps=secs; s.rir=null; s.t=Date.now(); }
+      else st.sets.push({st:'dev',added:true,reps:secs,rir:null,t:Date.now()});
+      holdT=null; save(); render(); alertToast(secs+'s logged');
+    } else { ensureAudio(); holdT={i:i,t0:Date.now()}; render(); }
+  });
+  q('[data-stdone]', function(el){
+    S.stHeld=false;
+    var i=+el.dataset.stdone, ex=startDay().exercises[i], st=exState(i,ex);
+    for(var j=0;j<st.sets.length;j++){ if(st.sets[j].st==='pend'){
+      st.sets[j].st='hit'; st.sets[j].t=Date.now(); try{ tw().sets++; }catch(e){} break; } }
+    save(); render();
+  });
+  q('[data-stnext]', function(el){
+    var i=+el.dataset.stnext, total=startDay().exercises.length;
+    S.stHeld=false;                                 // moving forward resumes auto-advance
+    if(i+1<total){ setFocus(i+1); }
+    save(); render();
+  });
+  q('[data-stback]', function(el){
+    S.stHeld=true;                                  // hold this view; do not auto-advance
+    setFocus(Math.max(0,+el.dataset.stback-1)); save(); render();
+  });
+  // the how-to sheet is the full card's, opened the way the full card opens it
+  q('[data-how]', function(el){ howEx=el.dataset.how; render(); });
+  q('[data-howclose]', function(){ howEx=null; render(); });
+  q('[data-stwt]', function(el){
+    var i=+el.dataset.stwt, ex=startDay().exercises[i], st=exState(i,ex);
+    st.wopen=!st.wopen; save(); render();
+  });
+  // borrowed weight stepper
+  document.querySelectorAll('[data-wed]').forEach(function(ed){
+    var i=+ed.dataset.wed, ex=startDay().exercises[i], st=exState(i,ex);
+    var stp=wStepLb(ex.barbell);
+    ed.querySelectorAll('[data-we]').forEach(function(b){ b.onclick=function(){
+      var base=st.sub? (subLoad(ex,st)!=null? subLoad(ex,st):50) : curLoad(ex,st);
+      st.w=Math.max(0, base+(+b.dataset.we)*stp); save(); render();
+    }; });
+    var dn=ed.querySelector('[data-wdone]'); if(dn) dn.onclick=function(){ st.wopen=false; save(); render(); };
+  });
+  q('[data-gradno]', function(){ S.gradAck=true; save(); render(); });
+  q('[data-gradgo]', function(){
+    try{
+      if(!S.gradConfirm){ S.gradConfirm=true; save(); render();
+        alertToast('Full setup takes about two minutes \u2014 tap again to start'); return; }
+      S.gradConfirm=false;
+      var o=ONB(); o.mode='full'; o.step=0; o.done=false; S.mode='full'; S.gradAck=true; save(); render();
+    }catch(e){}
+  });
+  q('[data-stsave]', function(){ try{ saveSessionLog(false); }catch(e){} setTimeout(function(){ try{ render(); }catch(e){} }, 300); });
+}
+function gradHTML(){
+  try{
+    if(!isStartMode() || S.gradAck) return '';
+    var n=(logKeys||[]).length;
+    if(n<24) return '';
+    return '<div class="intro-card lockfree">'
+      +'<div class="intro-h">'+n+' sessions. You are not a beginner any more.</div>'
+      +'<div class="intro-s">You know what these movements feel like now. The full card adds tested starting weights, '
+      +'goal-driven rep ranges and the progression math \u2014 same app, more of it. Everything you have logged comes with you.</div>'
+      +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+      +'<span class="daybtn lockfree" data-gradgo="1" role="button" tabindex="0" style="padding:8px 14px;background:var(--amber);color:var(--amber-ink,#111);border-color:var(--amber)">Set up the full card</span>'
+      +'<span class="daybtn lockfree" data-gradno="1" role="button" tabindex="0" style="padding:8px 14px">Not yet</span>'
+      +'</div></div>';
+  }catch(e){ return ''; }
+}
 function introHTML(){
   try{
     if(S.introDone) return '';
@@ -7850,6 +8107,19 @@ var EXLIB=[
 ['Machine Chest Press','push','machine','bench',0.62,'stack','low','Chest pressing on rails. Safe to push near failure.'],
 ['Machine Incline Press','push','machine','bench',0.55,'stack','low','Upper chest on rails.'],
 ['Smith Bench Press','push','machine','bench',0.85,'bar','low','Bench on a fixed path. Useful without a spotter.'],
+['Incline Push-Ups','push','bodyweight','bench',0.0,'bw','high','Push-ups with your hands raised. Less of your weight on the arms - the honest starting point.'],
+['Feet-Elevated Push-Ups','push','bodyweight','bench',0.0,'bw','high','Push-ups with your feet up. Shifts more of your weight onto the chest and shoulders.'],
+['Archer Push-Ups','push','bodyweight','bench',0.0,'bw','med','One arm straight, the other doing the work. The step before a one-arm push-up.'],
+['One-Arm Push-Up Progression','push','bodyweight','bench',0.0,'bw','low','Working toward a push-up on one arm. Elevate the hands until the reps are clean.'],
+['Assisted Pull-Ups','pull','machine','pull',0.0,'bw','high','Pull-ups with a band or machine taking part of your weight.'],
+['Negative Pull-Ups','pull','bodyweight','pull',0.0,'bw','high','Jump to the top and lower yourself slowly. Builds the strength a full pull-up needs.'],
+['Assisted Chin-Ups','pull','machine','pull',0.0,'bw','high','Chin-ups with a band or machine taking part of your weight.'],
+['Negative Chin-Ups','pull','bodyweight','pull',0.0,'bw','high','Jump to the top and lower under control. The fastest route to a first chin-up.'],
+['Feet-Elevated Inverted Row','pull','bodyweight','pull',0.0,'bw','high','Inverted rows with the feet raised so more of your weight goes through the arms.'],
+['Single-Arm Inverted Row','pull','bodyweight','pull',0.0,'bw','med','Inverted row on one arm. Heavy for the back and brutal on the trunk.'],
+['Single-Leg Glute Bridge','legs','bodyweight','dead',0.0,'bw','high','Glute bridge on one leg. Doubles the load without any equipment.'],
+['Pistol Squat Progression','legs','bodyweight','squat',0.0,'bw','low','Working toward a squat on one leg. Hold something or sit to a box until it is clean.'],
+['Weighted Back Extension','legs','bodyweight','dead',0.0,'bw','high','Back extensions holding a plate against the chest.'],
 ['Push-Ups','push','bodyweight','bench',0.0,'bw','high','Chest, shoulders and trunk with your own bodyweight.'],
 ['Hand-Release Push-Ups','push','bodyweight','bench',0.0,'bw','high','Push-ups with a dead stop. Kills any bouncing.'],
 ['Deficit Push-Ups','push','bodyweight','bench',0.0,'bw','med','Push-ups with your hands raised. Bigger chest stretch.'],
@@ -7892,6 +8162,14 @@ var EXLIB=[
 ['Inverted Row','pull','bodyweight','bench',0.0,'bw','med','Bodyweight rowing under a bar. The stepping stone to pull-ups.'],
 ['Pull-Ups','pull','bodyweight','bench',0.0,'bw','high','Lats and biceps against your own bodyweight. The benchmark.'],
 ['Chin-Ups','pull','bodyweight','bench',0.0,'bw','high','Pull-up with palms toward you. More biceps.'],
+['Weighted Chin-Ups','pull','bodyweight','pull',0.0,'bw','high','Chin-ups with a belt or vest. Once bodyweight is easy, this is how the pattern keeps growing.'],
+['Bodyweight Squat','legs','bodyweight','squat',0.0,'bw','high','Squats with no load. The pattern, the depth, and a genuine leg workout for a beginner.'],
+['Incline Barbell Press','push','barbell','bench',0.85,'bar','high','Barbell pressing on an incline. Upper chest and front delts.'],
+['Plate Lateral Raise','shoulders','plate','ohp',0.0,'db','high','Lateral raises holding plates. Same job as dumbbells when the rack is busy.'],
+['Rope Straight-Arm Pulldown','pull','cable','pull',0.0,'cable','high','Straight-arm pulldown with a rope. Lats through a long range with no elbow bend.'],
+['DB Reverse Curl','arms','dumbbell','pull',0.0,'db','high','Curls with the palms down. Hits the forearms and the outer arm.'],
+['DB Romanian Deadlift','legs','dumbbell','dead',0.60,'db','high','Romanian deadlift with dumbbells. Hamstrings and glutes without a bar.'],
+['Single-Leg DB Calf Raise','legs','dumbbell','squat',0.0,'db','high','Calf raises one leg at a time holding a dumbbell. Full range, no machine needed.'],
 ['Weighted Pull-Ups','pull','bodyweight','bench',0.18,'perHand','med','Pull-ups with weight added. Real upper-back strength.'],
 ['Assisted Pull-Up','pull','machine','bench',0.40,'stack','low','Pull-ups with help. Build toward doing them unassisted.'],
 ['Lat Pulldown','pull','cable','bench',0.43,'stack','med','Lats, the width of your back. The stepping stone to pull-ups.'],
@@ -8026,18 +8304,58 @@ function prSparksHTML(){
   }
   return s+'</div>';
 }
-// --- consistency streak: how many days in a row carry at least one logged session ---
-function streakDays(){
+// --- consistency streak: WEEKS in a row that carry training ---
+// This used to count consecutive calendar days, which meant every rest day reset it to zero.
+// Field-caught: five straight weeks of Monday/Wednesday/Friday - fifteen sessions, textbook
+// consistency - reported "1 day" and hid the flame, while seven days of never resting showed
+// seven. That rewards the one thing this program does not ask for. Recovery is part of the
+// plan, so the streak measures the thing that actually matters: unbroken WEEKS of showing up.
+// Also fixed here: it read LOGP and the calendar date, while logs are written under
+// curLOGP() and the 3am training date - so a late-night session looked like a missed day.
+function streakDayset(){
+  var days={};
   try{
-    if(!logKeys || !logKeys.length) return 0;
-    var days={};
-    logKeys.forEach(function(k){
-      var m=k.slice(LOGP.length).match(/^(\d{4}-\d{2}-\d{2})/);
+    var p=curLOGP();
+    (logKeys||[]).forEach(function(k){
+      if(k.indexOf(p)!==0) return;
+      var m=k.match(/(\d{4}-\d{2}-\d{2})-[A-Za-z]+-W\d+B\d+$/);
       if(m) days[m[1]]=true;
     });
-    var today=localDate();
-    // a streak survives today being unlogged - it only breaks once a full day has passed unlogged
-    var cur=new Date(today+'T00:00:00');
+  }catch(e){}
+  return days;
+}
+function streakWeeks(){
+  try{
+    if(!logKeys || !logKeys.length) return 0;
+    var days=streakDayset();
+    if(!Object.keys(days).length) return 0;
+    var end=new Date(shiftDate()+'T12:00:00');
+    function windowHasWork(offsetWeeks){
+      var hi=new Date(end.getTime()); hi.setDate(hi.getDate()-offsetWeeks*7);
+      for(var i=0;i<7;i++){
+        var d=new Date(hi.getTime()); d.setDate(d.getDate()-i);
+        var iso=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+        if(days[iso]) return true;
+      }
+      return false;
+    }
+    // the week in progress is allowed to be empty so far - it is not a broken streak on a
+    // Monday morning. Counting simply starts from the last week that has work in it.
+    var start=windowHasWork(0)? 0 : 1;
+    var n=0;
+    for(var wk=start; wk<200; wk++){
+      if(!windowHasWork(wk)) break;
+      n++;
+    }
+    return n;
+  }catch(e){ return 0; }
+}
+// kept for anything that still wants the raw day count, now reading the right prefix and date
+function streakDays(){
+  try{
+    var days=streakDayset();
+    var today=shiftDate();
+    var cur=new Date(today+'T12:00:00');
     if(!days[today]) cur.setDate(cur.getDate()-1);
     var n=0;
     for(var guard=0; guard<400; guard++){
@@ -8049,16 +8367,16 @@ function streakDays(){
   }catch(e){ return 0; }
 }
 function streakHTML(){
-  var n=streakDays();
-  if(n<2) return '';                        // one session is not yet a streak - don't cheapen it
-  var tier = n>=30? 4 : n>=14? 3 : n>=7? 2 : 1;
-  var word = n>=30? 'unbroken' : n>=14? 'rolling' : n>=7? 'building' : 'going';
-  return '<div class="streak t'+tier+'" data-streak="'+n+'">'
+  var n=streakWeeks();
+  if(n<2) return '';                        // one week is not yet a streak - don't cheapen it
+  var tier = n>=24? 4 : n>=12? 3 : n>=6? 2 : 1;
+  var word = n>=24? 'unbroken' : n>=12? 'rolling' : n>=6? 'building' : 'going';
+  return '<div class="streak t'+tier+'" data-streak="'+n+'" title="Weeks in a row with training logged">'
    +'<span class="stk-flame" aria-hidden="true">'
      +'<span class="stk-f1"></span><span class="stk-f2"></span><span class="stk-core"></span>'
    +'</span>'
    +'<span class="stk-n">'+n+'</span>'
-   +'<span class="stk-w">day'+(n===1?'':'s')+' '+word+'</span>'
+   +'<span class="stk-w">week'+(n===1?'':'s')+' '+word+'</span>'
    +'</div>';
 }
 // --- finishing a whole block is the biggest thing that happens in this app ---
@@ -8403,7 +8721,7 @@ function wireFocus(){
 
 var PLAN = {"block": "Starter Block - Full Body Strength", "start": "2026-08-16", "weeks": 6, "maxes": {"bench": 210.0, "ohp": 105.0, "squat": 220.0, "dead": 250.0}, "days": [{"code": "A", "title": "Push - Heavy", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "5", "load": "165", "loadNum": 165.0, "rir": "2, last set 1", "note": "78% of a 210 programming max", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [235, 235, 245, 245, 255, 135], "maxKey": "bench", "pct": [0.78333, 0.78333, 0.81667, 0.81667, 0.85, 0.45]}, {"name": "Overhead Press", "sets": 3, "reps": "8", "load": "75", "loadNum": 75.0, "rir": "2", "note": "Barbell - your other lagging lift. W1-2: eights. W3-4: ride reps to 9-10 at 75. W5: 80.", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [105, 105, 105, 105, 115, 55], "maxKey": "ohp", "pct": [0.7, 0.7, 0.7, 0.7, 0.76667, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Strict. No swinging.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Rope Pushdowns", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Straight-Bar Pushdown", "Overhead Rope Extension", "Bench Dips"], "cue": "Pin the elbows, split the rope at the bottom.", "wk": [30, 30, 35, 35, 40, 20], "maxKey": null, "pct": null}]}, {"code": "B", "title": "Pull - Heavy", "exercises": [{"name": "Cable Rows", "sets": 4, "reps": "8", "load": "100", "loadNum": 100.0, "rir": "2, last set 1", "note": "Pause a beat at the squeeze.", "perHand": false, "barbell": false, "deload": 60, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [140, 140, 150, 150, 160, 85], "maxKey": null, "pct": null}, {"name": "Lat Pulldown", "sets": 4, "reps": "8", "load": "90", "loadNum": 90.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 55, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [130, 130, 140, 140, 150, 80], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [65, 65, 70, 70, 75, 40], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "Fixed bars in 10s, no 55. Double progression: ride reps 8->10 at 60, then jump to 70.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [60, 60, 60, 70, 70, 35], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "10", "load": "45", "loadNum": 45.0, "rir": "1", "note": "35 broke form when pre-fatigued; start 30.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Replaces preacher - trains the biceps at full stretch (elbow behind the torso), works identically at both your gyms, and kills the PF-machine anchor problem. Start 20s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 2, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "C", "title": "Legs - Squat Priority", "exercises": [{"name": "Back Squat", "sets": 4, "reps": "5", "load": "170", "loadNum": 170.0, "rir": "2, last set 1", "note": "78% of 220. All four sets at 170 - do not climb.", "perHand": false, "barbell": true, "deload": 100, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [245, 245, 255, 265, 275, 145], "maxKey": "squat", "pct": [0.77778, 0.77778, 0.80952, 0.84127, 0.87302, 0.46032]}, {"name": "Leg Press", "sets": 3, "reps": "12", "load": "125", "loadNum": 125.0, "rir": "2", "note": "Extra quad volume for the lagging lift. Log your starting weight. Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 75, "rest": "2:00", "warmup": "", "subs": ["Hack Squat", "Bulgarian Split Squat", "Goblet Squat"], "cue": "Whole foot pressing, knees track the toes, never slam lockout.", "wk": [180, 190, 200, 210, 220, 110], "maxKey": null, "pct": null}, {"name": "Romanian Deadlift", "sets": 3, "reps": "8", "load": "135", "loadNum": 135.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "", "subs": ["DB Romanian Deadlift", "Good Morning", "Back Extension"], "cue": "Hips back until the hamstrings scream, bar drags the thighs.", "wk": [195, 205, 215, 225, 235, 115], "maxKey": null, "pct": null}, {"name": "Walking Lunges", "sets": 3, "reps": "10 per leg", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Bulgarian Split Squat", "Reverse Lunges", "Step-Ups"], "cue": "Long step, back knee straight down, drive through the front heel.", "wk": [35, 35, 40, 40, 45, 20], "maxKey": null, "pct": null}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Replaces hip thrust - glutes already get squat, leg press, RDL and lunges on this day, while hamstrings had only one direct slot all week. Seated for the lengthened position. Dial to RIR 1.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 4, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "10-15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "D", "title": "Push - Volume", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "10", "load": "145", "loadNum": 145.0, "rir": "2, last set 1", "note": "68% of 210", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [205, 205, 215, 215, 225, 115], "maxKey": "bench", "pct": [0.68333, 0.68333, 0.71667, 0.71667, 0.75, 0.38333]}, {"name": "Overhead Press", "sets": 3, "reps": "10", "load": "65", "loadNum": 65.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [95, 95, 95, 105, 105, 55], "maxKey": "ohp", "pct": [0.63333, 0.63333, 0.63333, 0.7, 0.7, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [55, 55, 60, 60, 65, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 4, "reps": "15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Overhead Rope Extension", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Upgraded from pushdowns on this day - overhead position grows the long head substantially more (Maeo 2023). Start 25 and dial to RIR 1; it will feel much lighter than pushdowns.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Elbows by your ears, full stretch behind the head, squeeze to lockout.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "E", "title": "Pull - Volume", "exercises": [{"name": "Lat Pulldown", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Cable Rows", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Fixed from 57.5 - stacks move in 5s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [50, 50, 50, 60, 60, 30], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Volume-day partner to Day B - lengthened-position biceps work. Start 15s, chase the stretch not the weight.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 2, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "F", "title": "Legs - Deadlift Focus", "exercises": [{"name": "Conventional Deadlift", "sets": 3, "reps": "6", "load": "165", "loadNum": 165.0, "rir": "3-4", "note": "65% of 250, deliberately easy. W1-2 groove the pattern at 165, then 180 / 190 / 200.", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "95 x5, 130 x3, 150 x1", "subs": ["Trap Bar Deadlift", "Rack Pull", "DB Romanian Deadlift"], "cue": "Wedge in, pull the slack out, push the floor away.", "wk": [235, 235, 255, 275, 285, 135], "maxKey": "dead", "pct": [0.65278, 0.65278, 0.70833, 0.76389, 0.79167, 0.375]}, {"name": "Back Squat", "sets": 3, "reps": "10", "load": "150", "loadNum": 150.0, "rir": "2", "note": "68% of 220. Second squat exposure - skill practice for the weak lift.", "perHand": false, "barbell": true, "deload": 90, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [215, 215, 225, 225, 235, 125], "maxKey": "squat", "pct": [0.68254, 0.68254, 0.71429, 0.71429, 0.74603, 0.39683]}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Seated beats lying for hamstring growth - hip flexed puts the hamstrings at length (Maeo 2021, +14 vs +9 percent). 70 is a guess anchor - dial to RIR 1 first session.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 4, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}, {"name": "Plank", "sets": 3, "reps": "max hold", "load": "bodyweight", "loadNum": null, "rir": "", "note": "You are tested on a max plank every six months and were training it zero times a week. Log the hold time in reps as seconds if you want it tracked.", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": [], "cue": "Squeeze glutes, ribs down, one straight line - the shake is the work.", "wk": null, "maxKey": null, "pct": null}]}], "builtOn": "2026-08-16", "v": 18};
 const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
-const BUILD = 'c20';
+const BUILD = 'c27';
 const CARD_NAME = 'DEADSTOP · TRAINING CARD';   // names bug reports and the share sheet
 // Filled in by the batch generator when a card is produced for a named person. Null on the
 // generic build, in which case nothing below it runs and the card onboards the user normally.
@@ -8683,7 +9001,11 @@ function exState(i, ex){
   if(st.open>=st.sets.length) st.open=-1;
   return st;
 }
-function defReps(ex){ const m=String(exReps(ex)).match(/\d+/); return m? +m[0]:8; }
+function defReps(ex){
+  var bt=(typeof bwTargetReps==='function')? bwTargetReps(ex) : null;
+  if(bt) return bt;                                   // prefill the target, not the range floor
+  const m=String(exReps(ex)).match(/\d+/); return m? +m[0]:8;
+}
 const GOALS = {
  block1:null,
  strength:{label:'Strength',sets:5,reps:'3',pct:[.80,.825,.85,.875,.90,.55],restMain:'4:00',accReps:'6-8',accSets:3,restAcc:'2:00',
@@ -8702,11 +9024,44 @@ const GOALS = {
 function goalDef(){ return GOALS[(S.profile&&S.profile.goal)||'block1']||null; }
 function isMain(ex){ return !!ex.maxKey; }
 function numericReps(ex){ return /^\s*\d+(\s*-\s*\d+)?\s*$/.test(String(ex.reps)); }
+// Sets follow the tested max too. Three sets of 39 push-ups and three sets of 4 are not
+// the same session: the first is 117 reps and fifteen minutes, the second is a dozen hard
+// reps. Bodyweight volume lives in TOTAL reps, so the set count moves opposite the rep
+// count - hard low-rep variations earn more sets, high-rep endurance work fewer.
+function bwSets(ex){
+  try{
+    var bp=bwPrescribe(ex); if(!bp) return null;
+    var t=bp.target;
+    if(t<=6)  return 5;        // a hard variation: this is their heavy work
+    if(t<=12) return 4;
+    if(t<=25) return 3;
+    if(t<=40) return 3;
+    return 2;                  // 40+ reps a set - two is already a serious amount of work
+  }catch(e){ return null; }
+}
 function exSets(ex){ const g=goalDef();
+  // Start prescribes two sets on purpose. The goal's accessory volume is for people who
+  // asked for a goal - a beginner never did, and four sets is how you lose them in week two.
+  if(isStartMode()) return ex.sets||2;
   if(g&&isMain(ex)) return g.sets;
+  var bs=(typeof bwSets==='function')? bwSets(ex) : null;
+  if(bs) return bs;                                   // tested bodyweight sets its own volume
   if(g&&g.accSets&&numericReps(ex)) return g.accSets;
   return ex.sets; }
-function exReps(ex){ const g=goalDef(); if(!g) return ex.reps; return isMain(ex)? g.reps : (numericReps(ex)? g.accReps : ex.reps); }
+function exReps(ex){
+  if(isStartMode()) return ex.reps;          // the plan's plain "10", not a goal rep range
+  // A tested bodyweight max OVERRIDES the goal's generic accessory range. Without this the
+  // panel said "27 reps" while the card still prescribed 3x8 - two different answers on one
+  // screen. The tested number wins: it is the only one measured on this athlete.
+  try{ if(typeof isBodyweightEx==='function' && isBodyweightEx(ex) && !isHoldEx(ex)){
+    var bp=bwPrescribe(ex);
+    if(bp) return bp.lo+'-'+bp.hi;
+  } }catch(e){}
+  const g=goalDef(); if(!g) return ex.reps;
+  return isMain(ex)? g.reps : (numericReps(ex)? g.accReps : ex.reps);
+}
+// what a set should PREFILL with: the target, not the bottom of the range
+function bwTargetReps(ex){ try{ var bp=bwPrescribe(ex); return bp? bp.target : null; }catch(e){ return null; } }
 // ===== REST, TAILORED TO THE MOVEMENT =====
 // The goal used to define exactly two rests: main and accessory - which handed a plank the
 // same clock as a barbell row. Third layer: the fractional volume table already knows what
@@ -8730,11 +9085,22 @@ function bwPanelHTML(i, ex){
     if(!isBodyweightEx(ex) || isHoldEx(ex)) return '';
     if(typeof dayLocked==='function' && dayLocked()) return '';
     var p=bwPrescribe(ex);
+    var asking=(S.bwAsk===i);
+    // The entry is an input inside the card, NOT a browser prompt(): iOS suppresses
+    // prompt/alert dialogs in an installed home-screen app, so the button did nothing on a
+    // real phone while working perfectly in a browser tab. Field-caught.
+    var entry='<div class="bw-row" style="margin-top:9px">'
+      +'<input class="bw-in" id="bwIn'+i+'" type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="200" '
+      +'placeholder="reps" value="'+((p&&p.max)?p.max:'')+'">'
+      +'<span class="daybtn bw-btn" data-bwsave="'+i+'" role="button" tabindex="0">Save</span>'
+      +'<span class="bw-re" data-bwcancel="1" role="button" tabindex="0">Cancel</span></div>';
     if(!p){
-      return '<div class="bw-panel" data-bwask="'+i+'">'
+      return '<div class="bw-panel">'
         +'<div class="bw-h">How many can you do?</div>'
         +'<div class="bw-s">One honest set to failure, once. Every '+esc(ex.name)+' prescription after this is a percentage of that number \u2014 the same way the bar works off a tested max.</div>'
-        +'<div class="bw-row"><span class="daybtn bw-btn" data-bwtest="'+i+'" role="button" tabindex="0">Log a max set</span></div></div>';
+        +(asking? entry
+          : '<div class="bw-row" style="margin-top:9px"><span class="daybtn bw-btn" data-bwtest="'+i+'" role="button" tabindex="0">Log a max set</span></div>')
+        +'</div>';
     }
     var up=bwOutgrown(i, ex), nx=up? bwNextRung(ex.name):null;
     return '<div class="bw-panel">'
@@ -8742,7 +9108,8 @@ function bwPanelHTML(i, ex){
       +'<div class="bw-s">'+Math.round(p.pct*100)+'% of your tested max of '+p.max+'. Stop at the top of the range with a rep or two left \u2014 the range moves when your max does.</div>'
       +(nx? '<div class="bw-up">You are topping this out. <b>'+esc(nx)+'</b> is the next step up \u2014 same movement, more of your weight on it.'
            +'<div class="bw-row" style="margin-top:8px"><span class="daybtn bw-btn" data-bwup="'+i+'" data-bwnext="'+esc(nx)+'" role="button" tabindex="0">Move up to '+esc(nx)+'</span></div></div>' : '')
-      +'<div class="bw-row" style="margin-top:8px"><span class="bw-re" data-bwtest="'+i+'" role="button" tabindex="0">Re-test max</span></div>'
+      +(asking? entry
+        : '<div class="bw-row" style="margin-top:8px"><span class="bw-re" data-bwtest="'+i+'" role="button" tabindex="0">Re-test max</span></div>')
       +'</div>';
   }catch(e){ return ''; }
 }
@@ -8821,7 +9188,10 @@ var HOLD_NAMES=/\b(plank|side plank|wall ?sit|dead ?hang|bar hang|l-?sit|hollow 
 function isHoldEx(ex){
   try{
     if(!ex) return false;
-    var r=String(exReps(ex)||'');
+    // RAW reps on purpose: exReps() consults isHoldEx(), and reading it back here made the
+    // two functions call each other forever. A hold's prescription is never numeric, so the
+    // goal never rewrites it - ex.reps IS what exReps would have returned.
+    var r=String((ex.reps!=null? ex.reps : '')||'');
     if(/max hold|isometric|for time|hold$/i.test(r)) return true;      // "max hold", "... hold"
     if(/\bhold\b/i.test(r) && !/\brep/i.test(r)) return true;          // "1:00 hold", "hold 45"
     if(/^\s*\d+\s*(s|sec|secs|seconds)\b/i.test(r)) return true;       // "45s", "30 sec"
@@ -8834,7 +9204,7 @@ function isHoldEx(ex){
 // If the prescription names a target time, surface it. Returns seconds or null.
 function holdTarget(ex){
   try{
-    var r=String(exReps(ex)||'');
+    var r=String((ex.reps!=null? ex.reps : '')||'');
     var m=r.match(/(\d+):(\d\d)/);            if(m) return (+m[1])*60+(+m[2]);
     m=r.match(/(\d+)\s*[-\u2013]\s*(\d+)\s*(?:s|sec|secs|seconds)\b/i); if(m) return +m[2];
     m=r.match(/(\d+)\s*(?:s|sec|secs|seconds)\b/i); if(m) return +m[1];
@@ -8844,18 +9214,23 @@ function holdTarget(ex){
 function exRestClass(ex){
   try{
     if(isHoldEx(ex)) return 'short';                                   // timed holds
+    var r=libRow((ex&&ex.name)||''); var grp=r? r[1] : null;
+    // What the movement IS comes first. Field test caught the old order handing Hanging Leg
+    // Raises a four-minute main-lift rest: it is bodyweight, so the bodyweight branch ran
+    // before anything looked at the fact that it is CORE work.
+    if(grp==='core'||grp==='carry') return 'short';
     // Bodyweight rests on what the set actually costs, not on the absence of equipment.
     // A set of 40 push-ups is a high-rep compound and genuinely metabolic - cutting its rest
     // degrades the next set. A hard low-rep set (pull-ups at 5) recovers like a main lift.
+    // ONLY with a tested max: untested, defReps() reports the goal's generic 10 and every
+    // untested bodyweight movement looked "heavy". Untested falls through to normal rules.
     if(isBodyweightEx(ex)){
       var bp=bwPrescribe(ex);
-      var t=bp? bp.target : defReps(ex);
-      if(t>=25) return null;                                           // compound accessory rest
-      if(t>=12) return null;
-      return 'main-ish';                                               // low reps = heavy for them
+      if(bp){
+        if(bp.target>=12) return null;                                 // compound accessory rest
+        return 'main-ish';                                             // genuinely low reps = heavy for them
+      }
     }
-    var r=libRow((ex&&ex.name)||''); var grp=r? r[1] : null;
-    if(grp==='core'||grp==='carry') return 'short';
     var mm=(typeof volMuscles==='function')? volMuscles(ex.name) : null;
     if(mm){ var ks=Object.keys(mm);
       // ANY single-muscle credit is isolation - Shrugs carry back:.5 and are still shrugs
@@ -8864,6 +9239,10 @@ function exRestClass(ex){
   }catch(e){}
   return null;                                                        // compound accessory
 }
+// A rep stepper fixed at 1 is fine for a set of 5 and absurd for a set of 60: the athlete
+// would tap fifty times. Step size follows the magnitude of the number being edited, and
+// the value itself is tappable to type an exact figure.
+function repStep(n){ n=+n||0; if(n>=40) return 10; if(n>=20) return 5; if(n>=12) return 2; return 1; }
 function restCap(pref, cap){ try{ return (restSecs(pref)<=restSecs(cap))? pref : cap; }catch(e){ return pref; } }
 function exRest(ex){ const g=goalDef();
   // The movement-class caps hold with OR without a goal (field-caught: a goal-less card
@@ -9303,7 +9682,30 @@ function scheduleRestBeeps(b){
 // iOS recovery: wake the audio back up when the app returns to the foreground or on the next tap
 // On the way back from a lock/background, the audio clock has drifted from wall time: throw away
 // anything queued and let the next tick re-book it against a fresh clock.
-try{ document.addEventListener('visibilitychange',function(){ if(!document.hidden){ ensureAudio(); stopScheduled();
+// ===== THE DAY MUST ROLL ON RESUME, NOT ONLY ON LAUNCH =====
+// An installed app is not re-launched when you tap its icon - it RESUMES from memory, so the
+// boot code that rolls the date and lands you on your next session never runs. Field test
+// caught the consequence: train Monday, save, put the phone away, tap the icon Tuesday, and
+// the card is still showing Monday's locked session - and a session saved then would be
+// written under MONDAY'S DATE. That corrupts the log the whole week engine reads.
+// On every return to the foreground, if the training day has changed, do what boot does.
+var __lastSeenDay=null;
+function dayRollCheck(){
+  try{
+    var today=shiftDate();
+    if(__lastSeenDay===null) __lastSeenDay=(S.when&&S.when.date)||today;
+    if((S.when&&S.when.date)===today){ __lastSeenDay=today; return false; }
+    // a new training day: re-date the session, land on the next one, clear yesterday's focus
+    S.when={date:today, time:(typeof localTime==='function')? localTime() : '00:00'};
+    S.focus=0;
+    __lastSeenDay=today;
+    save();
+    try{ syncToNext(); }catch(e){}
+    try{ render(); }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
+try{ document.addEventListener('visibilitychange',function(){ if(!document.hidden){ dayRollCheck(); ensureAudio(); stopScheduled();
   // If the resume didn't land, don't nurse a wedged context - rebuild on the next tap. A
   // context created INSIDE a gesture is also the one iOS unlocks most reliably.
   setTimeout(function(){ try{ if(AC && AC.state!=='running') audioNuke(); }catch(e){} },400);
@@ -9568,6 +9970,10 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
 
 function render(){
   try{ document.body.classList.toggle('ui-min', S.uiMode==='min'); }catch(e){}
+  // the footer deck nav, tab strip and status furniture are painted outside #app, so hiding
+  // them is a body-level job - otherwise Start renders one clean page with the engine's
+  // navigation still stuck to the bottom of it
+  try{ document.body.classList.toggle('start-mode', isStartMode()); }catch(e){}
   // the calculator lives outside the app container, so paint it on every render regardless of
   // which screen renderInner chose - including onboarding, where wire() never runs
   try{ var _r=renderInner(); calcPaint(); coachPaint(); return _r; }
@@ -9588,6 +9994,17 @@ function renderInner(){
   if(typeof ONB_ACTIVE==='function' && ONB_ACTIVE()){
     var app0=document.getElementById('app'); if(!app0) return;
     app0.innerHTML=ONB_HTML(); try{ ONB_WIRE(); }catch(e){}
+    return;
+  }
+  // ===== START MODE OWNS THE WHOLE SCREEN =====
+  // Simplifying the CONTENT was not enough: a beginner still met tabs, week chips, footer
+  // navigation, readiness, cardio and notes - the engine's whole instrument panel. They do
+  // not know where to look, and everything they need is one movement. So Start does not
+  // render the app shell at all. One page, one movement, one button.
+  if(isStartMode()){
+    var appS=document.getElementById('app'); if(!appS) return;
+    appS.innerHTML=startScreenHTML();
+    try{ startWire(); }catch(e){ oops('startWire',e); }
     return;
   }
   const d=dayObj(); const app=document.getElementById('app');
@@ -9813,6 +10230,7 @@ function renderInner(){
   h+='<details class="block" style="margin-top:10px"><summary style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700;cursor:pointer">'+COPY.rampSummary+'</summary>'
     +'<div class="exnote" style="padding:8px 0 0;font-style:normal;line-height:1.7">'+RAMPS[fam]+'</div></details>';
   try{ h+=introHTML(); }catch(e){}
+  try{ h+=gradHTML(); }catch(e){}
   h+='<div class="block rdyblock" style="margin-top:10px"><h3>Readiness \u2014 20 seconds, before the first bar</h3>'
     +'<div class="ed-row"><div class="ed-label">Sleep</div><div class="step"><button data-rdy="sleep" data-d="-1">\u2212</button><div class="val mono">'+((rToday&&S.ready.sleep!=null)?S.ready.sleep:'\u2014')+'h</div><button data-rdy="sleep" data-d="1">+</button></div></div>'
     +'<div class="ed-row"><div class="ed-label">Soreness</div><div class="rirchips">'+[1,2,3,4,5].map(v=>'<button class="rc'+((rToday&&S.ready.sore===v)?' on':'')+'" data-rdys="'+v+'">'+v+'</button>').join('')+'</div></div>'
@@ -9889,7 +10307,10 @@ function renderInner(){
           +'</select>';
       })()
       +(function(){var t=trainsFor(st.sub||ex.name);return t?'<div class="trains">'+t+'</div>':'';})()
-      +'<div class="target-label">'+(subbed?'Put this on the bar — tap to set':'Put this on the bar'+(numeric?' — tap to adjust':''))+'</div>'
+      +'<div class="target-label">'+(isStartMode()
+          ? 'Set the weight \u2014 tap to change'
+          : (subbed?'Put this on the bar \u2014 tap to set':'Put this on the bar'+(numeric?' \u2014 tap to adjust':'')))+'</div>'
+      +(isStartMode()? '<div class="start-cue">Pick a weight you could do about <b>three more reps</b> with. Not sure? Go lighter \u2014 the first sessions are for finding your weights, not proving anything.</div>' : '')
       +'<div class="ex-rx">'
       +(numeric
         ? '<button class="loadbtn" data-wbtn="'+i+'"><span class="load mono">'+WV(shown)+'<small> '+uLbl()+(!subbed&&ex.perHand?' / hand':'')+'</small></span></button>'
@@ -10073,8 +10494,11 @@ function setEditorHTML(i, ex, st){
     +'<div class="ed-row"><div class="ed-label">Set '+(st.open+1)+(hEx?' seconds':' reps')+'</div>'
     +(hEx
       ? '<div class="step"><button data-e="reps" data-d="-5">−5</button><div class="val mono">'+reps+'</div><button data-e="reps" data-d="5">+5</button></div></div>'
-      : '<div class="step"><button data-e="reps" data-d="-1">−</button><div class="val mono">'+reps+'</div><button data-e="reps" data-d="1">+</button></div></div>')
-    +(hEx? '' : '<div class="ed-row"><div class="ed-label">RIR</div><div class="rirchips">'
+      : (function(){ var stp=repStep(reps);
+          return '<div class="step"><button data-e="reps" data-d="-'+stp+'">\u2212'+(stp>1?stp:'')+'</button>'
+          +'<div class="val mono" data-edtype="1" role="button" tabindex="0" style="cursor:pointer;text-decoration:underline dotted">'+reps+'</div>'
+          +'<button data-e="reps" data-d="'+stp+'">+'+(stp>1?stp:'')+'</button></div></div>'; })())
+    +((hEx||isStartMode())? '' : '<div class="ed-row"><div class="ed-label">RIR</div><div class="rirchips">'
     +[0,1,2,3,4].map(r=>'<button class="rc'+(s.rir===r?' on':'')+'" data-rir="'+r+'">'+r+'</button>').join('')
     +'</div></div>')
     +(function(){ const numeric = st.sub? true : ex.loadNum!=null;
@@ -10171,6 +10595,11 @@ function wire(){
   try{ document.querySelectorAll('[data-printwk]').forEach(function(el){ el.onclick=function(){ printWeek(+el.dataset.printwk); }; }); }catch(e){}
   try{ wireOrder(); }catch(e){}
   try{ wirePlan(); }catch(e){}
+  document.querySelectorAll('[data-gradno]').forEach(function(el){ el.onclick=function(){ S.gradAck=true; save(); render(); }; });
+  document.querySelectorAll('[data-gradgo]').forEach(function(el){ el.onclick=function(){
+    try{ var o=ONB(); o.mode='full'; o.step=0; o.done=false; S.mode='full'; S.gradAck=true;
+      save(); render(); }catch(e){}
+  }; });
   document.querySelectorAll('[data-intromore]').forEach(function(el){ el.onclick=function(){ S.introOpen=true; save(); render(); }; });
   document.querySelectorAll('[data-introdone]').forEach(function(el){ el.onclick=function(){ S.introDone=true; save(); render(); }; });
   document.querySelectorAll('[data-nist]').forEach(function(el){ el.onclick=function(){ try{ a2hsShow(); }catch(e){} }; });
@@ -10435,19 +10864,25 @@ function wire(){
     const L=st.sets[st.sets.length-1];
     if(L && L.added && L.st==='pend'){ st.sets.pop(); save(); render(); }
   });
- // max-rep test: one prompt, one number, and every future prescription follows from it
+ // max-rep test: an input in the card, never a browser dialog
  document.querySelectorAll('[data-bwtest]').forEach(function(el){ el.onclick=function(){
+   try{ S.bwAsk=+el.dataset.bwtest; save(); render();
+     var f=document.getElementById('bwIn'+S.bwAsk); if(f){ f.focus(); try{ f.select(); }catch(e){} }
+   }catch(e){}
+ }; });
+ document.querySelectorAll('[data-bwcancel]').forEach(function(el){ el.onclick=function(){
+   try{ S.bwAsk=null; save(); render(); }catch(e){}
+ }; });
+ document.querySelectorAll('[data-bwsave]').forEach(function(el){ el.onclick=function(){
    try{
-     var i=+el.dataset.bwtest, ex=dayObj().exercises[i]; if(!ex) return;
-     var cur=bwMaxFor(ex.name);
-     var v=prompt('Max '+ex.name+' \u2014 one set to failure, good form only.\n\nHow many did you get?', cur? String(cur):'');
-     if(v==null) return;
-     var n=parseInt(String(v).replace(/[^0-9]/g,''),10);
-     if(!isFinite(n) || n<1){ alertToast('Enter a rep count'); return; }
+     var i=+el.dataset.bwsave, ex=dayObj().exercises[i]; if(!ex) return;
+     var f=document.getElementById('bwIn'+i); if(!f) return;
+     var n=parseInt(String(f.value||'').replace(/[^0-9]/g,''),10);
+     if(!isFinite(n) || n<1){ alertToast('Enter how many reps you managed'); f.focus(); return; }
      if(n>200){ alertToast('That is above what the card will track'); return; }
-     bwSetMax(ex.name, n);
+     bwSetMax(ex.name, n); S.bwAsk=null; save();
      var p=bwPrescribe(ex);
-     alertToast('Max '+n+' logged \u2014 working sets now '+(p? p.lo+'\u2013'+p.hi:'set')+' reps');
+     alertToast('Max '+n+' logged \u2014 working sets now '+(p? p.sets||'' : '')+(p? p.lo+'\u2013'+p.hi:'')+' reps');
      render();
    }catch(e){}
  }; });
@@ -10483,6 +10918,24 @@ function wire(){
   });
   document.querySelectorAll('[data-ed]').forEach(ed=>{
     const i=+ed.dataset.ed, ex=dayObj().exercises[i], st=exState(i,ex), s=st.sets[st.open];
+    ed.querySelectorAll('[data-edtype]').forEach(function(b){ b.onclick=function(){
+      // turn the number into an input in place - no dialog, works in an installed app
+      try{
+        var s=st.sets[st.open]; if(!s) return;
+        var cur=(s.reps!=null)? s.reps : defReps(ex);
+        var box=b;
+        box.innerHTML='<input class="bw-in" style="width:74px" type="number" inputmode="numeric" pattern="[0-9]*" value="'+cur+'">';
+        var f=box.querySelector('input'); if(!f) return;
+        f.focus(); try{ f.select(); }catch(e){}
+        var commit=function(){
+          var n=parseInt(String(f.value||'').replace(/[^0-9]/g,''),10);
+          if(isFinite(n) && n>=0){ s.reps=Math.min(500,n); if(s.st==='pend') s.st='dev'; save(); }
+          render();
+        };
+        f.onblur=commit;
+        f.onkeydown=function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); commit(); } };
+      }catch(e){}
+    }; });
     ed.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{
       s.reps=Math.max(0,(s.reps!=null?s.reps:defReps(ex))+(+b.dataset.d)); save(); render();
     });
@@ -11571,8 +12024,10 @@ function restNextInfo(b, omitW){
   const wv=(ns && ns.w!=null)? ns.w : (st.sub? st.w : (numeric? curLoad(ex,st): null));
   return b.label+' - next: set '+(nj+1)+' x '+reps+' @ RIR '+rir+((wv!=null&&!omitW)? ' - '+wv+' lb':'');
 }
+var __tickN=0;
 function startTick(){
   setInterval(()=>{
+    __tickN++;
     const el=document.getElementById('restTick'); if(!el) return;
     const hc=document.getElementById('holdClock'); if(hc && holdT) hc.textContent=fmtDur(Date.now()-holdT.t0);
     const cc=document.getElementById('cardClock');
@@ -11580,6 +12035,8 @@ function startTick(){
     paintRest(false);
     paintBars();
     audioGuard();
+    // left open across the 3am boundary: roll without needing a tap
+    if(++__tickN % 30 === 0){ try{ dayRollCheck(); }catch(e){} }
     var fc=document.getElementById('finClockLive');
     if(fc&&S.fin&&!S.fin.done){ var g=(S.fin.min||20)*60000, r=g-finElapsed();
       fc.textContent=(r<=0?'DONE':fmtDur(r)); if(r<=0) render(); }
@@ -12422,6 +12879,48 @@ var PG_LIGHT=0.87;      // second exposure runs at ~87% of the heavy day's perce
 // is simply two passes. What actually has to be chosen is the SHAPE of the rotation, and
 // there are only three that matter (plus a body-part split for bodybuilders). The athlete
 // picks a thing they can see, not a number they have to predict about their own future.
+// ===== START: THE BEGINNER PLAN =====
+// Full body every session (miss one and you have still trained everything), machines and
+// bodyweight before barbells (a machine holds the path; a barbell needs coaching), two sets
+// not four, and a session that fits in the time a beginner will actually give it.
+var START_TPL={
+  machines:[
+    {code:'A', title:'Session A', ex:['Machine Chest Press','Lat Pulldown','Leg Press','Seated Leg Curl','Plank']},
+    {code:'B', title:'Session B', ex:['Machine Shoulder Press','Cable Rows','Leg Press','Standing Calf Raise','Glute Bridge']},
+    {code:'C', title:'Session C', ex:['Machine Chest Press','Lat Pulldown','Goblet Squat','Rope Pushdowns','Plank']}
+  ],
+  free:[
+    {code:'A', title:'Session A', ex:['DB Bench Press','Single-Arm DB Row','Goblet Squat','DB Romanian Deadlift','Plank']},
+    {code:'B', title:'Session B', ex:['Seated DB Shoulder Press','Inverted Row','Split Squat','Glute Bridge','Hammer Curls']},
+    {code:'C', title:'Session C', ex:['DB Bench Press','Single-Arm DB Row','Goblet Squat','Standing Calf Raise','Plank']}
+  ],
+  home:[
+    {code:'A', title:'Session A', ex:['Incline Push-Ups','Inverted Row','Bodyweight Squat','Glute Bridge','Plank']},
+    {code:'B', title:'Session B', ex:['Push-Ups','Inverted Row','Split Squat','Back Extension','Hanging Leg Raises']},
+    {code:'C', title:'Session C', ex:['Incline Push-Ups','Inverted Row','Bodyweight Squat','Standing Calf Raise','Plank']}
+  ]
+};
+function startPlan(cfg){
+  var place=(cfg&&cfg.place)||'machines';
+  var days=Math.max(2, Math.min(4, (cfg&&cfg.days)||3));
+  var tpl=(START_TPL[place]||START_TPL.machines).slice(0, days>3?3:days);
+  if(days===4) tpl=tpl.concat([START_TPL[place][0]]).slice(0,4).map(function(t,i){
+    return {code:['A','B','C','D'][i], title:'Session '+['A','B','C','D'][i], ex:t.ex}; });
+  var today=new Date();
+  var iso=new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  var out=tpl.map(function(t){
+    var list=[];
+    t.ex.forEach(function(n){
+      var nm=PG_pick(n, cfg.limits||[]);            // injury swaps still apply
+      list.push(PG_ex(nm, {}, {limits:cfg.limits||[],
+        sch:{reps:'10', rir:'2-3 throughout', pct:null, sets:2}}));
+    });
+    return {code:t.code, title:t.title, exercises:list};
+  });
+  out=PG_dedupe(out, {});
+  return {block:'Start \u2014 your first weeks', start:iso, builtOn:iso, weeks:8, v:1,
+    maxes:{}, days:out, diag:{weak:null}, limits:(cfg.limits||[]), start_mode:true};
+}
 var PG_STRUCTS=[
   {id:'fullbody', days:3, name:'Full body',
    sub:'Every session trains your whole body.',
@@ -12461,21 +12960,21 @@ function PG_fitTime(days, mins){
   });
 }
 var PG_TEMPLATES={
-  3:[ {code:'A', title:'Full Body - A', mains:['squat','bench'], acc:['Cable Rows','Lateral Raises','Plank']},
+  3:[ {code:'A', title:'Full Body - A', mains:['squat','bench','row'], acc:['Lateral Raises','Plank']},
       {code:'B', title:'Full Body - B', mains:['dead','ohp'],    acc:['Lat Pulldown','Hammer Curls','Hanging Leg Raises']},
       {code:'C', title:'Full Body - C', mains:[{l:'squat',light:true},{l:'bench',light:true}],
                                         acc:['Romanian Deadlift','Face Pulls','Standing Calf Raise']} ],
- 4:[ {code:'A', title:'Upper - Heavy', mains:['bench','ohp'],
-                                        acc:['Cable Rows','Face Pulls','Hammer Curls']},
+ 4:[ {code:'A', title:'Upper - Heavy', mains:['bench','ohp','row'],
+                                         acc:['Face Pulls','Hammer Curls']},
       {code:'B', title:'Lower - Squat',  mains:['squat'],
                                         acc:['Romanian Deadlift','Walking Lunges','Standing Calf Raise','Plank']},
-      {code:'C', title:'Upper - Volume', mains:[{l:'bench',light:true}],
-                                        acc:['Lat Pulldown','Lateral Raises','Rope Pushdowns','Straight Bar Curl']},
+      {code:'C', title:'Upper - Volume', mains:[{l:'bench',light:true},{l:'row',light:true}],
+                                         acc:['Lat Pulldown','Lateral Raises','Rope Pushdowns','Straight Bar Curl']},
       {code:'D', title:'Lower - Hinge',  mains:['dead',{l:'squat',light:true}],
                                         acc:['Seated Leg Curl','Standing Calf Raise','Hanging Leg Raises']} ],
  5:[ {code:'A', title:'Lower - Squat',  mains:['squat'],      acc:['Romanian Deadlift','Walking Lunges','Standing Calf Raise','Plank']},
       {code:'B', title:'Upper - Push',  mains:['bench','ohp'],acc:['Incline DB Press','Lateral Raises','Rope Pushdowns']},
-      {code:'C', title:'Upper - Pull',  mains:[],             acc:['Cable Rows','Lat Pulldown','Face Pulls','Hammer Curls','Straight Bar Curl']},
+      {code:'C', title:'Upper - Pull',  mains:['row'],        acc:['Lat Pulldown','Face Pulls','Hammer Curls','Straight Bar Curl']},
       {code:'D', title:'Lower - Hinge', mains:['dead',{l:'squat',light:true}],
                                         acc:['Leg Press','Seated Leg Curl','Hanging Leg Raises']},
       {code:'E', title:'Upper - Volume',mains:[{l:'bench',light:true},{l:'ohp',light:true}],
@@ -12488,8 +12987,8 @@ var PG_TEMPLATES={
                                         acc:['Romanian Deadlift','Walking Lunges','Standing Calf Raise','Plank']},
       {code:'D', title:'Push - Volume', mains:[{l:'bench',light:true},{l:'ohp',light:true}],
                                         acc:['Lateral Raises','Overhead Rope Extension','Rope Pushdowns']},
-      {code:'E', title:'Pull - Volume', mains:[],
-                                        acc:['Cable Rows','Straight-Arm Pulldown','Face Pulls','Hammer Curls','Straight Bar Curl']},
+      {code:'E', title:'Pull - Volume', mains:[{l:'row',light:true}],
+                                         acc:['Straight-Arm Pulldown','Face Pulls','Hammer Curls','Straight Bar Curl']},
       {code:'F', title:'Legs - Hinge',  mains:[{l:'squat',light:true}],
                                         acc:['Leg Press','Seated Leg Curl','Standing Calf Raise','Hanging Leg Raises']} ],
  7:[ {code:'A', title:'Push - Heavy',  mains:['bench','ohp'],
@@ -12500,8 +12999,8 @@ var PG_TEMPLATES={
                                         acc:['Romanian Deadlift','Walking Lunges','Standing Calf Raise','Plank']},
       {code:'D', title:'Push - Volume', mains:[{l:'bench',light:true},{l:'ohp',light:true}],
                                         acc:['Lateral Raises','Overhead Rope Extension','Rope Pushdowns']},
-      {code:'E', title:'Pull - Volume', mains:[],
-                                        acc:['Cable Rows','Straight-Arm Pulldown','Face Pulls','Hammer Curls','Straight Bar Curl']},
+      {code:'E', title:'Pull - Volume', mains:[{l:'row',light:true}],
+                                         acc:['Straight-Arm Pulldown','Face Pulls','Hammer Curls','Straight Bar Curl']},
       {code:'F', title:'Legs - Hinge',  mains:[{l:'squat',light:true}],
                                         acc:['Leg Press','Seated Leg Curl','Standing Calf Raise','Hanging Leg Raises']},
       {code:'G', title:'Arms & Core',   mains:[],
@@ -12519,7 +13018,8 @@ var PG_PREFS={
   squat:{label:'Squat pattern', opts:['Back Squat','Front Squat','Goblet Squat','Leg Press','Hack Squat','Bulgarian Split Squat']},
   bench:{label:'Press pattern', opts:['Bench Press','DB Bench Press','Incline Dumbbell Press','Machine Chest Press','Push-Ups']},
   dead: {label:'Hinge pattern', opts:['Conventional Deadlift','Romanian Deadlift','Trap Bar Deadlift','Hip Thrust','Glute Bridge']},
-  ohp:  {label:'Overhead pattern', opts:['Overhead Press','Seated DB Shoulder Press','Machine Shoulder Press','Landmine Press']}
+  ohp:  {label:'Overhead pattern', opts:['Overhead Press','Seated DB Shoulder Press','Machine Shoulder Press','Landmine Press']},
+  row:  {label:'Row pattern', opts:['Barbell Row','Pendlay Row','T-Bar Row','Chest-Supported Row','Cable Rows','Single-Arm DB Row']}
 };
 function PG_prefName(cfg, mk){
   try{
@@ -12529,7 +13029,13 @@ function PG_prefName(cfg, mk){
     return opts.indexOf(p)>-1 ? p : null;          // only ever something we offered
   }catch(e){ return null; }
 }
-var PG_MAINNAME={squat:'Back Squat', bench:'Bench Press', dead:'Conventional Deadlift', ohp:'Overhead Press'};
+// Every main movement pattern gets a barbell alpha - including the pull. A pull day built
+// only from cables and machines has no primary lift to progress, which the field test caught
+// on days B and E. The row is prescribed by sets and reps rather than a percentage because
+// there is no tested row max; the card raises it from logged work like any other lift.
+var PG_MAINNAME={squat:'Back Squat', bench:'Bench Press', dead:'Conventional Deadlift',
+  ohp:'Overhead Press', row:'Barbell Row'};
+var PG_NOMAXMAIN={row:1};        // a main lift with no tested max: sets and reps, not percentages
 // If the empty bar is already too heavy, the barbell lift is simply the wrong tool. These start at
 // a genuinely light load and climb from there, so somebody can train the same pattern today rather
 // than being handed a bar they cannot lift.
@@ -12738,7 +13244,8 @@ function generatePlan(cfg){
     var list=[];
     t.mains.forEach(function(m){
       var spec=PG_mainSpec(m), mk=spec.l;
-      var sub=(PG_belowBar(cfg.res, mk) || PG_underBar(maxes, mk, PG_pct(goal, false)))
+      var noMax=!!PG_NOMAXMAIN[mk];
+      var sub=(!noMax && (PG_belowBar(cfg.res, mk) || PG_underBar(maxes, mk, PG_pct(goal, false))))
                ? PG_BELOWBAR[mk] : null;
       // a stated preference wins over the default, but never over "you cannot lift the bar"
       var pref=sub? null : PG_prefName(cfg, mk);
@@ -12765,6 +13272,12 @@ function generatePlan(cfg){
           limits:cfg.limits||[],
           note:'Swapped in for the barbell '+PG_MAINNAME[mk].toLowerCase()+' \u2014 '+sub.why
               +'. Start light enough to finish every rep clean; the card will build you up.'}));
+      } else if(noMax){
+        // The alpha lift for a pattern with no tested max. It still leads the day - it is
+        // the primary movement - but it is prescribed on sets, reps and RIR.
+        list.push(PG_ex(nm, maxes, {sch:{reps:(goal==='strength'?'5-6':'8-10'), rir:'2, last set 1',
+          pct:null, sets:(goal==='strength'?4:(sch.sets||3))}, limits:cfg.limits||[],
+          note:'Primary pull for this session. Load it like a main lift \u2014 the card raises it from what you log.'}));
       } else {
       list.push(PG_ex(nm, maxes, {maxKey:mk, sch:sch, limits:cfg.limits||[],
         note: spec.light ? 'Second exposure this week - lighter on purpose. Own the pattern, do not chase the weight.'
@@ -12828,7 +13341,20 @@ var ONB_BWM={squat:{new:.75,some:1.25,vet:1.75}, bench:{new:.50,some:.90,vet:1.3
 // Five reps only while it is genuinely light; singles near the top. Total work stays about 14 reps.
 var ONB_SCHED=[{p:.40,r:5},{p:.60,r:3},{p:.75,r:2},{p:.85,r:1},{p:.92,r:1}];
 var ONB_ORDER=['squat','bench','dead','ohp'];
-var ONB_STEPS=['welcome','goal','body','experience','schedule','length','emphasis','limits','prefs','calibrate','priority','review'];
+// ===== TWO DOORS =====
+// The full card answers "what do I do today and how do I log it" for someone who already
+// trains. A beginner's problem is not information - it is fear and friction: they do not know
+// what the movement looks like, whether they are doing it right, or what is normal. So Start
+// is not a lighter version of the same product, it is a different job: escorting, not
+// optimising. Same engine underneath - the athlete is simply never asked to know any of it.
+// 'level' sits in BOTH lists at the same index: it is the fork itself, so it has to be
+// reachable before a mode exists. Everything after it differs.
+var ONB_STEPS_FULL=['welcome','level','goal','body','experience','schedule','length','emphasis','limits','prefs','calibrate','priority','review'];
+var ONB_STEPS_START=['welcome','level','place','days','pain','review'];   // same index for 'level'
+function ONB_STEPS_FOR(){ try{ return (ONB().mode==='start')? ONB_STEPS_START : ONB_STEPS_FULL; }catch(e){ return ONB_STEPS_FULL; } }
+// legacy name kept: everything downstream indexes into this
+var ONB_STEPS=ONB_STEPS_FULL;
+function isStartMode(){ try{ return S.mode==='start'; }catch(e){ return false; } }
 
 // The card's founding move, offered to everyone: it was built because a coach looked at one
 // lifter's numbers and said "your squat is behind - we fix that first." After calibration
@@ -12849,7 +13375,7 @@ function ONB_ACTIVE(){ try{
   if(o.done) return false;
   // a plan that arrived some other way (restore, import) should not drag anyone through setup,
   // but the review screen still gets its moment right after a build
-  if(S.genPlan && S.genPlan.days && ONB_STEPS[o.step]!=='review') return false;
+  if(S.genPlan && S.genPlan.days && ONB_STEPS_FOR()[o.step]!=='review') return false;
   return true;
 }catch(e){ return false; } }
 function ONB_r5(x){
@@ -12955,10 +13481,10 @@ function ONB_finish(){
   o.ramp=null; save(); render();
 }
 function ONB_HTML(){
-  var o=ONB(), st=ONB_STEPS[o.step], h='';
+  var o=ONB(), STEPS=ONB_STEPS_FOR(), st=STEPS[o.step], h='';
   var done=ONB_ORDER.filter(function(l){ return !!o.res[l]; }).length;
   h+='<header>'+((o.step>0 && st!=='review')?'<div class="onb-back" data-onbback="1" role="button" tabindex="0" aria-label="Back to the previous question">\u2190 Back</div>':'')+'<div class="eyebrow">Setup</div><h1>'+({welcome:'Let\u2019s build your program.',goal:'What are you training for?',
-      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',prefs:'Pick your movements.',priority:'Your numbers say something.',weekdays:'Which days can you train?',schedule:'How do you want your sessions arranged?',length:'How long is a session for you?',limits:'Anything to work around?',
+      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',prefs:'Pick your movements.',priority:'Your numbers say something.',weekdays:'Which days can you train?',schedule:'How do you want your sessions arranged?',length:'How long is a session for you?',level:'Where are you starting from?',place:'Where will you train?',days:'How many days can you show up?',pain:'Anything that hurts?',limits:'Anything to work around?',
       calibrate:'Find your starting weights',review:'Ready to go.'}[st])+'</h1></header>';
 
   if(st==='welcome'){
@@ -12982,6 +13508,41 @@ function ONB_HTML(){
      +'<input type="file" id="onbRestoreFile" accept=".json,application/json" style="display:none">';
    }
   }
+
+  if(st==='level'){
+    h+='<div class="block">'
+     +'<div class="onb-opt'+(o.mode==='start'?' on':'')+'" data-onblevel="start">New to this'
+       +'<span class="onb-why">You have not trained much, or you are coming back after a long time off. The card picks the movements, shows you each one, and keeps sessions around 25 minutes.</span></div>'
+     +'<div class="onb-opt'+(o.mode==='full'?' on':'')+'" data-onblevel="full">I already train'
+       +'<span class="onb-why">You know your way around a gym. Full setup: tested starting weights, goal-driven rep ranges, the whole engine.</span></div>'
+     +'<div class="cue" style="padding:8px 0 0">You can move up whenever you want \u2014 nothing is locked, and your training history comes with you.</div></div>'
+     +'<div class="daybtn onb-go'+(o.mode?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
+
+  if(st==='place'){
+    h+='<div class="block">'
+     +[['machines','A gym with machines','Machines hold the path for you \u2014 the easiest place to start and the hardest place to get it wrong.'],
+       ['free','A gym with free weights','Dumbbells and barbells. More to learn, and worth learning.'],
+       ['home','At home, nothing much','Bodyweight and whatever you have. No equipment needed.']]
+       .map(function(p){ return '<div class="onb-opt'+(o.place===p[0]?' on':'')+'" data-onbplace="'+p[0]+'">'+p[1]
+         +'<span class="onb-why">'+p[2]+'</span></div>'; }).join('')
+     +'</div>'
+     +'<div class="daybtn onb-go'+(o.place?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
+
+  if(st==='days'){
+    h+='<div class="block"><div style="display:flex;gap:8px;flex-wrap:wrap">'
+     +[2,3,4].map(function(n){ return '<div class="onb-opt'+((o.days||3)===n?' on':'')+'" data-onbdays2="'+n+'" style="flex:1 1 28%;min-width:76px;text-align:center">'+n+' days'
+       +'<span class="onb-why" style="text-align:center">'+(n===2?'Enough to make progress':n===3?'The sweet spot':'If you know you will')+'</span></div>'; }).join('')
+     +'</div><div class="cue" style="padding:8px 0 0">Pick what you will actually do. Two days you keep beats four days you quit \u2014 and you can train more whenever you feel like it; the card just moves to your next session.</div></div>'
+     +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
+
+  if(st==='pain'){
+    var L=o.limits||[];
+    h+='<div class="block">'
+     +[['knee','Knees'],['shoulder','Shoulders'],['back','Lower back'],['none','Nothing hurts']]
+       .map(function(p){ var on=(p[0]==='none')? L.length===0 : L.indexOf(p[0])>-1;
+         return '<div class="onb-opt'+(on?' on':'')+'" data-onbpain="'+p[0]+'">'+p[1]+'</div>'; }).join('')
+     +'<div class="cue" style="padding:8px 0 0">Anything you pick gets swapped for a movement that does the same job without bothering it. This is not medical advice \u2014 if something actually hurts, see someone about it.</div></div>'
+     +'<div class="daybtn onb-go" data-onbnext="1">Build my plan</div>'; }
 
   if(st==='goal'){ h+='<div class="block">'+ONB_GOALS.map(function(g){
       return '<div class="onb-opt'+(o.goal===g.id?' on':'')+'" data-onbgoal="'+g.id+'">'+g.t
@@ -13168,8 +13729,9 @@ function ONB_WIRE(){
   var q=function(sel,fn){ document.querySelectorAll(sel).forEach(function(el){ el.onclick=function(){ fn(el); }; }); };
   var o=ONB();
   q('[data-onbnext]',function(el){ if(el.className.indexOf('onb-off')>-1) return;
-    o.step=Math.min(ONB_STEPS.length-1,o.step+1);
-    if(ONB_STEPS[o.step]==='review'){ ONB_build(); return; }
+    var STEPS=ONB_STEPS_FOR();
+    o.step=Math.min(STEPS.length-1,o.step+1);
+    if(STEPS[o.step]==='review'){ ONB_build(); return; }
     save(); render(); });
   q('[data-onbback]',function(el){
     var st=ONB_STEPS[o.step];
@@ -13205,6 +13767,15 @@ function ONB_WIRE(){
   // 4 upper/lower, 5 body part, 6 push/pull/legs), so it sets o.days - which is what the
   // generator reads. Weekday picks are cleared: the rotation is not a weekly timetable.
   q('[data-onbstruct]',function(el){ o.days=+el.dataset.onbstruct; o.wd=null; save(); render(); });
+  q('[data-onblevel]',function(el){ o.mode=el.dataset.onblevel;
+    if(o.mode==='start'){ o.days=o.days||3; o.limits=o.limits||[]; }
+    save(); render(); });
+  q('[data-onbplace]',function(el){ o.place=el.dataset.onbplace; save(); render(); });
+  q('[data-onbdays2]',function(el){ o.days=+el.dataset.onbdays2; save(); render(); });
+  q('[data-onbpain]',function(el){ var id=el.dataset.onbpain; o.limits=o.limits||[];
+    if(id==='none'){ o.limits=[]; }
+    else { var i=o.limits.indexOf(id); if(i>-1) o.limits.splice(i,1); else o.limits.push(id); }
+    save(); render(); });
   q('[data-onbmins]',function(el){ o.mins=+el.dataset.onbmins; save(); render(); });
   q('[data-onbpref]',function(el){ o.prefs=o.prefs||{};
     o.prefs[el.dataset.onbpref]=el.dataset.prefname; save(); render(); });
@@ -13253,6 +13824,22 @@ function ONB_buildRaw(){
 }
 function ONB_build(){
   var o=ONB();
+  if(o.mode==='start'){
+    // no maxes, no calibration, no goal - the three answers are everything Start needs
+    S.mode='start';
+    var sp=startPlan({place:o.place||'machines', days:o.days||3, limits:o.limits||[]});
+    S.genPlan=sp; PLAN=sp;
+    S.maxes={}; S.profile=Object.assign({}, S.profile||{}, {goal:'build'});
+    S.day=sp.days[0].code; S.week=1; S.data={};
+    o.step=ONB_STEPS_START.indexOf('review');
+    save(); render(); return;
+  }
+  S.mode='full';
+  // A new plan is a new block. Graduating from Start (or rebuilding for any other reason)
+  // must open a fresh cycle: the week engine anchors on the first log IN THIS BLOCK, so
+  // leaving months of beginner sessions attached made the new plan read as week 11 of 6 and
+  // hand the athlete no session at all. Old logs keep their own block and stay in history.
+  try{ if(typeof cycleHasLogs==='function' && cycleHasLogs()) S.cycle=cyc()+1; }catch(e){}
   var maxes={};
   ONB_ORDER.forEach(function(l){ maxes[l]=(o.res[l]&&o.res[l].pm)||Math.round(o.wt*({squat:.6,bench:.45,dead:.8,ohp:.3})[l]); });
   // Every field the generator reads is passed here, explicitly, even where the value is null.
