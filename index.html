@@ -936,6 +936,28 @@ td.c-n.now{font-weight:700;}
 .rec-note{border-left:2px solid var(--amber);padding:10px 0 10px 14px;margin:10px 0;
   font-size:12.5px;line-height:1.55;color:var(--dim);}
 .rec-note b{display:block;color:var(--chalk);margin-bottom:4px;}
+.log-arch{font-size:11px;font-weight:700;color:var(--faint);padding:9px 2px 4px;cursor:pointer;
+  text-decoration:underline;}
+.log-arch.armed{display:flex;flex-wrap:wrap;gap:8px;align-items:center;text-decoration:none;
+  color:var(--dim);line-height:1.5;border-left:2px solid var(--amber);padding-left:11px;margin:6px 0;}
+.log-arch.armed b{width:100%;color:var(--chalk);}
+.rir-adv{border-left:2px solid var(--amber);padding:9px 0 9px 12px;margin:8px 0 2px;
+  font-size:12px;line-height:1.55;color:var(--dim);}
+.rir-adv b{display:block;color:var(--chalk);margin-bottom:3px;}
+.rir-adv .vol-pick{display:inline-block;margin-top:8px;}
+.gbsw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;
+  vertical-align:-1px;box-shadow:0 0 0 1px rgba(0,0,0,.35) inset;}
+#gbHost{transition:filter .25s ease;}
+.stale-bar{border:1px solid var(--amber);border-radius:12px;padding:12px 14px;margin:10px 0;
+  font-size:12.5px;line-height:1.55;color:var(--dim);display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.stale-bar b{width:100%;color:var(--chalk);}
+.log-count{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--faint);padding:8px 0 4px;}
+.log-grp{display:flex;align-items:center;gap:8px;padding:11px 10px;margin-top:6px;cursor:pointer;
+  border:1px solid var(--line);border-radius:10px;font-size:12.5px;font-weight:800;color:var(--dim);
+  -webkit-tap-highlight-color:transparent;}
+.log-grp.on{border-color:var(--amber);color:var(--chalk);}
+.log-grp-n{margin-left:auto;font-size:10.5px;font-weight:600;color:var(--faint);}
+.log-grp-x{font-size:15px;color:var(--faint);width:14px;text-align:center;}
 .vol-grp{font-size:9.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
   color:var(--faint);padding:12px 0 5px;border-bottom:1px solid var(--line);margin-bottom:6px;}
 .vol-tick{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--line);}
@@ -990,6 +1012,8 @@ td.c-n.now{font-weight:700;}
   color:var(--amber);border:1px solid var(--amber);border-radius:999px;padding:2px 8px;cursor:pointer;
   vertical-align:middle;-webkit-tap-highlight-color:transparent;}
 .hw-btn:active{background:var(--amber);color:var(--amber-ink,#111);}
+.set-wrap .hw-sheet{padding-bottom:26px;}
+.hdr-help[data-setopen] svg{display:block;}
 .hw-wrap{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.74);display:flex;align-items:flex-end;
   justify-content:center;animation:hwFade .2s ease both;}
 @keyframes hwFade{from{opacity:0}to{opacity:1}}
@@ -1059,14 +1083,6 @@ td.c-n.now{font-weight:700;}
 #gbHost.gb-pose .gb-tail{filter:brightness(.58) saturate(.88);}
 .gb-base,.gb-lids,.gb-tail{transition:filter .45s ease;}
 @keyframes gbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.16)}}
-.gb-hint{position:fixed;left:44px;z-index:79;max-width:210px;padding:10px 13px;
-  border-radius:var(--r-sm,12px);background:var(--panel,#23262B);
-  border:1px solid var(--amber,#E8A33D);color:var(--chalk,#EDEDE8);
-  font-size:12.5px;font-weight:700;line-height:1.35;box-shadow:0 6px 20px rgba(0,0,0,.4);
-  animation:gbHintIn .5s ease both;}
-.gb-hint::before{content:"";position:absolute;left:-7px;top:50%;margin-top:-7px;
-  border:7px solid transparent;border-left:0;border-right-color:var(--amber,#E8A33D);}
-@keyframes gbHintIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
 /* honest label, quiet size: the card is in beta and says so - and the tag turns the
    disclaimer into a feedback funnel by pointing at the built-in reporter */
 .beta-tag{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--amber);
@@ -5203,7 +5219,7 @@ function lockGuard(ev){
     // modal on a gated preview), the floating calculator, the storage and error bars,
     // and the boot ident's tap-to-skip. Locking any of these traps the athlete behind
     // a modal or silences a warning. Third bug in this family - hence one rule, on top.
-    if(t.closest('#gbHost') || t.closest('.gb-hint')
+    if(t.closest('#gbHost')
        || t.closest('#a2hsSheet') || t.closest('.calcfab') || t.closest('.calcpanel')
        || t.closest('#errBar') || t.closest('.stbar') || t.closest('#bootSplash')
        // the footer is deck NAVIGATION (prev / next exercise, jump to deck) - it moves the
@@ -5525,8 +5541,44 @@ function ghostRow(taken, rir){
   s+='<div class="rp-wall"></div></div>';
   var cap = (rir==null)? taken+' to take \u00b7 the wall is failure'
     : (rir===0? taken+' taken \u00b7 nothing left \u2014 that was the wall'
+       : rir>=4? taken+' taken \u00b7 four or more left \u2014 that was too light'
        : taken+' taken \u00b7 '+rir+' in the tank \u00b7 the wall is failure');
   return s+'<div class="grr-cap">'+cap+'</div>';
+}
+// ===== WHAT A REPORTED EFFORT ACTUALLY CHANGES =====
+// The card asked for reps in reserve and then did nothing with the answer, which makes the
+// question a survey rather than a tool. Four or more left means the load is wrong NOW, and
+// the fix is weight on the next set - not another set. A set taken five reps shy of failure
+// buys fatigue and very little stimulus; adding more of them is junk volume.
+function rirAdvice(b){
+  try{
+    var r=restSetRef(b); if(!r || r.s.rir==null) return '';
+    // restSetRef hands back the exercise and its state directly - it carries no index, and
+    // reaching for r.i returned undefined, which made this function silently return nothing
+    var ex=r.ex, st=r.st; if(!ex||!st) return '';
+    var left=st.sets.filter(function(s){ return s.st==='pend'; }).length;
+    var cur=curLoad(ex, st);
+    if(typeof cur!=='number' || !(cur>0)) return '';        // bodyweight has no load to add
+    var step=(typeof fixedStep==='function' && fixedStep(ex)) ||
+             (ex.barbell? Math.max(5, wStepLb(true)) : 5);
+    if(r.s.rir>=4){
+      var up=cur+step;
+      return '<div class="rir-adv"><b>That was too light.</b>'
+        +(left? 'Put '+WV(up)+' '+uLbl()+' on for the '+(left===1?'last set':'remaining '+left+' sets')
+                +' rather than adding another \u2014 a set that far from failure does very little.'
+              : 'Start here next time instead of '+WV(cur)+'.')
+        +(left? '<span class="vol-pick" data-rirup="'+up+'">Use '+WV(up)+' '+uLbl()+'</span>' : '')
+        +'</div>';
+    }
+    if(r.s.rir===0 && left){
+      var dn=Math.max(step, cur-step);
+      return '<div class="rir-adv"><b>You hit the wall.</b>'
+        +'Nothing wrong with that on a last set. With '+left+' still to go, '+WV(dn)+' '+uLbl()
+        +' will keep the reps honest.'
+        +'<span class="vol-pick" data-rirup="'+dn+'">Use '+WV(dn)+' '+uLbl()+'</span></div>';
+    }
+    return '';
+  }catch(e){ return ''; }
 }
 function restHoldBtn(cls, attr, label){
   var k=attr, holding=(holdK===k);
@@ -5586,8 +5638,14 @@ function restBody(b,e,go){
        +'<button class="rest-step" data-restrep="'+stp+'"'+(stp>1?' style="font-size:17px"':'')+'>+'+(stp>1?stp:'')+'</button></div>'; })()
      +ghostRow(reps, (rir!=null? rir : (function(){ var m=String(r.ex.rir||'').match(/\d/); return m? +m[0] : null; })()))
      +'<div class="rest-row"><span class="rest-k">Reps left</span><span class="rest-rir">'
-     +[0,1,2,3,4].map(function(v){ return '<button class="rr'+(rir===v?' on':'')+'" data-restrir="'+v+'">'+v+'</button>'; }).join('')
+     +[0,1,2,3,4].map(function(v){
+        // 4 is the top of the scale and has to absorb everything above it: an athlete with
+        // six in the tank has the same problem as one with four - the weight is too light -
+        // and asking him to pick an exact number he cannot feel is false precision.
+        return '<button class="rr'+(rir===v?' on':'')+'" data-restrir="'+v+'" title="'
+          +(v===4?'four or more - too light':(v===0?'nothing left':''))+'">'+(v===4?'4+':v)+'</button>'; }).join('')
      +'</span></div>'
+     +(function(){ try{ return rirAdvice(b); }catch(e){ return ''; } })()
      +'<div class="rest-row"><button class="rest-grind'+(r.s.g?' on':'')+'" data-restgrind="1">'
      +(r.s.g?'\u2713 ':'')+'That one was a grind</button></div>'
      +'</div>';
@@ -5695,6 +5753,14 @@ function wireRest(){
       // plain tap in Start: hold-to-fire is a gesture a first-timer will not discover
       S.restDismiss=b.t; stopScheduled(); save(); paintRest(true); render(); return; }
     if((n=hit('data-restrep'))){ restEditReps(b,+n.dataset.restrep); return; }
+    if((n=hit('data-rirup'))){
+      // apply the suggested load to every set still to come on this exercise
+      try{
+        var rr=restSetRef(b); if(rr){ var dd=dayObj(), xx=dd.exercises[rr.i], ss=exState(rr.i,xx);
+          ss.w=+n.dataset.rirup; save(); paintRest(true); render();
+          alertToast(WV(+n.dataset.rirup)+' '+uLbl()+' for the rest of this exercise'); }
+      }catch(e){}
+      return; }
     if((n=hit('data-restrir'))){ restSetRir(b,+n.dataset.restrir); return; }
     if(hit('data-restgrind')){ restToggleGrind(b); return; }
     if(hit('data-reststart')){
@@ -5884,7 +5950,14 @@ async function rosterSwitch(id){
     ROSTER.active=id||null;
     rosterSave();
     try{ S=JSON.parse(JSON.stringify(S_BLANK)); }catch(e){ oops('rosterBlank',e); }
+    // load() MERGES a saved state over whatever S currently holds, so a brand-new athlete with
+    // an empty drawer inherited whoever was loaded before them - maxes, plan and all. Blank
+    // the plan too, and let load() fill it from their own drawer or leave it empty.
+    try{ PLAN=JSON.parse(JSON.stringify(PLAN_DEFAULT||PLAN)); }catch(e){}
     await load();                              // reads from curSKEY() -> their drawer
+    // whatever they have generated is theirs; nobody else's plan may survive the switch
+    try{ PLAN=(S.genPlan && S.genPlan.days && S.genPlan.days.length)? S.genPlan
+              : JSON.parse(JSON.stringify(PLAN_DEFAULT||PLAN)); }catch(e){}
     // stepping out of an athlete returns you to the screen the roster lives on, not to
     // whatever training day happened to be saved
     if(!id) S.day='MAX';
@@ -6775,6 +6848,106 @@ function libFilter(){
     var em=document.getElementById('libEmpty'); if(em) em.style.display=any?'none':'';
   }catch(e){}
 }
+// ===== SETTINGS SHEET =====
+// Settings used to live on the You tab, mixed in with the athlete's lifts - two thirds of that
+// screen was configuration. They move to a sheet behind a gear: the tab row stays at five, the
+// You tab is about the person again, and settings are one tap from anywhere rather than a
+// scroll on one particular screen. Deliberately built on the existing sheet pattern (how-to,
+// report, what's-new) so the lock guard, the animation and the dismiss behaviour are code that
+// already works rather than a new mechanism.
+var SET_OPEN=false;
+function settingsBodyHTML(){
+  // MOVED verbatim off the You tab - identical markup and data- attributes, so every
+  // handler in wire() and every test that drives these controls still applies unchanged.
+  var h='';
+  h+='<div class="sub" style="margin-top:12px">Appearance</div>';
+  h+='<div class="ex"><div class="ex-head">'
+    +'<div class="target-label">Theme</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
+    +THEMES.map(t=>'<div class="chip'+((S.theme||'iron')===t.id?' on':'')+'" data-thm="'+t.id+'" style="flex:1 1 30%;min-width:90px;font-size:12px;padding:9px 0">'+t.name+'</div>').join('')
+    +'</div>'
+    +'<div class="target-label" style="margin-top:12px">Font</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
+    +FONTS.map(f=>'<div class="chip'+((S.font||'system')===f.id?' on':'')+'" data-fnt="'+f.id+'" style="flex:1 1 44%;min-width:110px;font-size:13px;padding:9px 0;font-family:'+f.f.replace(/"/g,'&quot;')+'">'+f.name+'</div>').join('')
+    +'</div>'
+    +'<div class="target-label" style="margin-top:12px">Text size</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +[['std','Standard'],['lg','Large'],['xl','Extra']].map(z=>'<div class="chip'+((S.tsize||'std')===z[0]?' on':'')+'" data-tsz="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
+    +'</div>'
+    +'<div class="target-label" style="margin-top:12px">Coaching text</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +[['full','Full'],['min','Minimal']].map(z=>'<div class="chip'+((S.uiMode||'full')===z[0]?' on':'')+'" data-uimode="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
+    +'</div>'
+    +'<div class="exnote" style="padding:8px 0 0">Applies everywhere instantly and sticks across sessions. Daylight is the outdoor/bright-gym option.</div>'
+    +'</div></div>';
+  h+='<div class="sub" style="margin-top:12px">Timer, sound &amp; loading</div>';
+  h+='<div class="ex"><div class="ex-head">'
+    +'<div class="target-label">Rest \u2014 every prescribed rest, adjusted</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +[[-30,'\u221230s'],[0,'As written'],[30,'+30s'],[60,'+60s']].map(r=>'<div class="chip'+((S.restAdj||0)===r[0]?' on':'')+'" data-radj="'+r[0]+'" style="flex:1;font-size:12px;padding:9px 0">'+r[1]+'</div>').join('')
+    +'</div><div class="cue" style="padding:10px 0 0"><b>Beeps while the screen is off</b> \u2014 '
+    +'<span class="chip'+(S.kaOn?' on':'')+'" data-kaon="1" style="font-size:12px;padding:6px 12px;display:inline-block">'+(S.kaOn?'On':'Off')+'</span> '
+    +'Only turn this on if you do not listen to music while you train: it holds the audio open, and iOS will pause your music to let it. '
+    +'With it off, the card keeps the screen awake through your rest instead \u2014 the beeps still work, and your music keeps playing.</div><div style="display:none"'
+    +'</div>'
+    +'</div>'
+    + (function(){ try{ return '<div class="block"><h3>Gummy</h3>'
+          +'<div class="cue" style="padding:0 0 8px">Drag him to the middle of the screen and he lights '
+          +'up the muscles today\u2019s session trains. Pick his flavour \u2014 only the colour moves; '
+          +'the shading and the barbell on his chest stay exactly as drawn.</div>'
+          +'<div class="chiprow" style="flex-wrap:wrap;gap:6px">'
+          +GB_FLAV.map(function(z){ return '<div class="chip gbchip'+((S.gbFlav||'amber')===z.id?' on':'')
+            +'" data-gbflav="'+z.id+'" style="flex:1 1 30%;min-width:92px;font-size:12px;padding:9px 6px">'
+            +'<i class="gbsw" style="background:'+z.sw+'"></i>'+z.n+'</div>'; }).join('')
+          +'</div></div>'; }catch(e){ return ''; } })()
+    +'<div class="block">'
+    +'<div class="target-label">Sound</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
+    +SOUNDS.map(z=>'<div class="chip'+((S.snd||'classic')===z.id?' on':'')+'" data-snd="'+z.id+'" style="flex:1 1 30%;min-width:92px;font-size:12px;padding:9px 0">'+z.name+'</div>').join('')
+    +'</div>'
+    +'<div class="target-label" style="margin-top:12px">Beep tone</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +[['deep','Deep'],['std','Standard'],['bright','Bright']].map(z=>'<div class="chip'+((S.tone||'std')===z[0]?' on':'')+'" data-tone="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
+    +'</div>'
+    +'<div class="target-label" style="margin-top:12px">Breathing pacer between sets</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +[[0,'Off'],[1,'On']].map(z=>'<div class="chip'+(((S.breathe?1:0))===z[0]?' on':'')+'" data-brth="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
+    +'</div>'
+    +'<div class="target-label" style="margin-top:12px">Smallest jump on the bar</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +(isKg()? [[10,'5 kg'],[5,'2.5 kg'],[2.5,'1 kg']] : [[10,'10 lb'],[5,'5 lb'],[2.5,'2.5 lb']]).map(z=>'<div class="chip'+((S.jump||5)===z[0]?' on':'')+'" data-jump="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
+    +'</div>'
+    +'<div class="exnote" style="padding:8px 0 0">Rest never drops under 30 seconds. The jump setting matches your gym\u2019s smallest pair of plates \u2014 '+(isKg()? '2.5 kg needs 1.25s, 1 kg needs 0.5s':'5 lb needs 2.5s, 2.5 lb needs microplates')+' \u2014 and every calculated load and warm-up respects it.</div>'
+    +'</div></div>';
+  return h;
+}
+// Mounted at BODY level, not inside #app: several screens finish with their own
+// app.innerHTML + return, so anything appended to the page markup was never reached from
+// them. One host, synced after every render, works from everywhere.
+function settingsSync(){
+  try{
+    var host=document.getElementById('setHost');
+    if(!host){ host=document.createElement('div'); host.id='setHost'; document.body.appendChild(host); }
+    var want=settingsSheetHTML();
+    if(host.innerHTML!==want){
+      host.innerHTML=want;
+      if(want) settingsWire();
+    }
+  }catch(e){ oops('settingsSync',e); }
+}
+function settingsWire(){
+  try{
+    document.querySelectorAll('#setHost [data-setclose]').forEach(function(b){
+      b.onclick=function(ev){
+        if(ev && ev.target && ev.target.closest && ev.target.closest('[data-setstop]')
+           && !(ev.target.getAttribute && ev.target.getAttribute('data-setclose'))) return;
+        SET_OPEN=false; settingsSync(); };
+    });
+    // the settings controls live in the sheet now, so give them the same handlers wire() gives
+    try{ wire(); }catch(e){}
+  }catch(e){ oops('settingsWire',e); }
+}
+function settingsSheetHTML(){
+  if(!SET_OPEN) return '';
+  return '<div class="hw-wrap set-wrap" data-setclose="1">'
+   +'<div class="hw-sheet" role="dialog" aria-label="Settings" data-setstop="1">'
+     +'<div class="hw-grip" aria-hidden="true"></div>'
+     +'<div class="hw-title">Settings</div>'
+     +(function(){ try{ return settingsBodyHTML(); }catch(e){ oops('settingsBody',e); return ''; } })()
+     +'<div class="daybtn lockfree" data-setclose="1" style="margin-top:14px">Done</div>'
+   +'</div></div>';
+}
 function howSheetHTML(){
   if(!howEx) return '';
   var name=howEx, file=CLIPS[exSlug(name)];
@@ -6969,7 +7142,6 @@ function gbPose(){
   gbViewSync();
   gbLight();
   if(typeof S!=='undefined' && S && !S.gbSeen){ S.gbSeen=1; try{ save(); }catch(e){} }  // discovered - retire the hint for good
-  try{ var _gh=document.getElementById('gbHint'); if(_gh) _gh.remove(); }catch(e){}
   gbWake();
 }
 // Which of today's muscles glow, at what intensity. Shared by dock AND pose: the docked
@@ -6993,6 +7165,33 @@ function gbDock(){
   if(GB.host){ GB.host.classList.remove('gb-pose','gb-stand'); gbViewSync(); }
   gbLight();                                   // today's muscles stay lit on the docked sliver
   gbWake();
+}
+// ===== GUMMY'S FLAVOUR =====
+// Recoloured with a GPU filter, not a redrawn sprite: hue-rotate moves the colour and leaves
+// every highlight, shadow and the etched barbell exactly where the artwork put them. The bear
+// loses nothing - it is the same image, lit differently. Same trick as the apparel flavours,
+// so the shirt and the app agree.
+var GB_FLAV=[
+  {id:'amber',     n:'Amber',     f:'none',                                   sw:'#E0A94C'},
+  {id:'cherry',    n:'Cherry',    f:'hue-rotate(-38deg) saturate(1.15)',      sw:'#E04A3C'},
+  {id:'lime',      n:'Lime',      f:'hue-rotate(72deg) saturate(1.05)',       sw:'#7BC94A'},
+  {id:'raspberry', n:'Raspberry', f:'hue-rotate(178deg) saturate(1.05)',      sw:'#3FA9E0'},
+  {id:'grape',     n:'Grape',     f:'hue-rotate(250deg) saturate(1.05)',      sw:'#B45CD8'},
+  {id:'clear',     n:'Clear',     f:'saturate(0.12) brightness(1.10)',        sw:'#E8E4DA'}
+];
+function gbFlavour(){
+  try{
+    var id=S.gbFlav||'amber';
+    for(var i=0;i<GB_FLAV.length;i++) if(GB_FLAV[i].id===id) return GB_FLAV[i];
+  }catch(e){}
+  return GB_FLAV[0];
+}
+function gbApplyFlavour(){
+  try{
+    var h=document.getElementById('gbHost'); if(!h) return;
+    var f=gbFlavour().f;
+    h.style.filter=(f==='none')? '' : f;
+  }catch(e){}
 }
 function gbLayers(){
   var out='<div class="gb-stage">';
@@ -7048,18 +7247,11 @@ function gummyInit(){
     document.body.appendChild(h); GB.host=h;
     var d0=gbDockPos(); GB.px=GB.tx=d0.x; GB.py=GB.ty=d0.y; GB.sx=1; gbApply(); h.classList.add('gb-docked');
     gbLight();                                  // glowing from the first frame, docked or not
-    // One-time discovery hint from the bear himself, retired forever the first time he's
-    // posed. Reappears on each open until then: a feature nobody finds may as well not exist.
-    try{
-      if(typeof S!=='undefined' && S && !S.gbSeen && !document.getElementById('gbHint')){
-        var gh=document.createElement('div'); gh.id='gbHint'; gh.className='gb-hint lockfree';
-        gh.textContent='Pull me to the middle \u2014 today\u2019s muscles glow';
-        gh.style.top=Math.round((window.innerHeight||600)*0.56+40)+'px';
-        gh.onclick=function(){ try{ gh.remove(); }catch(e){} };
-        document.body.appendChild(gh);
-        setTimeout(function(){ try{ var el=document.getElementById('gbHint'); if(el) el.remove(); }catch(e){} },12000);
-      }
-    }catch(e){}
+    try{ gbApplyFlavour(); }catch(e){}   // the colour they picked, from the first frame
+    // The discovery hint is gone. It sat over the screen for twelve seconds on every open
+    // until the bear had been posed once, and it was in the way of the work - which is the
+    // one thing this card is not allowed to be. Gummy is discoverable by being draggable;
+    // a bubble telling you so is not worth the interruption.
     var down=window.PointerEvent?'pointerdown':'mousedown';
     var move=window.PointerEvent?'pointermove':'mousemove';
     var up=window.PointerEvent?'pointerup':'mouseup';
@@ -8077,10 +8269,30 @@ function plannedDirect(){
 // amber = heavily loaded. Parametric: male/female differ by real proportion numbers (shoulder,
 // waist and hip widths), not two separately hand-drawn figures, so muscle placement stays honest
 // on both. Limbs are drawn as round-capped strokes - far cleaner than outlining every limb.
+// Which figure to draw, from whatever the card actually knows about the person in front of
+// it. In coach mode this resolves per athlete, because switching athletes swaps the whole
+// state drawer - the coach sees each person's own figure without doing anything.
+// Order matters: an explicit tap beats a stored answer, and a stored answer beats a default.
 function anaSex(){
-  if(S.figSex==='m'||S.figSex==='f') return S.figSex;
-  try{ if(S.onb && (S.onb.sex==='m'||S.onb.sex==='f')) return S.onb.sex; }catch(e){}
+  var ok=function(v){ return (v==='m'||v==='f')? v : null; };
+  try{ if(ok(S.figSex)) return S.figSex; }catch(e){}          // they chose, and that stands
+  try{ if(ok(S.onb&&S.onb.sex)) return S.onb.sex; }catch(e){}  // answered during setup
+  try{ if(ok(S.profile&&S.profile.sex)) return S.profile.sex; }catch(e){}
+  try{ var a=(typeof activeAthlete==='function')? activeAthlete():null;
+       if(a && ok(a.sex)) return a.sex; }catch(e){}            // recorded on the roster entry
   return 'm';
+}
+// Nothing on file. Worth knowing, because defaulting is a coin flip on half the people who
+// use this - and the toggle only helps someone who notices it.
+function anaSexKnown(){
+  try{
+    if(S.figSex==='m'||S.figSex==='f') return true;
+    if(S.onb&&(S.onb.sex==='m'||S.onb.sex==='f')) return true;
+    if(S.profile&&(S.profile.sex==='m'||S.profile.sex==='f')) return true;
+    var a=(typeof activeAthlete==='function')? activeAthlete():null;
+    if(a&&(a.sex==='m'||a.sex==='f')) return true;
+    return false;
+  }catch(e){ return false; }
 }
 // colour + opacity for a muscle carrying n weekly sets
 // One colour, varying only in strength: the chart answers "where does the work go", and the
@@ -8308,12 +8520,22 @@ function anatomyHTML(){
     }).join('');
     var chip=function(id,label){
       return '<span class="ana-chip'+(vw===id?' on':'')+'" data-anaview="'+id+'">'+label+'</span>'; };
+    // The figure selector was lost when this renderer was rewritten: the handler survived in
+    // wire() but nothing drew the buttons, so a female athlete had no way to reach the female
+    // silhouette even though both were built and sitting in the file.
+    var sx=anaSex();
+    var sexchip=function(id,label){
+      return '<span class="ana-chip'+(sx===id?' on':'')+'" data-anasex="'+id+'">'+label+'</span>'; };
     var key=[['grey','not trained'],['faint','worked indirectly'],['yellow','needs work'],['green','on target']]
       .map(function(k){ var c=ANA_COL[k[0]];
         return '<span class="ana-k"><i style="background:rgb('+c.join(',')+')"></i>'+k[1]+'</span>'; }).join('');
     return '<div class="ana-wrap">'
       +'<div class="ana-grid'+(views.length>1?' two':'')+'">'+cells+'</div>'
       +'<div class="ana-sex ana-views">'+chip('both','Both')+chip('front','Front')+chip('back','Back')+'</div>'
+      +'<div class="ana-sex ana-views">'+sexchip('m','Male')+sexchip('f','Female')+'</div>'
+      +(anaSexKnown()? ''
+        : '<div class="cue" style="padding:6px 0 0;text-align:center">Showing the male figure '
+          +'by default \u2014 tap Female if that fits you better. The card will remember.</div>')
       +'<div class="ana-legend">'+key+'</div>'
       +'<div class="cue" style="padding:6px 0 0">Painted from your weekly volume. Muscles that only ever '
       +'assist \u2014 forearms, and anything you touch lightly \u2014 sit in the pale band; that is normal.</div>'
@@ -8496,6 +8718,28 @@ function wirePlan(){
   q('[data-splitset]',function(el){ el.onclick=function(){ var n=+el.dataset.splitset; var cur=(PLAN.days&&PLAN.days.length)||0; splitPending=(n===cur)?null:n; render(); }; });
   q('[data-splitgo]',function(el){ el.onclick=function(){ var n=+el.dataset.splitgo; splitPending=null; rebuildSplit(n); }; });
   q('[data-splitcancel]',function(el){ el.onclick=function(){ splitPending=null; render(); }; });
+  q('[data-logarm]',function(el){ el.onclick=function(){ S.logArm=+el.dataset.logarm; save(); render(); }; });
+  q('[data-logunarm]',function(el){ el.onclick=function(){ S.logArm=null; save(); render(); }; });
+  q('[data-logarch]',function(el){ el.onclick=function(){ logArchiveBlock(+el.dataset.logarch); }; });
+  q('[data-setopen]',function(el){
+    if(el.__setWired) return; el.__setWired=1;
+    el.addEventListener('click',function(ev){ ev.preventDefault(); ev.stopPropagation();
+      SET_OPEN=true; try{ settingsSync(); }catch(e){} }); });
+  q('[data-setclose]',function(el){ el.onclick=function(ev){
+    // only the backdrop and the Done button close it - a tap on a control inside must not
+    if(ev && ev.target && ev.target.closest && ev.target.closest('[data-setstop]')
+       && !(ev.target.getAttribute && ev.target.getAttribute('data-setclose'))) return;
+    SET_OPEN=false; render(); }; });
+  q('[data-gbflav]',function(el){ el.onclick=function(){
+    S.gbFlav=el.dataset.gbflav; save(); try{ gbApplyFlavour(); }catch(e){} render(); }; });
+  q('[data-staleuse]',function(el){ el.onclick=function(){ try{ location.reload(); }catch(e){} }; });
+  q('[data-stalekeep]',function(el){ el.onclick=function(){
+    // this copy wins: adopt the current stamp so the next save goes through
+    var st=readStamp(); LAST_SYNC=st? st.t : Date.now();
+    STALE_WARNED=false; save(); render();
+  }; });
+  q('[data-loggrp]',function(el){ el.onclick=function(){
+    var b=+el.dataset.loggrp; S.logGrp=(S.logGrp===b)? -1 : b; save(); render(); }; });
   q('[data-volfix]',function(el){ el.onclick=function(){
     var m=el.dataset.volfix; S.volOpen=(S.volOpen===m)? null : m; save(); render(); }; });
   q('[data-volclose]',function(el){ el.onclick=function(){ S.volOpen=null; save(); render(); }; });
@@ -9198,8 +9442,9 @@ function wireFocus(){
 
 
 var PLAN = {"block": "Starter Block - Full Body Strength", "start": "2026-08-16", "weeks": 6, "maxes": {"bench": 210.0, "ohp": 105.0, "squat": 220.0, "dead": 250.0}, "days": [{"code": "A", "title": "Push - Heavy", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "5", "load": "165", "loadNum": 165.0, "rir": "2, last set 1", "note": "78% of a 210 programming max", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [235, 235, 245, 245, 255, 135], "maxKey": "bench", "pct": [0.78333, 0.78333, 0.81667, 0.81667, 0.85, 0.45]}, {"name": "Overhead Press", "sets": 3, "reps": "8", "load": "75", "loadNum": 75.0, "rir": "2", "note": "Barbell - your other lagging lift. W1-2: eights. W3-4: ride reps to 9-10 at 75. W5: 80.", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [105, 105, 105, 105, 115, 55], "maxKey": "ohp", "pct": [0.7, 0.7, 0.7, 0.7, 0.76667, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Strict. No swinging.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Rope Pushdowns", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Straight-Bar Pushdown", "Overhead Rope Extension", "Bench Dips"], "cue": "Pin the elbows, split the rope at the bottom.", "wk": [30, 30, 35, 35, 40, 20], "maxKey": null, "pct": null}]}, {"code": "B", "title": "Pull - Heavy", "exercises": [{"name": "Cable Rows", "sets": 4, "reps": "8", "load": "100", "loadNum": 100.0, "rir": "2, last set 1", "note": "Pause a beat at the squeeze.", "perHand": false, "barbell": false, "deload": 60, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [140, 140, 150, 150, 160, 85], "maxKey": null, "pct": null}, {"name": "Lat Pulldown", "sets": 4, "reps": "8", "load": "90", "loadNum": 90.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 55, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [130, 130, 140, 140, 150, 80], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [65, 65, 70, 70, 75, 40], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "Fixed bars in 10s, no 55. Double progression: ride reps 8->10 at 60, then jump to 70.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [60, 60, 60, 70, 70, 35], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "10", "load": "45", "loadNum": 45.0, "rir": "1", "note": "35 broke form when pre-fatigued; start 30.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Replaces preacher - trains the biceps at full stretch (elbow behind the torso), works identically at both your gyms, and kills the PF-machine anchor problem. Start 20s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 2, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "C", "title": "Legs - Squat Priority", "exercises": [{"name": "Back Squat", "sets": 4, "reps": "5", "load": "170", "loadNum": 170.0, "rir": "2, last set 1", "note": "78% of 220. All four sets at 170 - do not climb.", "perHand": false, "barbell": true, "deload": 100, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [245, 245, 255, 265, 275, 145], "maxKey": "squat", "pct": [0.77778, 0.77778, 0.80952, 0.84127, 0.87302, 0.46032]}, {"name": "Leg Press", "sets": 3, "reps": "12", "load": "125", "loadNum": 125.0, "rir": "2", "note": "Extra quad volume for the lagging lift. Log your starting weight. Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 75, "rest": "2:00", "warmup": "", "subs": ["Hack Squat", "Bulgarian Split Squat", "Goblet Squat"], "cue": "Whole foot pressing, knees track the toes, never slam lockout.", "wk": [180, 190, 200, 210, 220, 110], "maxKey": null, "pct": null}, {"name": "Romanian Deadlift", "sets": 3, "reps": "8", "load": "135", "loadNum": 135.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "", "subs": ["DB Romanian Deadlift", "Good Morning", "Back Extension"], "cue": "Hips back until the hamstrings scream, bar drags the thighs.", "wk": [195, 205, 215, 225, 235, 115], "maxKey": null, "pct": null}, {"name": "Walking Lunges", "sets": 3, "reps": "10 per leg", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Bulgarian Split Squat", "Reverse Lunges", "Step-Ups"], "cue": "Long step, back knee straight down, drive through the front heel.", "wk": [35, 35, 40, 40, 45, 20], "maxKey": null, "pct": null}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Replaces hip thrust - glutes already get squat, leg press, RDL and lunges on this day, while hamstrings had only one direct slot all week. Seated for the lengthened position. Dial to RIR 1.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 4, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "10-15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "D", "title": "Push - Volume", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "10", "load": "145", "loadNum": 145.0, "rir": "2, last set 1", "note": "68% of 210", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [205, 205, 215, 215, 225, 115], "maxKey": "bench", "pct": [0.68333, 0.68333, 0.71667, 0.71667, 0.75, 0.38333]}, {"name": "Overhead Press", "sets": 3, "reps": "10", "load": "65", "loadNum": 65.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [95, 95, 95, 105, 105, 55], "maxKey": "ohp", "pct": [0.63333, 0.63333, 0.63333, 0.7, 0.7, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [55, 55, 60, 60, 65, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 4, "reps": "15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Overhead Rope Extension", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Upgraded from pushdowns on this day - overhead position grows the long head substantially more (Maeo 2023). Start 25 and dial to RIR 1; it will feel much lighter than pushdowns.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Elbows by your ears, full stretch behind the head, squeeze to lockout.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "E", "title": "Pull - Volume", "exercises": [{"name": "Lat Pulldown", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Cable Rows", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Fixed from 57.5 - stacks move in 5s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [50, 50, 50, 60, 60, 30], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Volume-day partner to Day B - lengthened-position biceps work. Start 15s, chase the stretch not the weight.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 2, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "F", "title": "Legs - Deadlift Focus", "exercises": [{"name": "Conventional Deadlift", "sets": 3, "reps": "6", "load": "165", "loadNum": 165.0, "rir": "3-4", "note": "65% of 250, deliberately easy. W1-2 groove the pattern at 165, then 180 / 190 / 200.", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "95 x5, 130 x3, 150 x1", "subs": ["Trap Bar Deadlift", "Rack Pull", "DB Romanian Deadlift"], "cue": "Wedge in, pull the slack out, push the floor away.", "wk": [235, 235, 255, 275, 285, 135], "maxKey": "dead", "pct": [0.65278, 0.65278, 0.70833, 0.76389, 0.79167, 0.375]}, {"name": "Back Squat", "sets": 3, "reps": "10", "load": "150", "loadNum": 150.0, "rir": "2", "note": "68% of 220. Second squat exposure - skill practice for the weak lift.", "perHand": false, "barbell": true, "deload": 90, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [215, 215, 225, 225, 235, 125], "maxKey": "squat", "pct": [0.68254, 0.68254, 0.71429, 0.71429, 0.74603, 0.39683]}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Seated beats lying for hamstring growth - hip flexed puts the hamstrings at length (Maeo 2021, +14 vs +9 percent). 70 is a guess anchor - dial to RIR 1 first session.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 4, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}, {"name": "Plank", "sets": 3, "reps": "max hold", "load": "bodyweight", "loadNum": null, "rir": "", "note": "You are tested on a max plank every six months and were training it zero times a week. Log the hold time in reps as seconds if you want it tracked.", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": [], "cue": "Squeeze glutes, ribs down, one straight line - the shake is the work.", "wk": null, "maxKey": null, "pct": null}]}], "builtOn": "2026-08-16", "v": 18};
+var PLAN_DEFAULT=null; try{ PLAN_DEFAULT=JSON.parse(JSON.stringify(PLAN)); }catch(e){}
 const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
-const BUILD = 'c47';
+const BUILD = 'c59';
 const CARD_NAME = 'DEADSTOP · TRAINING CARD';   // names bug reports and the share sheet
 // Filled in by the batch generator when a card is produced for a named person. Null on the
 // generic build, in which case nothing below it runs and the card onboards the user normally.
@@ -9897,6 +10142,22 @@ function accLoad(ex){
     // reps come first: no load increase until the top of the range was reached
     var rp=accRepsHit(ex);
     if(rp && !rp.hit && out>A.val) out=A.val;
+    // ...and effort decides how far it moves. Topping the range with four in reserve is a
+    // different session from topping it at failure, and they should not earn the same jump.
+    // Reps say WHETHER to add load; reps-in-reserve says HOW MUCH.
+    try{
+      var LPr=(S.lastPerf||{})[ex.name];
+      var eff=(LPr && LPr.rir!=null)? +LPr.rir : null;
+      if(eff!=null && out>A.val){
+        var step0=fx || (ex.barbell? Math.max(5,wStepLb(true)) : 5);
+        if(eff>=3){                                  // it was easy - take a double step
+          var big=A.val+step0*2;
+          if(big<=A.val*1.10) out=Math.max(out, big);
+        } else if(eff===0){                          // taken to failure - hold, do not pile on
+          out=A.val;
+        }
+      }
+    }catch(e){}
     // ...but do not hold someone at a fixed-bar weight forever. Once they have topped the
     // range across several sessions and the reps-and-sets levers are spent, a coach takes
     // the bigger jump and lets the reps rebuild. That is normal double progression, not a
@@ -10242,7 +10503,48 @@ function oops(where, e){
   }catch(_){}
 }
 var ERR_LOG=[], LAST_ERR=null;
+// ===== TWO COPIES OF THE CARD, ONE SET OF DATA =====
+// Storage is last-write-wins. With the card open on a phone and a laptop, whichever saves
+// second silently erases the other - including a session someone just finished. Every write
+// carries a stamp saying WHO wrote it and WHEN; before writing, a copy checks whether the
+// stored stamp is newer than the last one it saw. If it is, this copy is stale and must not
+// overwrite. It says so instead, and the athlete decides which copy is real.
+var TAB_ID='t'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36);
+var LAST_SYNC=0;            // the write stamp this copy last saw or made
+var STALE_WARNED=false;
+function readStamp(){
+  try{
+    if(typeof ST_MODE!=='undefined' && ST_MODE==='local' && window.localStorage){
+      var raw=window.localStorage.getItem(stLocalKey(curSKEY()));
+      if(!raw) return null;
+      var o=JSON.parse(raw);
+      return (o && o._w)? o._w : null;
+    }
+  }catch(e){}
+  return null;
+}
+function staleBannerHTML(){
+  if(!STALE_WARNED) return '';
+  return '<div class="stale-bar" role="alert"><b>This card is open somewhere else.</b>'
+    +'That copy saved after this one, so the two have drifted apart. They will not merge \u2014 '
+    +'whichever you keep, the other loses what it did since.'
+    +'<span class="vol-pick" data-staleuse="1">Load the other copy</span>'
+    +'<span class="vol-pick ghost" data-stalekeep="1">Keep this one</span></div>';
+}
+var SYNC_READY=false;       // true once this copy has actually read the stored state
 function save(){ try{
+  var st=readStamp();
+  // Never cry stale before loading. Anything that saves during boot runs before load() has
+  // read the stored stamp, and would see any existing write as "newer" - warning a perfectly
+  // normal single copy on every launch.
+  if(SYNC_READY && st && st.id!==TAB_ID && st.t>LAST_SYNC){
+    // another copy has written since this one last synced - do not clobber it
+    if(!STALE_WARNED){ STALE_WARNED=true; try{ render(); }catch(e){}
+      try{ alertToast('This card is open somewhere else \u2014 not overwriting it'); }catch(e){} }
+    return;
+  }
+  var stamp={id:TAB_ID, t:Date.now()};
+  S._w=stamp; LAST_SYNC=stamp.t;
   var payload=JSON.stringify(S);
   stSet(curSKEY(), payload);
 }catch(e){ try{ __logErr('save',e.message,'',0,0,e); }catch(x){} } }
@@ -10473,7 +10775,21 @@ async function probeStorage(){
 }
 async function refreshLogs(){
   if(!storageOK){ logKeys=[]; return; }
-  try{ const _ks=await stList(LOGP); logKeys=(_ks||[]).filter(k=>k!==curLOGP()+'probe').sort().reverse(); }
+  try{
+    const _ks=await stList(LOGP);
+    const P=curLOGP();
+    // An athlete's prefix is LOGP + id + ':', which STARTS WITH LOGP - so a plain prefix scan
+    // matched every athlete's sessions as well as the owner's. The coach saw their athletes'
+    // sessions in their own log, and each athlete saw the coach's. Field-caught by audit.
+    // Match the CURRENT namespace exactly: the owner takes only keys with no id segment,
+    // an athlete takes only keys carrying their own id.
+    logKeys=(_ks||[]).filter(function(k){
+      if(k===P+'probe') return false;
+      if(k.indexOf(P)!==0) return false;
+      var rest=k.slice(P.length);
+      return rest.indexOf(':')<0;            // no further namespace below this one
+    }).sort().reverse();
+  }
   catch(e){ logKeys=[]; }
 }
 async function saveSessionLog(quiet){
@@ -10488,7 +10804,18 @@ async function saveSessionLog(quiet){
   if(!String(S.notes||'').trim() && S.noteStashKey===key && S.noteStash) S.notes=S.noteStash;
   const snap={date:S.when.date, time:S.when.time, day:S.day, week:S.week, report:report()};
   try{
-    await stSet(key, JSON.stringify(snap));
+    // stSet returns FALSE when the write fails - a full device, most often - and this line
+    // used to discard that answer and carry on to "Session saved". The athlete finished a
+    // session, was told it was filed, and it was gone. A false success is worse than an
+    // error: it removes the one chance they had to do something about it.
+    var wrote=await stSet(key, JSON.stringify(snap));
+    if(wrote===false){
+      S.notes=noteBefore;                      // give them their notes back, nothing was filed
+      if(!quiet) alertToast('Could not save \u2014 this device is out of space. Back up to a file, then clear an old block.');
+      try{ stFailHard(); }catch(e){}
+      try{ render(); }catch(e){}
+      return false;
+    }
     delete logCache[key];
     try{ frzSnap(S.week, S.day); }catch(e){ oops("saveSessionLog",e); }
     // saving closes the day: the debrief stops greeting you and the sets stop responding
@@ -10541,6 +10868,7 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
     const saved=JSON.parse(_v);
     // merge, never replace — a saved state missing a section must not take the app down
     S=Object.assign({}, DEF, saved);
+    try{ LAST_SYNC=(saved && saved._w && saved._w.t)||0; }catch(e){}
     Object.keys(DEF).forEach(function(k){
       if(DEF[k] && typeof DEF[k]==='object' && !Array.isArray(DEF[k])){
         if(!S[k] || typeof S[k]!=='object' || Array.isArray(S[k])) S[k]=JSON.parse(JSON.stringify(DEF[k]));
@@ -10648,6 +10976,7 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   }
   // future migrations slot in here: if(sv < 3){ ... }
   S.v = SCHEMA_V;
+  SYNC_READY=true;   // loaded, or confirmed there was nothing to load
 }
 
 function render(){
@@ -10701,6 +11030,10 @@ function renderInner(){
         ? ' \u00b7 <span class="nist-tag lockfree" data-nist="1" role="button" tabindex="0">NOT INSTALLED</span>' : '')
       +'</div></div>'
     +((cyc()===1)? '<div class="hdr-help lockfree" data-tourcore="1" role="button" tabindex="0" aria-label="Replay the quick tour">?</div>' : '')
+    +'<div class="hdr-help lockfree" data-setopen="1" role="button" tabindex="0" aria-label="Settings">'
+      +'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">'
+      +'<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6h.05A1.7 1.7 0 0 0 10.1 3V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.1 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.05A1.7 1.7 0 0 0 21 10.1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/>'
+      +'</svg></div>'
     +'</header>';
   var __nx=nextSession(); var __td=(__nx && __nx.week===S.week)? __nx.code : null;
   // Two rows, two visual languages: training days are chips (content), app sections are a
@@ -10722,16 +11055,16 @@ function renderInner(){
     try{ h+=backupBarHTML(); }catch(e){}
     if(S.hist){ h+=histDetailHTML(S.hist); }
     else { h+=printPickerHTML(); try{ h+=roadAheadHTML(false); }catch(e){} try{ h+=volumeHTML(); }catch(e){} h+=routineHTML(); h+=earlyCloseHTML(); h+=histListHTML(); h+=whyHTML(); try{ h+=provenanceHTML(); }catch(e){} h+=shareQRHTML(); h+=installHTML(); try{ h+=wipeHTML(); }catch(e){} }
-    app.innerHTML=h; wire(); try{ anaPaintAll(); }catch(e){} return;
+    app.innerHTML=h; wire(); try{ anaPaintAll(); }catch(e){} try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='LIB'){
     h+=libraryHTML();
     try{ h+=howSheetHTML(); }catch(e){}
-    app.innerHTML=h; wire(); return;
+    app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='RATE'){
     h+=rateHTML();
-    app.innerHTML=h; wire(); return;
+    app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='CAL'){
     h+='<div class="sub" style="margin-top:8px">Training calendar</div>';
@@ -10739,7 +11072,7 @@ function renderInner(){
     h+='<div class="rules">Green days are sessions you actually logged \u2014 the letters are which day you ran. '
       +'Dashed amber marks a deload week computed from the block start date. A red outline is a pain flag. '
       +'Small numbers are logged bodyweight. Tap any day to open it.</div>';
-    app.innerHTML=h; wire(); return;
+    app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='MAX'){
     const G=goalDef();
@@ -10866,47 +11199,9 @@ function renderInner(){
     h+='<div class="rules">Change a max and every barbell load in all six weeks recalculates instantly, rounded to what actually racks here ('+(isKg()? '20 kg bar + kg plates':'45 bar + tens')+'). '
       +'OHP note: with minimum bar jumps this small a max change may not move the bar \u2014 that is the plate math, not a bug. Ride the reps. '
       +'Accessories (cables, dumbbells, machines) progress on their own schedule and are not tied to a max.</div>';
-    h+='<div class="sub" style="margin-top:12px">Appearance</div>';
-    h+='<div class="ex"><div class="ex-head">'
-      +'<div class="target-label">Theme</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
-      +THEMES.map(t=>'<div class="chip'+((S.theme||'iron')===t.id?' on':'')+'" data-thm="'+t.id+'" style="flex:1 1 30%;min-width:90px;font-size:12px;padding:9px 0">'+t.name+'</div>').join('')
-      +'</div>'
-      +'<div class="target-label" style="margin-top:12px">Font</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
-      +FONTS.map(f=>'<div class="chip'+((S.font||'system')===f.id?' on':'')+'" data-fnt="'+f.id+'" style="flex:1 1 44%;min-width:110px;font-size:13px;padding:9px 0;font-family:'+f.f.replace(/"/g,'&quot;')+'">'+f.name+'</div>').join('')
-      +'</div>'
-      +'<div class="target-label" style="margin-top:12px">Text size</div><div class="chiprow" style="margin-top:6px;gap:6px">'
-      +[['std','Standard'],['lg','Large'],['xl','Extra']].map(z=>'<div class="chip'+((S.tsize||'std')===z[0]?' on':'')+'" data-tsz="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
-      +'</div>'
-      +'<div class="target-label" style="margin-top:12px">Coaching text</div><div class="chiprow" style="margin-top:6px;gap:6px">'
-      +[['full','Full'],['min','Minimal']].map(z=>'<div class="chip'+((S.uiMode||'full')===z[0]?' on':'')+'" data-uimode="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
-      +'</div>'
-      +'<div class="exnote" style="padding:8px 0 0">Applies everywhere instantly and sticks across sessions. Daylight is the outdoor/bright-gym option.</div>'
-      +'</div></div>';
-    h+='<div class="sub" style="margin-top:12px">Timer, sound &amp; loading</div>';
-    h+='<div class="ex"><div class="ex-head">'
-      +'<div class="target-label">Rest \u2014 every prescribed rest, adjusted</div><div class="chiprow" style="margin-top:6px;gap:6px">'
-      +[[-30,'\u221230s'],[0,'As written'],[30,'+30s'],[60,'+60s']].map(r=>'<div class="chip'+((S.restAdj||0)===r[0]?' on':'')+'" data-radj="'+r[0]+'" style="flex:1;font-size:12px;padding:9px 0">'+r[1]+'</div>').join('')
-      +'</div><div class="cue" style="padding:10px 0 0"><b>Beeps while the screen is off</b> \u2014 '
-      +'<span class="chip'+(S.kaOn?' on':'')+'" data-kaon="1" style="font-size:12px;padding:6px 12px;display:inline-block">'+(S.kaOn?'On':'Off')+'</span> '
-      +'Only turn this on if you do not listen to music while you train: it holds the audio open, and iOS will pause your music to let it. '
-      +'With it off, the card keeps the screen awake through your rest instead \u2014 the beeps still work, and your music keeps playing.</div><div style="display:none"'
-      +'</div>'
-      +'<div class="target-label" style="margin-top:12px">Sound</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
-      +SOUNDS.map(z=>'<div class="chip'+((S.snd||'classic')===z.id?' on':'')+'" data-snd="'+z.id+'" style="flex:1 1 30%;min-width:92px;font-size:12px;padding:9px 0">'+z.name+'</div>').join('')
-      +'</div>'
-      +'<div class="target-label" style="margin-top:12px">Beep tone</div><div class="chiprow" style="margin-top:6px;gap:6px">'
-      +[['deep','Deep'],['std','Standard'],['bright','Bright']].map(z=>'<div class="chip'+((S.tone||'std')===z[0]?' on':'')+'" data-tone="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
-      +'</div>'
-      +'<div class="target-label" style="margin-top:12px">Breathing pacer between sets</div><div class="chiprow" style="margin-top:6px;gap:6px">'
-      +[[0,'Off'],[1,'On']].map(z=>'<div class="chip'+(((S.breathe?1:0))===z[0]?' on':'')+'" data-brth="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
-      +'</div>'
-      +'<div class="target-label" style="margin-top:12px">Smallest jump on the bar</div><div class="chiprow" style="margin-top:6px;gap:6px">'
-      +(isKg()? [[10,'5 kg'],[5,'2.5 kg'],[2.5,'1 kg']] : [[10,'10 lb'],[5,'5 lb'],[2.5,'2.5 lb']]).map(z=>'<div class="chip'+((S.jump||5)===z[0]?' on':'')+'" data-jump="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
-      +'</div>'
-      +'<div class="exnote" style="padding:8px 0 0">Rest never drops under 30 seconds. The jump setting matches your gym\u2019s smallest pair of plates \u2014 '+(isKg()? '2.5 kg needs 1.25s, 1 kg needs 0.5s':'5 lb needs 2.5s, 2.5 lb needs microplates')+' \u2014 and every calculated load and warm-up respects it.</div>'
-      +'</div></div>';
+
     try{ h+=coachToggleHTML()+rosterHTML(); }catch(e){ oops('rosterHTML',e); }
-    app.innerHTML=h; wire(); return;
+    app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){} return;
   }
   h+='<div class="'+(isDeload()?'deload':'')+'"><div class="deload-banner">Deload week: 2 sets per exercise, light loads (roughly 40\u201350% \u2014 exact numbers below, already adjusted).</div></div>';
   h+='<div class="sub" style="margin-top:8px">'+d.title+(function(){ var m=sessionMinutes(d); return m? ' \u00b7 about '+m+' min':''; })()+'</div>';
@@ -10917,6 +11212,7 @@ function renderInner(){
     +'<div class="exnote" style="padding:8px 0 0;font-style:normal;line-height:1.7">'+RAMPS[fam]+'</div></details>';
   try{ h+=introHTML(); }catch(e){}
   try{ h+=gradHTML(); }catch(e){}
+  try{ h+=staleBannerHTML(); }catch(e){}
   try{ h+=recoveryNote(); }catch(e){}
   h+='<div class="block rdyblock" style="margin-top:10px"><h3>Readiness \u2014 20 seconds, before the first bar</h3>'
     +'<div class="ed-row"><div class="ed-label">Sleep</div><div class="step"><button data-rdy="sleep" data-d="-1">\u2212</button><div class="val mono">'+((rToday&&S.ready.sleep!=null)?S.ready.sleep:'\u2014')+'h</div><button data-rdy="sleep" data-d="1">+</button></div></div>'
@@ -11143,26 +11439,116 @@ function renderInner(){
         +'</div>' : '')
     +'<input type="file" id="restoreFile" accept=".json,application/json" style="display:none">';
   if(logKeys.length===0) h+='<div class="hint" style="font-size:11px;color:var(--faint);margin-top:6px">No saved sessions yet. Copying a report also saves it automatically.</div>';
-  logKeys.forEach(k=>{
-    const c=logCache[k];
-    // slice the CURRENT prefix, not the base one - otherwise a coached athlete's rows read
-    // "a1x2y:2026-09-01-A-W1B1" with the internal id sitting in the date column
-    const label=k.indexOf(curLOGP())===0 ? k.slice(curLOGP().length) : k.slice(LOGP.length);
-    h+='<div class="logrow lockfree" data-log="'+k+'"><span class="log-date mono">'+label+'</span>'
-      +'<span class="log-meta">'+(c? (c.time||'') : 'tap to view')+'</span>'
-      +'<button class="xbtn'+(armDel==='log:'+k?' armed':'')+'" data-logdel="'+k+'" style="'+(armDel==='log:'+k?'width:auto;padding:0 10px;background:var(--red);color:#fff;border-color:var(--red);':'')+'">'+(armDel==='log:'+k?'Sure?':'\u00d7')+'</button></div>';
-    if(logOpen===k && c){
-      h+='<div class="logview">'+(c.report? c.report.replace(/</g,'&lt;') : 'could not load')+'</div>';
-    }
-  });
+  else h+=logListHTML();
   h+='</div>';
   h+='<div class="rules">One working weight per lift. Warm-ups never near failure. Every set RIR 2, last set RIR 1. '
     +'Hit all reps at target → the card adds +10 barbell / +5 else next time. Bar loads = 45 + tens (no 2.5s in this gym). '
     +'Weight feels wrong? Tap it to adjust, then tag it with the Load? chips — your report feeds the next block.</div>';
   h+=dayUtilHTML();
-  app.innerHTML=h; wire();
+  app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){}
 }
 
+// ===== SAVED SESSIONS, ORGANISED =====
+// A flat list of every session ever is fine for a fortnight and unusable after a year: four
+// sessions a week is two hundred rows and the tab becomes a wall you scroll past. Sessions are
+// grouped by BLOCK, newest first. The block you are training is open; finished blocks collapse
+// to one line each and open on a tap. Nothing is hidden or deleted - it is filed.
+function logMeta(k){
+  var m=k.match(/(\d{4}-\d{2}-\d{2})-([A-Za-z]+)-W(\d+)B(\d+)$/);
+  return m? {date:m[1], code:m[2], week:+m[3], block:+m[4]} : null;
+}
+function logGroups(){
+  var g={}, order=[];
+  (logKeys||[]).forEach(function(k){
+    var mm=logMeta(k); if(!mm) return;
+    if(!g[mm.block]){ g[mm.block]={block:mm.block, keys:[], from:mm.date, to:mm.date}; order.push(mm.block); }
+    var G=g[mm.block]; G.keys.push({k:k, m:mm});
+    if(mm.date<G.from) G.from=mm.date;
+    if(mm.date>G.to) G.to=mm.date;
+  });
+  order.sort(function(a,b){ return b-a; });
+  return order.map(function(b){
+    var G=g[b]; G.keys.sort(function(x,y){ return y.m.date.localeCompare(x.m.date); }); return G;
+  });
+}
+function logRow(k, mm){
+  var c=logCache[k];
+  var when=mm? mm.date : k, what=mm? (' \u00b7 '+mm.code+' \u00b7 wk '+mm.week) : '';
+  return '<div class="logrow lockfree" data-log="'+k+'"><span class="log-date mono">'+when+what+'</span>'
+    +'<span class="log-meta">'+(c? (c.time||'') : 'tap to view')+'</span>'
+    +'<button class="xbtn'+(armDel==='log:'+k?' armed':'')+'" data-logdel="'+k+'" style="'
+    +(armDel==='log:'+k?'width:auto;padding:0 10px;background:var(--red);color:#fff;border-color:var(--red);':'')+'">'
+    +(armDel==='log:'+k?'Sure?':'\u00d7')+'</button></div>'
+    +((logOpen===k && c)? '<div class="logview">'+(c.report? c.report.replace(/</g,'&lt;') : 'could not load')+'</div>' : '');
+}
+// What the logs actually cost, and a way to take an old block off the device without losing
+// it. Archiving downloads the block as a file FIRST, then removes those sessions from storage
+// - never the other way round, and never without the athlete asking twice.
+function logFootprint(){
+  try{
+    var bytes=0, n=0;
+    (logKeys||[]).forEach(function(k){
+      n++;
+      var raw=null;
+      try{ raw=window.localStorage? window.localStorage.getItem('nsc:'+k) : null; }catch(e){}
+      bytes += raw? raw.length : ((logCache[k]&&logCache[k].report)? logCache[k].report.length : 400);
+    });
+    return {n:n, kb:Math.max(1, Math.round(bytes/1024))};
+  }catch(e){ return {n:0, kb:0}; }
+}
+async function logArchiveBlock(b){
+  try{
+    var G=logGroups().filter(function(x){ return x.block===b; })[0];
+    if(!G) return;
+    var out={card:CARD_NAME, archived:new Date().toISOString(), block:b,
+             from:G.from, to:G.to, sessions:[]};
+    for(var i=0;i<G.keys.length;i++){
+      var k=G.keys[i].k, v=null;
+      try{ v=await stGet(k); }catch(e){}
+      out.sessions.push({key:k, data:v||((logCache[k]&&JSON.stringify(logCache[k]))||null)});
+    }
+    // the file lands before anything is removed
+    var blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='deadstop-block'+b+'-'+G.from+'-to-'+G.to+'.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    for(var j=0;j<G.keys.length;j++){ try{ await stDel(G.keys[j].k); }catch(e){} }
+    try{ await refreshLogs(); }catch(e){}
+    S.logArm=null; save(); render();
+    alertToast('Block '+b+' saved to a file and cleared from the card');
+  }catch(e){ oops('logArchive',e); }
+}
+function logListHTML(){
+  try{
+    var groups=logGroups(); if(!groups.length) return '';
+    var cur=cyc();
+    var fp=logFootprint();
+    var out='<div class="log-count">'+fp.n+' saved session'+(fp.n===1?'':'s')
+      +' across '+groups.length+' block'+(groups.length===1?'':'s')
+      +' \u00b7 about '+fp.kb+' KB on this device</div>';
+    groups.forEach(function(G){
+      var open=(S.logGrp===G.block) || (S.logGrp==null && G.block===cur);
+      out+='<div class="log-grp'+(open?' on':'')+'" data-loggrp="'+G.block+'">'
+        +'<span>Block '+G.block+(G.block===cur? ' \u00b7 current':'')+'</span>'
+        +'<span class="log-grp-n">'+G.keys.length+' session'+(G.keys.length===1?'':'s')
+        +' \u00b7 '+G.from+' \u2192 '+G.to+'</span>'
+        +'<span class="log-grp-x">'+(open?'\u2212':'+')+'</span></div>';
+      if(open){
+        G.keys.forEach(function(e){ out+=logRow(e.k, e.m); });
+        if(G.block!==cur){
+          out+= (S.logArm===G.block)
+            ? '<div class="log-arch armed"><b>Download block '+G.block+' and clear it from the card?</b>'
+              +'The file saves first. You can paste it back any time with Restore. '
+              +'<span class="vol-pick" data-logarch="'+G.block+'">Download and clear</span>'
+              +'<span class="vol-pick ghost" data-logunarm="1">cancel</span></div>'
+            : '<div class="log-arch" data-logarm="'+G.block+'">Archive this block \u2192 file</div>';
+        }
+      }
+    });
+    return out;
+  }catch(e){ oops('logList',e); return ''; }
+}
 function weightEditorHTML(i, ex, st){
   if(!st.wopen || (!st.sub && ex.loadNum==null)) return '';
   const stp = wStepDisp(ex.barbell);
@@ -11188,7 +11574,7 @@ function setEditorHTML(i, ex, st){
           +'<div class="val mono" data-edtype="1" role="button" tabindex="0" style="cursor:pointer;text-decoration:underline dotted">'+reps+'</div>'
           +'<button data-e="reps" data-d="'+stp+'">+'+(stp>1?stp:'')+'</button></div></div>'; })())
     +((hEx||isStartMode())? '' : '<div class="ed-row"><div class="ed-label">RIR</div><div class="rirchips">'
-    +[0,1,2,3,4].map(r=>'<button class="rc'+(s.rir===r?' on':'')+'" data-rir="'+r+'">'+r+'</button>').join('')
+    +[0,1,2,3,4].map(r=>'<button class="rc'+(s.rir===r?' on':'')+'" data-rir="'+r+'">'+(r===4?'4+':r)+'</button>').join('')
     +'</div></div>')
     +(function(){ const numeric = st.sub? true : ex.loadNum!=null;
        const wb = st.sub? (st.w!=null? st.w:null) : (numeric? curLoad(ex,st): null);
@@ -12195,7 +12581,14 @@ function recordPerf(){ const d=dayObj(); if(!S.lastPerf) S.lastPerf={};
     const nm=st.sub||ex.name; const numeric=st.sub? true: ex.loadNum!=null;
     const w=st.sub? st.w : (numeric? curLoad(ex,st): null);
     const reps=done.map(s=> s.st==='hit'? defReps(ex): (s.reps!=null? s.reps:'?')).join(',');
-    S.lastPerf[nm]={d:S.when.date, w:(typeof w==='number'? w:null), r:reps}; }); }
+    // Effort was being collected on every set and then discarded at save: lastPerf carried
+    // date, weight and reps, and nothing about how hard any of it was. That made reps-in-
+    // reserve a survey - the card asked, the athlete answered, and the answer never reached
+    // the next prescription. Keep the HARDEST reported set: the easy first set of three says
+    // less about whether the load is right than the one that actually taxed him.
+    var rirs=done.map(function(s){ return s.rir; }).filter(function(v){ return v!=null; });
+    var hardest=rirs.length? Math.min.apply(null, rirs) : null;
+    S.lastPerf[nm]={d:S.when.date, w:(typeof w==='number'? w:null), r:reps, rir:hardest}; }); }
 function holdHTML(i){ const on=holdT&&holdT.i===i;
   var _tg=null; try{ _tg=holdTarget(dayObj().exercises[i]); }catch(e){}
   return '<div class="ed-row" style="padding:0 12px 10px;margin-top:0"><div class="ed-label" style="width:auto">Hold'
