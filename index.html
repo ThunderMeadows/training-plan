@@ -7016,13 +7016,26 @@ function settingsSync(){
 // the highlight worked for chip rows and silently did nothing for the rest. The reason this
 // used to flicker was the <img> preview reloading on each rebuild; that is a cached CSS
 // background now, so there is nothing left to flash. Scroll position is preserved.
+// FLICKER, actual cause: this used to do host.innerHTML=settingsSheetHTML(), which destroys
+// and recreates .hw-wrap and .hw-sheet. Both carry entry animations - hwFade .2s on the wrap,
+// hwUp .28s on the sheet - so every single tap replayed the whole sheet's open animation:
+// fade from transparent, slide up 28px. That is the flicker. It was never the preview image.
+// Only the BODY is rebuilt now. Rebuilding the body from state is still the right call - every
+// control computes its selected look from S when it is built, so this is correct for chip rows
+// and for every other control shape alike. Nothing inside .set-body animates on create, and the
+// wrap and sheet elements are never touched, so there is nothing left to replay.
+function settingsBodyFull(){
+  return (function(){ try{ return settingsBodyHTML(); }catch(e){ oops('settingsBody',e); return ''; } })()
+    +'<div class="daybtn lockfree" data-setclose="1" style="margin-top:14px">Done</div>';
+}
 function settingsRefresh(){
   try{
     var host=document.getElementById('setHost'); if(!host) return;
     var body=host.querySelector('.set-body');
-    var top=body? body.scrollTop : 0;
-    host.innerHTML=settingsSheetHTML();
-    var b2=host.querySelector('.set-body'); if(b2) b2.scrollTop=top;
+    if(!body){ host.innerHTML=settingsSheetHTML(); settingsWire(); try{ gbApplyFlavour(); }catch(e){} return; }
+    var top=body.scrollTop;
+    body.innerHTML=settingsBodyFull();
+    body.scrollTop=top;
     settingsWire();
     try{ gbApplyFlavour(); }catch(e){}
   }catch(e){ oops('settingsRefresh',e); }
@@ -7031,8 +7044,11 @@ function settingsWire(){
   try{
     document.querySelectorAll('#setHost [data-setclose]').forEach(function(b){
       b.onclick=function(ev){
-        if(ev && ev.target && ev.target.closest && ev.target.closest('[data-setstop]')
-           && !(ev.target.getAttribute && ev.target.getAttribute('data-setclose'))) return;
+        // same rule as wire()'s copy: identity, not ancestry - see the note there
+        var t=ev && ev.target;
+        var isCloser = !!(t && t.getAttribute && t.getAttribute('data-setclose'));
+        var isBackdrop = (t===b) || !!(t && t.classList && t.classList.contains('hw-wrap'));
+        if(!isCloser && !isBackdrop) return;
         SET_OPEN=false; settingsSync(); render(); };
     });
     // drag the grip down to close, the way the sheet's own handle implies it should
@@ -7067,22 +7083,43 @@ function settingsWire(){
     try{ wire(); }catch(e){}
     // every settings control updates the SHEET in place, never the whole app
     document.querySelectorAll('#setHost [data-gbflav]').forEach(function(b){
-      b.onclick=function(){ S.gbFlav=b.dataset.gbflav; save(); settingsRefresh(); };
+      b.onclick=function(ev){ if(ev && ev.stopPropagation) ev.stopPropagation();
+        S.gbFlav=b.dataset.gbflav; save(); settingsRefresh(); };
     });
-    ['data-radj','data-snd','data-tone','data-brth','data-kaon','data-jump','data-thm','data-fnt','data-fsz','data-coachtx','data-unit','data-wl']
-      .forEach(function(attr){
-        document.querySelectorAll('#setHost ['+attr+']').forEach(function(b){
-          var prev=b.onclick;
-          b.onclick=function(ev){
-            // the original handler ends in render(); suppress that while the sheet is up so
-            // the app underneath is not rebuilt on every tap
-            SET_BUSY=true;
-            if(prev) try{ prev.call(b,ev); }catch(e){}
-            SET_BUSY=false;
-            settingsRefresh();                  // redraw the body from state
-          };
-        });
-      });
+    // HIGHLIGHT, actual cause: this was a hand-written list of attribute names and it had
+    // drifted out of step with the markup. Four names in it - data-fsz, data-coachtx,
+    // data-unit, data-wl - match no control in the sheet at all (data-wl is a history chart
+    // element elsewhere in the app), while the two real controls named data-tsz (Text size)
+    // and data-uimode (Coaching text) were missing. Those two changed S and saved, but never
+    // reached settingsRefresh, so their chip never moved - and because SET_BUSY stayed false
+    // their render() ran in full, rebuilding the entire app behind a sheet nobody can see
+    // through. Text size and Coaching text were the two dead-looking buttons.
+    //
+    // The list is now derived from the sheet itself rather than remembered by hand, so a
+    // control added to settingsBodyHTML later is picked up automatically instead of silently
+    // failing to highlight. Excluded: the close targets, the data buttons (they open pickers
+    // and manage their own redraw), and data-gbflav, wired above.
+    var SET_SKIP='[data-setclose],[data-setstop],#backupBtn,#restoreBtn,#restorePasteBtn,#reportBtn,#restoreFile,[data-gbflav],.hw-grip';
+    document.querySelectorAll('#setHost .set-body *').forEach(function(b){
+      if(!b.onclick) return;                       // only controls wire() actually bound
+      // NB: only the element ITSELF is checked. The sheet's own wrapper carries
+      // data-setclose, so an ancestor test here would exclude every control in the sheet.
+      if(b.matches && b.matches(SET_SKIP)) return;
+      if(b.__setWrapped) return;                   // never double-wrap
+      var prev=b.onclick;
+      b.__setWrapped=1;
+      b.onclick=function(ev){
+        // A tap on a control is not a tap on the backdrop. Stop it here so it can never reach
+        // the wrapper's close handler - belt and braces alongside the identity check there.
+        if(ev && ev.stopPropagation) ev.stopPropagation();
+        // the original handler ends in render(); suppress that while the sheet is up so
+        // the app underneath is not rebuilt on every tap
+        SET_BUSY=true;
+        if(prev) try{ prev.call(b,ev); }catch(e){}
+        SET_BUSY=false;
+        settingsRefresh();                  // redraw the body from state
+      };
+    });
   }catch(e){ oops('settingsWire',e); }
 }
 function settingsSheetHTML(){
@@ -7095,8 +7132,7 @@ function settingsSheetHTML(){
        +'<button class="set-x" data-setclose="1" aria-label="Close settings">\u00d7</button></div>'
      +'</div>'
      +'<div class="set-body">'
-       +(function(){ try{ return settingsBodyHTML(); }catch(e){ oops('settingsBody',e); return ''; } })()
-       +'<div class="daybtn lockfree" data-setclose="1" style="margin-top:14px">Done</div>'
+       +settingsBodyFull()
      +'</div>'
    +'</div></div>';
 }
@@ -7324,12 +7360,12 @@ function gbDock(){
 // loses nothing - it is the same image, lit differently. Same trick as the apparel flavours,
 // so the shirt and the app agree.
 var GB_FLAV=[
-  {id:'amber',     n:'Amber',     f:'none',                                   sw:'#E0A94C'},
-  {id:'cherry',    n:'Cherry',    f:'hue-rotate(-38deg) saturate(1.15)',      sw:'#E04A3C'},
-  {id:'lime',      n:'Lime',      f:'hue-rotate(72deg) saturate(1.05)',       sw:'#7BC94A'},
-  {id:'raspberry', n:'Raspberry', f:'hue-rotate(178deg) saturate(1.05)',      sw:'#3FA9E0'},
-  {id:'grape',     n:'Grape',     f:'hue-rotate(250deg) saturate(1.05)',      sw:'#B45CD8'},
-  {id:'clear',     n:'Clear',     f:'saturate(0.12) brightness(1.10)',        sw:'#E8E4DA'}
+  {id:'amber',     n:'Mango',          f:'none',                              sw:'#E0A94C'},
+  {id:'cherry',    n:'Cherry',         f:'hue-rotate(-38deg) saturate(1.15)', sw:'#E04A3C'},
+  {id:'lime',      n:'Lime',           f:'hue-rotate(72deg) saturate(1.05)',  sw:'#7BC94A'},
+  {id:'raspberry', n:'Blue Raspberry', f:'hue-rotate(178deg) saturate(1.05)', sw:'#3FA9E0'},
+  {id:'grape',     n:'Grape',          f:'hue-rotate(250deg) saturate(1.05)', sw:'#B45CD8'},
+  {id:'clear',     n:'Pineapple',      f:'saturate(0.12) brightness(1.10)',   sw:'#E8E4DA'}
 ];
 function gbFlavour(){
   try{
@@ -8878,10 +8914,27 @@ function wirePlan(){
     el.addEventListener('click',function(ev){ ev.preventDefault(); ev.stopPropagation();
       SET_OPEN=true; try{ settingsSync(); }catch(e){} }); });
   q('[data-setclose]',function(el){ el.onclick=function(ev){
-    // only the backdrop and the Done button close it - a tap on a control inside must not
-    if(ev && ev.target && ev.target.closest && ev.target.closest('[data-setstop]')
-       && !(ev.target.getAttribute && ev.target.getAttribute('data-setclose'))) return;
-    SET_OPEN=false; render(); }; });
+    // Only the backdrop itself and an element explicitly marked data-setclose may close the
+    // sheet. This used to ask whether the tapped element sat inside [data-setstop], which
+    // broke the moment a control redrew the sheet: settingsRefresh() replaces .set-body
+    // synchronously while the click is still bubbling, so by the time the event reached this
+    // handler the tapped chip was already DETACHED from the document. closest() on a detached
+    // node walks an orphaned tree and returns null, the guard read that as "not inside the
+    // sheet", and every settings tap closed the page. Asking what the target IS, rather than
+    // where it sits, cannot be invalidated by a redraw mid-dispatch.
+    var __t = ev && ev.target;
+    var __isCloser = !!(__t && __t.getAttribute && __t.getAttribute('data-setclose'));
+    var __isBackdrop = (__t === el) || !!(__t && __t.classList && __t.classList.contains('hw-wrap'));
+    if(!__isCloser && !__isBackdrop) return;
+    // Tear the sheet down HERE rather than relying on render() to do it. renderInner() has
+    // three screens that return early - coach idle, onboarding and Start mode - and none of
+    // them reach settingsSync(), so on those screens Done, the X and the backdrop all set
+    // SET_OPEN=false and left the sheet sitting on top of the app: a trapped overlay. The
+    // gear does not render on those screens today, so it is not reachable yet, but the close
+    // path should not depend on which screen render() happens to take.
+    // NOTE: this handler is bound by wire(), which settingsWire() calls AFTER binding its own
+    // copy - so wire()'s version is the one that survives. It has to be the correct one.
+    SET_OPEN=false; try{ settingsSync(); }catch(e){} render(); }; });
   q('[data-gbflav]',function(el){ el.onclick=function(){
     S.gbFlav=el.dataset.gbflav; save(); try{ gbApplyFlavour(); }catch(e){} render(); }; });
   q('[data-staleuse]',function(el){ el.onclick=function(){ try{ location.reload(); }catch(e){} }; });
@@ -9596,7 +9649,7 @@ function wireFocus(){
 var PLAN = {"block": "Starter Block - Full Body Strength", "start": "2026-08-16", "weeks": 6, "maxes": {"bench": 210.0, "ohp": 105.0, "squat": 220.0, "dead": 250.0}, "days": [{"code": "A", "title": "Push - Heavy", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "5", "load": "165", "loadNum": 165.0, "rir": "2, last set 1", "note": "78% of a 210 programming max", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [235, 235, 245, 245, 255, 135], "maxKey": "bench", "pct": [0.78333, 0.78333, 0.81667, 0.81667, 0.85, 0.45]}, {"name": "Overhead Press", "sets": 3, "reps": "8", "load": "75", "loadNum": 75.0, "rir": "2", "note": "Barbell - your other lagging lift. W1-2: eights. W3-4: ride reps to 9-10 at 75. W5: 80.", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [105, 105, 105, 105, 115, 55], "maxKey": "ohp", "pct": [0.7, 0.7, 0.7, 0.7, 0.76667, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Strict. No swinging.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Rope Pushdowns", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Straight-Bar Pushdown", "Overhead Rope Extension", "Bench Dips"], "cue": "Pin the elbows, split the rope at the bottom.", "wk": [30, 30, 35, 35, 40, 20], "maxKey": null, "pct": null}]}, {"code": "B", "title": "Pull - Heavy", "exercises": [{"name": "Cable Rows", "sets": 4, "reps": "8", "load": "100", "loadNum": 100.0, "rir": "2, last set 1", "note": "Pause a beat at the squeeze.", "perHand": false, "barbell": false, "deload": 60, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [140, 140, 150, 150, 160, 85], "maxKey": null, "pct": null}, {"name": "Lat Pulldown", "sets": 4, "reps": "8", "load": "90", "loadNum": 90.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 55, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [130, 130, 140, 140, 150, 80], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [65, 65, 70, 70, 75, 40], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "Fixed bars in 10s, no 55. Double progression: ride reps 8->10 at 60, then jump to 70.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [60, 60, 60, 70, 70, 35], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "10", "load": "45", "loadNum": 45.0, "rir": "1", "note": "35 broke form when pre-fatigued; start 30.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Replaces preacher - trains the biceps at full stretch (elbow behind the torso), works identically at both your gyms, and kills the PF-machine anchor problem. Start 20s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 2, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "C", "title": "Legs - Squat Priority", "exercises": [{"name": "Back Squat", "sets": 4, "reps": "5", "load": "170", "loadNum": 170.0, "rir": "2, last set 1", "note": "78% of 220. All four sets at 170 - do not climb.", "perHand": false, "barbell": true, "deload": 100, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [245, 245, 255, 265, 275, 145], "maxKey": "squat", "pct": [0.77778, 0.77778, 0.80952, 0.84127, 0.87302, 0.46032]}, {"name": "Leg Press", "sets": 3, "reps": "12", "load": "125", "loadNum": 125.0, "rir": "2", "note": "Extra quad volume for the lagging lift. Log your starting weight. Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 75, "rest": "2:00", "warmup": "", "subs": ["Hack Squat", "Bulgarian Split Squat", "Goblet Squat"], "cue": "Whole foot pressing, knees track the toes, never slam lockout.", "wk": [180, 190, 200, 210, 220, 110], "maxKey": null, "pct": null}, {"name": "Romanian Deadlift", "sets": 3, "reps": "8", "load": "135", "loadNum": 135.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "", "subs": ["DB Romanian Deadlift", "Good Morning", "Back Extension"], "cue": "Hips back until the hamstrings scream, bar drags the thighs.", "wk": [195, 205, 215, 225, 235, 115], "maxKey": null, "pct": null}, {"name": "Walking Lunges", "sets": 3, "reps": "10 per leg", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Bulgarian Split Squat", "Reverse Lunges", "Step-Ups"], "cue": "Long step, back knee straight down, drive through the front heel.", "wk": [35, 35, 40, 40, 45, 20], "maxKey": null, "pct": null}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Replaces hip thrust - glutes already get squat, leg press, RDL and lunges on this day, while hamstrings had only one direct slot all week. Seated for the lengthened position. Dial to RIR 1.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 4, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "10-15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "D", "title": "Push - Volume", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "10", "load": "145", "loadNum": 145.0, "rir": "2, last set 1", "note": "68% of 210", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [205, 205, 215, 215, 225, 115], "maxKey": "bench", "pct": [0.68333, 0.68333, 0.71667, 0.71667, 0.75, 0.38333]}, {"name": "Overhead Press", "sets": 3, "reps": "10", "load": "65", "loadNum": 65.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [95, 95, 95, 105, 105, 55], "maxKey": "ohp", "pct": [0.63333, 0.63333, 0.63333, 0.7, 0.7, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [55, 55, 60, 60, 65, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 4, "reps": "15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Overhead Rope Extension", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Upgraded from pushdowns on this day - overhead position grows the long head substantially more (Maeo 2023). Start 25 and dial to RIR 1; it will feel much lighter than pushdowns.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Elbows by your ears, full stretch behind the head, squeeze to lockout.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "E", "title": "Pull - Volume", "exercises": [{"name": "Lat Pulldown", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Cable Rows", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Fixed from 57.5 - stacks move in 5s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [50, 50, 50, 60, 60, 30], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Volume-day partner to Day B - lengthened-position biceps work. Start 15s, chase the stretch not the weight.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 2, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "F", "title": "Legs - Deadlift Focus", "exercises": [{"name": "Conventional Deadlift", "sets": 3, "reps": "6", "load": "165", "loadNum": 165.0, "rir": "3-4", "note": "65% of 250, deliberately easy. W1-2 groove the pattern at 165, then 180 / 190 / 200.", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "95 x5, 130 x3, 150 x1", "subs": ["Trap Bar Deadlift", "Rack Pull", "DB Romanian Deadlift"], "cue": "Wedge in, pull the slack out, push the floor away.", "wk": [235, 235, 255, 275, 285, 135], "maxKey": "dead", "pct": [0.65278, 0.65278, 0.70833, 0.76389, 0.79167, 0.375]}, {"name": "Back Squat", "sets": 3, "reps": "10", "load": "150", "loadNum": 150.0, "rir": "2", "note": "68% of 220. Second squat exposure - skill practice for the weak lift.", "perHand": false, "barbell": true, "deload": 90, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [215, 215, 225, 225, 235, 125], "maxKey": "squat", "pct": [0.68254, 0.68254, 0.71429, 0.71429, 0.74603, 0.39683]}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Seated beats lying for hamstring growth - hip flexed puts the hamstrings at length (Maeo 2021, +14 vs +9 percent). 70 is a guess anchor - dial to RIR 1 first session.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 4, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}, {"name": "Plank", "sets": 3, "reps": "max hold", "load": "bodyweight", "loadNum": null, "rir": "", "note": "You are tested on a max plank every six months and were training it zero times a week. Log the hold time in reps as seconds if you want it tracked.", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": [], "cue": "Squeeze glutes, ribs down, one straight line - the shake is the work.", "wk": null, "maxKey": null, "pct": null}]}], "builtOn": "2026-08-16", "v": 18};
 var PLAN_DEFAULT=null; try{ PLAN_DEFAULT=JSON.parse(JSON.stringify(PLAN)); }catch(e){}
 const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
-const BUILD = 'c64';
+const BUILD = 'c68';
 const CARD_NAME = 'DEADSTOP · TRAINING CARD';   // names bug reports and the share sheet
 // Filled in by the batch generator when a card is produced for a named person. Null on the
 // generic build, in which case nothing below it runs and the card onboards the user normally.
