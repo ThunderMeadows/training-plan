@@ -223,6 +223,14 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
   color:var(--bg);border-radius:var(--r-sm);padding:13px 18px;font-size:14px;font-weight:700;opacity:0;
   transition:opacity .2s;pointer-events:none;z-index:70;box-shadow:var(--shadow);}
 .toast.show{opacity:1;}
+/* An actionable toast. The plain one is pointer-events:none by design - it is a notice, not a
+   control - so an Undo has to opt back in. */
+.toast.act{pointer-events:auto;display:flex;align-items:center;gap:14px;}
+.toast-undo{background:var(--bg);color:var(--chalk);border:0;border-radius:8px;padding:7px 13px;
+  font-weight:800;font-size:13px;letter-spacing:.04em;}
+/* the weight under the glowing set: a tap target of its own, so adjusting never means logging */
+.setwadj{font-size:10px;font-weight:800;color:var(--amber);margin-top:2px;padding-top:1px;
+  border-top:1px dashed currentColor;}
 
 /* ---------- THE REST SCREEN takes the whole display ---------- */
 .restchip{position:fixed;inset:0;z-index:65;background:var(--amber);color:var(--amber-ink);
@@ -845,6 +853,9 @@ td.c-n.now{font-weight:700;}
 .rest-lw small{font-size:13px;font-weight:700;opacity:.8;margin-left:4px;}
 .rest-plates{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:6px;opacity:.95;}
 .rest-cue{font-size:11px;font-style:italic;opacity:.8;margin-top:8px;line-height:1.45;max-width:300px;margin-left:auto;margin-right:auto;}
+.rest-extrow{display:flex;align-items:center;justify-content:center;gap:10px;margin:12px auto 2px;}
+.rest-extrow .rest-ext{margin:0;min-width:74px;text-align:center;}
+.rest-extlb{font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--amber);white-space:nowrap;}
 .rest-ext{display:block;margin:12px auto 2px;padding:9px 18px;border:2px solid currentColor;border-radius:11px;
   background:transparent;color:inherit;font-family:inherit;font-size:12.5px;font-weight:800;
   white-space:nowrap;cursor:pointer;}
@@ -5477,6 +5488,7 @@ function restLogNext(b){
   if(tgt.kind==='set'){
     // identical to tapping that set's button once: mark hit, stamp the time — the new rest starts itself
     const s=tgt.st.sets[tgt.j];
+    stampPerf((typeof effDay==='function'? effDay():dayObj()).exercises[tgt.i], tgt.st, s);
     s.st='hit'; s.reps=null; s.rir=null; s.t=Date.now(); tgt.st.open=-1; tgt.st.wopen=false;
     if(tgt.i!==focusIdx()) S.focus=tgt.i; // superset partner or continued exercise — keep the card in step
     save(); render(); return;
@@ -5493,6 +5505,22 @@ function restLogNext(b){
 }
 // The next set, fully loaded: the weight and the exact plates, so the bar gets loaded DURING
 // the rest instead of after leaving the screen. Plus the cue - between-sets rehearsal.
+// A tap that cannot be taken back is a hazard mid-session. +30s only ever added: bump it by
+// accident and the rest was permanently longer, repeated bumps compounded, and nothing on the
+// screen even said by how much. Field-caught. Now the extension is visible and the same step
+// is available in reverse. Clamped at zero on purpose - this can undo what was added and no
+// more. Letting it run negative would cut the prescribed rest short, which is the same bug
+// pointed the other way and worse, because a short rest changes the set that follows.
+function restExtRow(b){
+  var add=0;
+  try{ if(S.restExt && b && S.restExt.t===b.t) add=+S.restExt.add||0; }catch(e){}
+  if(!(add>0)) return '<button class="rest-ext" data-restext="30">+30s this rest</button>';
+  return '<div class="rest-extrow">'
+    +'<button class="rest-ext" data-restext="-30" aria-label="Take back 30 seconds">\u221230s</button>'
+    +'<span class="rest-extlb">+'+add+'s added</span>'
+    +'<button class="rest-ext" data-restext="30" aria-label="Add 30 seconds">+30s</button>'
+  +'</div>';
+}
 function restNextLoaded(b){
   try{
     var tgt=restNextTarget(b);
@@ -5500,7 +5528,10 @@ function restNextLoaded(b){
     var d2=(typeof effDay==='function')? effDay():dayObj();
     var ex=d2.exercises[tgt.i]; if(!ex) return '';
     var st=tgt.st||exState(tgt.i,ex);
+    // the weight this SET will be done at: its own override if the athlete set one, else plan
+    var ns0=(st&&st.sets)? st.sets[tgt.j] : null;
     var w=(st&&st.sub)? st.w : (ex.loadNum!=null? curLoad(ex,st) : null);
+    if(ns0 && ns0.w!=null) w=ns0.w;
     var h2='<div class="rest-loaded">';
     if(w!=null){
       // Too light or too heavy last set? Fix it HERE - tap the weight, step it, keep resting.
@@ -5653,7 +5684,7 @@ function restBody(b,e,go){
    +'<div class="rest-cap">'+(go? '+'+over+' past the bell \u00b7 rested '+fmtDur(e)+' total':'REST \u00b7 '+fmtDur(b.target*1000)+' prescribed'+restWhy(b))+'</div>'
    +'<div class="rest-next">'+restNextInfo(b,true)+'</div>'
    +restNextLoaded(b)
-   +(go? '' : '<button class="rest-ext" data-restext="30">+30s this rest</button>')
+   +(go? '' : restExtRow(b))
    +((S.breathe&&!go)? breathRing() : '');
   if(r && isHoldEx(r.ex)){
     // a hold's number is SECONDS - the rest screen speaks its language: no reps, no RIR,
@@ -5779,12 +5810,22 @@ function wireRest(){
     var t=ev.target, hit=function(a){ return t.closest? t.closest('['+a+']') : null; };
     var n;
     if((n=hit('data-rwe'))){
+      // This used to write st.w, the exercise-level override - which IS the day's prescription.
+      // Nudging the bar between sets therefore rewrote what the card said to lift today, for
+      // every remaining set and for the sets already banked. The prescription is the plan; the
+      // athlete does not get to edit it. What they do get to record is the weight they
+      // ACTUALLY put on the bar for this set, which is s.w - the same field the set editor
+      // has always written, and the one e1RM and the session export already read.
       try{ var tg=restNextTarget(b);
         if(tg && tg.kind==='set'){ var d3=(typeof effDay==='function')? effDay():dayObj();
           var ex3=d3.exercises[tg.i], st3=tg.st||exState(tg.i,ex3);
+          var ns3=st3.sets[tg.j]; if(!ns3) return;
           var stp3=wStepLb(ex3.barbell);
-          var base3=(st3&&st3.sub)? (st3.w!=null? st3.w:50) : curLoad(ex3,st3);
-          st3.w=Math.max(0, base3+(+n.dataset.rwe)*stp3); save(); paintRest(true); } }catch(e){}
+          var plan3=(st3&&st3.sub)? (st3.w!=null? st3.w:50) : curLoad(ex3,st3);
+          var base3=(ns3.w!=null)? ns3.w : plan3;
+          ns3.w=Math.max(0, base3+(+n.dataset.rwe)*stp3);
+          if(ns3.w===plan3) delete ns3.w;      // back on plan means no override at all
+          save(); paintRest(true); } }catch(e){}
       return; }
     if(hit('data-rwadj')){ restWOpen=!restWOpen; paintRest(true); return; }
     if(hit('data-reptype')){ restTypeReps(b); return; }
@@ -5817,7 +5858,7 @@ function wireRest(){
       // taps don't fire these anymore - holds do. A click right after a completed hold is
       // the pointer sequence finishing; anything else gets one gentle hint.
       if(Date.now()-holdFired<600) return;
-      if(!holdHinted){ holdHinted=true; alertToast('Hold the button \u2014 quick taps are ignored on purpose'); }
+      if(!holdHinted){ holdHinted=true; alertToast('Hold the button \u2014 quick taps are ignored on purpose', 3500); }
       return; }
     if(hit('data-restmin')){ S.restMin=b.t; save(); paintRest(true); return; }
 
@@ -6114,7 +6155,7 @@ function rosterWire(){
       var a=rosterAthlete(el.dataset.rosrm); if(!a) return;
       if(S.rosConfirm===el.dataset.rosrm){ rosterRemove(el.dataset.rosrm); S.rosConfirm=null; save(); render(); }
       else { S.rosConfirm=el.dataset.rosrm; save(); render();
-             alertToast('Tap \u00d7 again to take '+a.name+' off the roster'); }
+             alertToast('Tap \u00d7 again to take '+a.name+' off the roster', 4000); }   // matches arm()
     };
   });
   var add=document.getElementById('rosAdd');
@@ -6936,9 +6977,6 @@ function settingsBodyHTML(){
             +'style="background-image:url('+((GB_IMG.front&&GB_IMG.front.u)||'')+');filter:'
             +(gbFlavour().f==='none'?'none':gbFlavour().f)+'"></span>'
             +'<span class="gb-prev-lb">'+esc(gbFlavour().n)+'</span></div>'
-          // DIAGNOSTIC (c73 only): reports what the bear's filter actually IS on this device,
-          // written by gbApplyFlavour after it applies. Remove once the cause is known.
-          +'<div class="cue" id="gbDiag" style="padding:0 0 8px;color:var(--amber);font-size:11px;word-break:break-all">diag: waiting\u2026</div>'
           +'<div class="chiprow" style="flex-wrap:wrap;gap:6px">'
           +GB_FLAV.map(function(z){ return '<div class="chip gbchip'+((S.gbFlav||'amber')===z.id?' on':'')
             +'" data-gbflav="'+z.id+'" style="flex:1 1 30%;min-width:92px;font-size:12px;padding:9px 6px">'
@@ -6970,6 +7008,16 @@ function settingsBodyHTML(){
     +'<div class="savelog lockfree" id="restoreBtn">Restore from backup</div>'
     +'<div class="savelog lockfree" id="restorePasteBtn">Paste a backup</div>'
     +'<div class="savelog lockfree" id="reportBtn">Report a problem or ask a question</div>'
+    +(function(){
+        var a=rescueAge();
+        if(a==null || a>30*86400000) return '';   // older than a month is noise, not a rescue
+        var d=new Date(RESCUE.t);
+        var when=d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' at '
+               +d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+        return '<div class="savelog lockfree" id="rescueBtn" style="border-color:var(--amber);color:var(--amber)">'
+          +'Put back what was here before the last restore</div>'
+          +'<div class="cue" style="padding:4px 0 0">Saved automatically just before you restored, on '+when+'.</div>';
+      })()
     +(ERR_LOG.length? '<div class="cue" style="margin-top:10px;color:var(--amber)">'
         +'Recent problems ('+ERR_LOG.length+'): '
         +esc(ERR_LOG.slice(-3).map(function(x){ return x.where+' \u2014 '+x.msg; }).join(' \u00b7 '))
@@ -7394,29 +7442,21 @@ var GB_SHADOW='drop-shadow(0 7px 15px rgba(0,0,0,.45))';
 function gbApplyFlavour(){
   try{
     var h=document.getElementById('gbHost'); if(!h) return;
-    // Always ASSIGN a value, never remove one. Amber has no tint, so this used to clear the
-    // inline filter and let the css drop-shadow take over - correct on paper, but #gbHost is
-    // promoted to its own compositing layer by will-change:transform, and dropping the
-    // property there does not reliably force a repaint on iOS. Every other flavour assigns a
-    // value and repaints instantly; Amber alone removed one and the old tint stayed on screen
-    // until the next launch. Composing the shadow in for both branches keeps the change a
-    // value-to-value transition, which the compositor does honour.
+    // Always assign a value rather than removing the property, and keep the shadow composed in
+    // so a tint never wipes it. Neither of those was the cause of the bear not changing on the
+    // spot - see the note below the assignment for what actually was - but both are correct
+    // and worth keeping.
     var f=gbFlavour().f;
     h.style.filter=(f&&f!=='none'? f+' ' : '')+GB_SHADOW;
-    // DIAGNOSTIC (c73 only)
-    try{
-      var d=document.getElementById('gbDiag');
-      if(d){
-        var cs=''; try{ cs=window.getComputedStyle(h).filter||'(empty)'; }catch(e2){ cs='(getComputedStyle threw)'; }
-        var r={}; try{ r=h.getBoundingClientRect(); }catch(e3){}
-        d.textContent='diag  id='+(S.gbFlav||'(unset)')
-          +'  hosts='+document.querySelectorAll('#gbHost').length
-          +'  cls='+(h.className||'(none)')
-          +'  box='+Math.round(r.width||0)+'x'+Math.round(r.height||0)
-          +'  inline='+(h.style.filter||'(EMPTY)')
-          +'  computed='+cs;
-      }
-    }catch(e){}
+    // DO NOT REMOVE, and do not "tidy" these two reads away - they are the fix, not debris.
+    // #gbHost is promoted to its own compositing layer by will-change:transform. Writing
+    // filter marks it dirty but the repaint stays QUEUED: on iOS the layer kept its previous
+    // paint until something else forced a flush - a relaunch, or dragging the bear. So the
+    // colour was always correct in the DOM and simply not on screen. Reading a computed style
+    // and a layout box forces that flush synchronously, which is what actually puts the new
+    // colour on the bear. This was found by accident: a diagnostic readout that called these
+    // two methods made the bug disappear.
+    try{ void window.getComputedStyle(h).filter; void h.getBoundingClientRect(); }catch(e){}
   }catch(e){}
 }
 function gbLayers(){
@@ -7849,6 +7889,7 @@ function startWire(){
     S.stHeld=false;
     var i=+el.dataset.stdone, ex=startDay().exercises[i], st=exState(i,ex);
     for(var j=0;j<st.sets.length;j++){ if(st.sets[j].st==='pend'){
+      stampPerf(ex, st, st.sets[j]);
       st.sets[j].st='hit'; st.sets[j].t=Date.now(); try{ tw().sets++; }catch(e){} break; } }
     save(); render();
   });
@@ -7883,7 +7924,7 @@ function startWire(){
   q('[data-gradgo]', function(){
     try{
       if(!S.gradConfirm){ S.gradConfirm=true; save(); render();
-        alertToast('Full setup takes about two minutes \u2014 tap again to start'); return; }
+        alertToast('Full setup takes about two minutes \u2014 tap again to start', 6000); return; }
       S.gradConfirm=false;
       var o=ONB(); o.mode='full'; o.step=0; o.done=false; S.mode='full'; S.gradAck=true; save(); render();
     }catch(e){}
@@ -8149,7 +8190,7 @@ function wireOrder(){
   q('[data-rtdown]',function(el){ el.onclick=function(){ moveInDay(el.dataset.rtc,+el.dataset.rtdown,+el.dataset.rtdown+1); }; });
   q('[data-rtkill]',function(el){ el.onclick=function(){
     var c=el.dataset.rtc, n=el.dataset.rtkill, k='kill:'+c+':'+n;
-    if(armDel!==k){ arm(k); alertToast('Tap again to delete '+n); return; }
+    if(armDel!==k){ arm(k); alertToast('Tap again to delete '+n, 4000); return; }   // matches arm()
     armDel=null; deleteAdded(c,n); }; });
   q('[data-rtswap]',function(el){ el.onclick=function(){ S.swapFor={code:el.dataset.rtc,name:el.dataset.rtswap}; S.swapQ=''; save(); render(); }; });
   q('[data-swcancel]',function(el){ el.onclick=function(){ S.swapFor=null; save(); render(); }; });
@@ -9687,7 +9728,7 @@ function wireFocus(){
 var PLAN = {"block": "Starter Block - Full Body Strength", "start": "2026-08-16", "weeks": 6, "maxes": {"bench": 210.0, "ohp": 105.0, "squat": 220.0, "dead": 250.0}, "days": [{"code": "A", "title": "Push - Heavy", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "5", "load": "165", "loadNum": 165.0, "rir": "2, last set 1", "note": "78% of a 210 programming max", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [235, 235, 245, 245, 255, 135], "maxKey": "bench", "pct": [0.78333, 0.78333, 0.81667, 0.81667, 0.85, 0.45]}, {"name": "Overhead Press", "sets": 3, "reps": "8", "load": "75", "loadNum": 75.0, "rir": "2", "note": "Barbell - your other lagging lift. W1-2: eights. W3-4: ride reps to 9-10 at 75. W5: 80.", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [105, 105, 105, 105, 115, 55], "maxKey": "ohp", "pct": [0.7, 0.7, 0.7, 0.7, 0.76667, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Strict. No swinging.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Rope Pushdowns", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Straight-Bar Pushdown", "Overhead Rope Extension", "Bench Dips"], "cue": "Pin the elbows, split the rope at the bottom.", "wk": [30, 30, 35, 35, 40, 20], "maxKey": null, "pct": null}]}, {"code": "B", "title": "Pull - Heavy", "exercises": [{"name": "Cable Rows", "sets": 4, "reps": "8", "load": "100", "loadNum": 100.0, "rir": "2, last set 1", "note": "Pause a beat at the squeeze.", "perHand": false, "barbell": false, "deload": 60, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [140, 140, 150, 150, 160, 85], "maxKey": null, "pct": null}, {"name": "Lat Pulldown", "sets": 4, "reps": "8", "load": "90", "loadNum": 90.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 55, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [130, 130, 140, 140, 150, 80], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [65, 65, 70, 70, 75, 40], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "Fixed bars in 10s, no 55. Double progression: ride reps 8->10 at 60, then jump to 70.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [60, 60, 60, 70, 70, 35], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "10", "load": "45", "loadNum": 45.0, "rir": "1", "note": "35 broke form when pre-fatigued; start 30.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Replaces preacher - trains the biceps at full stretch (elbow behind the torso), works identically at both your gyms, and kills the PF-machine anchor problem. Start 20s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 2, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "C", "title": "Legs - Squat Priority", "exercises": [{"name": "Back Squat", "sets": 4, "reps": "5", "load": "170", "loadNum": 170.0, "rir": "2, last set 1", "note": "78% of 220. All four sets at 170 - do not climb.", "perHand": false, "barbell": true, "deload": 100, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [245, 245, 255, 265, 275, 145], "maxKey": "squat", "pct": [0.77778, 0.77778, 0.80952, 0.84127, 0.87302, 0.46032]}, {"name": "Leg Press", "sets": 3, "reps": "12", "load": "125", "loadNum": 125.0, "rir": "2", "note": "Extra quad volume for the lagging lift. Log your starting weight. Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 75, "rest": "2:00", "warmup": "", "subs": ["Hack Squat", "Bulgarian Split Squat", "Goblet Squat"], "cue": "Whole foot pressing, knees track the toes, never slam lockout.", "wk": [180, 190, 200, 210, 220, 110], "maxKey": null, "pct": null}, {"name": "Romanian Deadlift", "sets": 3, "reps": "8", "load": "135", "loadNum": 135.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "", "subs": ["DB Romanian Deadlift", "Good Morning", "Back Extension"], "cue": "Hips back until the hamstrings scream, bar drags the thighs.", "wk": [195, 205, 215, 225, 235, 115], "maxKey": null, "pct": null}, {"name": "Walking Lunges", "sets": 3, "reps": "10 per leg", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Bulgarian Split Squat", "Reverse Lunges", "Step-Ups"], "cue": "Long step, back knee straight down, drive through the front heel.", "wk": [35, 35, 40, 40, 45, 20], "maxKey": null, "pct": null}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Replaces hip thrust - glutes already get squat, leg press, RDL and lunges on this day, while hamstrings had only one direct slot all week. Seated for the lengthened position. Dial to RIR 1.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 4, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "10-15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "D", "title": "Push - Volume", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "10", "load": "145", "loadNum": 145.0, "rir": "2, last set 1", "note": "68% of 210", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [205, 205, 215, 215, 225, 115], "maxKey": "bench", "pct": [0.68333, 0.68333, 0.71667, 0.71667, 0.75, 0.38333]}, {"name": "Overhead Press", "sets": 3, "reps": "10", "load": "65", "loadNum": 65.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [95, 95, 95, 105, 105, 55], "maxKey": "ohp", "pct": [0.63333, 0.63333, 0.63333, 0.7, 0.7, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [55, 55, 60, 60, 65, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 4, "reps": "15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Overhead Rope Extension", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Upgraded from pushdowns on this day - overhead position grows the long head substantially more (Maeo 2023). Start 25 and dial to RIR 1; it will feel much lighter than pushdowns.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Elbows by your ears, full stretch behind the head, squeeze to lockout.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "E", "title": "Pull - Volume", "exercises": [{"name": "Lat Pulldown", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Cable Rows", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Fixed from 57.5 - stacks move in 5s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [50, 50, 50, 60, 60, 30], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Volume-day partner to Day B - lengthened-position biceps work. Start 15s, chase the stretch not the weight.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 2, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "F", "title": "Legs - Deadlift Focus", "exercises": [{"name": "Conventional Deadlift", "sets": 3, "reps": "6", "load": "165", "loadNum": 165.0, "rir": "3-4", "note": "65% of 250, deliberately easy. W1-2 groove the pattern at 165, then 180 / 190 / 200.", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "95 x5, 130 x3, 150 x1", "subs": ["Trap Bar Deadlift", "Rack Pull", "DB Romanian Deadlift"], "cue": "Wedge in, pull the slack out, push the floor away.", "wk": [235, 235, 255, 275, 285, 135], "maxKey": "dead", "pct": [0.65278, 0.65278, 0.70833, 0.76389, 0.79167, 0.375]}, {"name": "Back Squat", "sets": 3, "reps": "10", "load": "150", "loadNum": 150.0, "rir": "2", "note": "68% of 220. Second squat exposure - skill practice for the weak lift.", "perHand": false, "barbell": true, "deload": 90, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [215, 215, 225, 225, 235, 125], "maxKey": "squat", "pct": [0.68254, 0.68254, 0.71429, 0.71429, 0.74603, 0.39683]}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Seated beats lying for hamstring growth - hip flexed puts the hamstrings at length (Maeo 2021, +14 vs +9 percent). 70 is a guess anchor - dial to RIR 1 first session.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 4, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}, {"name": "Plank", "sets": 3, "reps": "max hold", "load": "bodyweight", "loadNum": null, "rir": "", "note": "You are tested on a max plank every six months and were training it zero times a week. Log the hold time in reps as seconds if you want it tracked.", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": [], "cue": "Squeeze glutes, ribs down, one straight line - the shake is the work.", "wk": null, "maxKey": null, "pct": null}]}], "builtOn": "2026-08-16", "v": 18};
 var PLAN_DEFAULT=null; try{ PLAN_DEFAULT=JSON.parse(JSON.stringify(PLAN)); }catch(e){}
 const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
-const BUILD = 'c73';
+const BUILD = 'c85';
 const CARD_NAME = 'DEADSTOP · TRAINING CARD';   // names bug reports and the share sheet
 // Filled in by the batch generator when a card is produced for a named person. Null on the
 // generic build, in which case nothing below it runs and the card onboards the user normally.
@@ -9707,6 +9748,8 @@ let splitPending=null;   // training-split control: pending day count awaiting c
 let mxEdit=false, bgEdit=false;
 let howtoOpen={};   // Minimal mode: which how-to blocks the athlete has expanded this visit
 let restWOpen=false;  // rest-screen weight adjust: open stepper survives the per-second repaint
+// Arms the second tap when someone logs a set while the previous rest is still running.
+let REST_ARM={k:null,t:0};
 // Hold-to-fire for the rest screen's consequential buttons: a phone being pocketed or
 // picked up brushes taps constantly; logging a set or skipping rest must take a DELIBERATE
 // ~0.65s hold. State is wall-clock so the per-second repaint can't reset a hold in progress.
@@ -9866,6 +9909,21 @@ function cardioLabel(){ const m=cmode();
   return S.cardio.min+'min '+nm+(bits.length?' \u00b7 '+bits.join(' \u00b7 '):'');
 }
 let S = { week:1, day:PLAN.days[0].code, data:{}, cardio:{on:false,min:20,inc:10,mph:3.0,tstart:null,tacc:0,info:false}, notes:'', when:{date:'',time:''}, restDismiss:null, sound:true, weightLog:[], outs:{}, customs:{}, maxes:null, profile:null, ready:null, e1rm:{}, painLog:[] };
+// A pristine copy of the shape S is supposed to have. load() already merges saved state over
+// this shape - "a saved state missing a section must not take the app down" - but restore
+// assigned obj.S raw, so a backup taken before a field existed left that field missing and the
+// next tick died on it. Same merge, same reason.
+var S_DEF=JSON.parse(JSON.stringify(S));
+function mergeIntoShape(obj){
+  var out=Object.assign({}, S_DEF, obj||{});
+  Object.keys(S_DEF).forEach(function(k){
+    if(S_DEF[k] && typeof S_DEF[k]==='object' && !Array.isArray(S_DEF[k])){
+      if(!out[k] || typeof out[k]!=='object' || Array.isArray(out[k])) out[k]=JSON.parse(JSON.stringify(S_DEF[k]));
+      else out[k]=Object.assign({}, S_DEF[k], out[k]); }
+    else if(Array.isArray(S_DEF[k]) && !Array.isArray(out[k])) out[k]=S_DEF[k].slice();
+  });
+  return out;
+}
 // A pristine copy of the blank state, taken before anything is loaded. Opening an athlete with
 // no saved drawer must give them a BLANK card, not the previous athlete's numbers - load()
 // merges onto whatever is in memory, so the reset has to happen before it runs.
@@ -10286,8 +10344,17 @@ var ANCHOR_FIX={'Lat Pulldown':{bwCap:0.95},'Face Pulls':{min:15},'Lateral Raise
 function estAccessory(n){
   var r=libRow(n); if(!r||r[5]==='bw') return null;
   var m=(S.maxes||{})[r[3]]; if(m==null) return null;
+  // A ratio of 0 in the library means NO RATIO IS KNOWN for this movement - it does not mean
+  // zero pounds. Treating it as a real multiplier produced 0, which the floor below then
+  // rounded up to the smallest increment the implement makes, and the card presented that as
+  // "estimated from your squat - high confidence". Field-caught on the hip abduction and
+  // adduction machines: 5 lb prescribed against a 327 lb squat. Twelve movements carried a
+  // 0 ratio and every one of them was doing this. There is no honest number to give here, so
+  // give none and let the card ask - one logged set anchors it properly from then on.
+  var ratio=parseFloat(r[4]);
+  if(!(ratio>0)) return null;
   var fx=ANCHOR_FIX[n]||{};
-  var v=parseFloat(r[4])*m;
+  var v=ratio*m;
   if(fx.bwCap!=null){ var bw=(S.profile&&S.profile.wt)||190; if(v>bw*fx.bwCap) v=bw*fx.bwCap; }
   var step=(r[5]==='sled')?10:5;
   v=Math.max(fx.min||step, Math.round(v/step)*step);
@@ -10391,13 +10458,22 @@ function accLoad(ex){
     try{
       var LPr=(S.lastPerf||{})[ex.name];
       var eff=(LPr && LPr.rir!=null)? +LPr.rir : null;
-      if(eff!=null && out>A.val){
+      var grind=!!(LPr && LPr.g);
+      // Reps say WHETHER to add load. Effort says HOW MUCH, and there are two readings of it:
+      // reps-in-reserve is the precise one, so where it exists it decides. A grind flag is the
+      // same question answered by feel, and it covers the sets where no rir was reported.
+      // Whichever way it is read, a set the athlete called a grind never earns the double step.
+      if(out>A.val){
         var step0=fx || (ex.barbell? Math.max(5,wStepLb(true)) : 5);
-        if(eff>=3){                                  // it was easy - take a double step
-          var big=A.val+step0*2;
-          if(big<=A.val*1.10) out=Math.max(out, big);
-        } else if(eff===0){                          // taken to failure - hold, do not pile on
-          out=A.val;
+        if(eff!=null){
+          if(eff>=3 && !grind){                      // it was easy - take a double step
+            var big=A.val+step0*2;
+            if(big<=A.val*1.10) out=Math.max(out, big);
+          } else if(eff===0){                        // taken to failure - hold, do not pile on
+            out=A.val;
+          }
+        } else if(grind){
+          out=A.val;                                 // no rir given, but they said it was ugly
         }
       }
     }catch(e){}
@@ -10468,6 +10544,13 @@ function accProgNote(ex){
     var rp=accRepsHit(ex);
     if(rp && !rp.hit)
       return 'Same weight \u2014 get '+rp.top+' reps on every set before it goes up. You had '+rp.got+'.';
+    // Do not blame the increment when the hold was the athlete's own report. If the note gives
+    // the wrong reason, the next honest answer is less likely to be given.
+    try{
+      var LPn=(S.lastPerf||{})[ex.name];
+      if(LPn && LPn.g && (LPn.rir==null))
+        return 'Same weight \u2014 you called that one a grind. Own it at this load first.';
+    }catch(e){}
     return 'Same weight \u2014 the next increment would be too big a jump. Add reps instead.';
   }catch(e){ return ''; }
 }
@@ -10479,7 +10562,18 @@ function accNote(ex){
     var pn=accProgNote(ex);
     return pn? '<div class="sleeve-label">'+pn+'</div>' : '';
   }
-  if(!A) return '';
+  if(!A){
+    // No anchor and no ratio to build one from. Say so plainly instead of leaving a bare
+    // number with no provenance - and never dress a guess up as an estimate off a main lift.
+    try{
+      var r0=libRow(ex.name);
+      if(r0 && r0[5]!=='bw' && !(parseFloat(r0[4])>0))
+        return '<div class="sleeve-label">first time on this one \u2014 set a weight you could '
+          +'stop two reps short of, and log it. The card anchors off what you actually lift '
+          +'from then on.</div>';
+    }catch(e){}
+    return '';
+  }
   const L={bench:'bench',squat:'squat',dead:'deadlift',ohp:'overhead press'}[A.base]||A.base;
   return '<div class="sleeve-label">estimated from your '+L+' \u00b7 '+CONFTXT[A.conf]+'</div>';
 }
@@ -10523,6 +10617,21 @@ function baseLoad(ex){
   return adj(ex.loadNum);
 }
 function curLoad(ex, st){ return st.w!=null ? st.w : baseLoad(ex); }
+// Stamp the weight a set was ACTUALLY done at, the moment it is logged.
+// The exercise-level weight is deliberately adjustable mid-session - the card says so, and
+// shows "adjusted from X" when it differs from the plan. But sets carried no weight of their
+// own, so they read whatever the exercise weight happened to be LATER. Drop the bar for your
+// last set and the three you already did at the old weight silently reported the new one, and
+// that rewritten number is what anchored the next session. A set is history once it is logged;
+// history does not move. Sets that already carry their own weight are left alone.
+function stampPerf(ex, st, s){
+  try{
+    if(!s || s.w!=null) return;
+    var v = st.sub ? (subLoad(ex,st)!=null? subLoad(ex,st) : st.w)
+                   : (ex.loadNum!=null ? curLoad(ex,st) : null);
+    if(typeof v==='number' && isFinite(v)) s.w=v;
+  }catch(e){}
+}
 // Starting weight for a substitute: the library anchor scaled off the lifter's own maxes, or the
 // planned load carried across when it is a like-for-like barbell swap. null only when nothing
 // sensible exists (a bodyweight sub), in which case the card asks.
@@ -11103,8 +11212,31 @@ async function deleteLog(k){
   try{ await stDel(k); delete logCache[k]; if(logOpen===k) logOpen=null;
     await refreshLogs(); render(); alertToast('Log deleted'); }catch(e){ alertToast('Delete failed'); }
 }
-function alertToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),1500); }
+var __toastT=null;
+// A message that asks for a second tap has to stay up as long as the second tap is accepted.
+// The default 1.5s is right for a notice you only have to notice ("Bodyweight logged"); it is
+// wrong for a prompt you have to read and then act on - it vanished while it was still live,
+// so the athlete saw a flash, could not read it, and had no idea a second tap would work.
+// Callers that describe a window pass that window.
+function alertToast(msg, ms){ const t=document.getElementById('toast'); if(!t) return;
+  clearTimeout(__toastT); t.textContent=msg; t.classList.remove('act'); t.classList.add('show');
+  __toastT=setTimeout(()=>t.classList.remove('show'), ms||1500); }
+// Same toast, but it carries a way back. Used where a single tap does something the athlete
+// may not have meant - logging a set they were only trying to adjust. Five seconds, because
+// the mistake is realised a beat after it happens, not instantly.
+function undoToast(msg, fn, ms){
+  var t=document.getElementById('toast'); if(!t){ return; }
+  clearTimeout(__toastT);
+  var hide=function(){ clearTimeout(__toastT); t.classList.remove('show','act'); t.textContent=''; };
+  t.textContent=msg;
+  var b=document.createElement('button');
+  b.className='toast-undo'; b.type='button'; b.textContent='Undo';
+  b.setAttribute('aria-label','Undo '+msg);
+  b.onclick=function(ev){ if(ev&&ev.stopPropagation) ev.stopPropagation(); hide(); try{ fn(); }catch(e){} };
+  t.appendChild(b);
+  t.classList.add('show','act');
+  __toastT=setTimeout(hide, ms||5000);
+}
 async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   // gated on the bridge alone until v53, which meant a hosted card wrote data it never read back
   try{ if(ST_MODE!=='none'){ const _v=await stGet(curSKEY()); if(_v){
@@ -11227,6 +11359,7 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   // always saved correctly; nothing ever put it back on the bear. This is the one place
   // every path reaches - first boot, a reload, and a roster switch all finish here.
   try{ gbApplyFlavour(); }catch(e){}
+  try{ await rescuePeek(); }catch(e){}
 }
 
 function render(){
@@ -11604,8 +11737,16 @@ function renderInner(){
             return '<div class="set '+s.st+'" data-ex="'+i+'" data-set="'+j+'" data-holdset="1"'
               +' role="button" tabindex="0" aria-label="Set '+(j+1)+', '+esc(dispName)+', held '+(s.reps!=null?s.reps:'?')+' seconds, tap to edit"><div class="n">SET '+(j+1)+'</div><div class="v mono">'+(s.reps!=null? s.reps+'s' : v)+'</div></div>';
           }
+          // The weight under the set is its own tap target. Tapping the chip logs the set; that
+          // was the ONLY thing a pending set could do, so coming back to adjust it a second
+          // time banked it instead. The number opens the editor and logs nothing.
+          var wEff=(s.w!=null)? s.w : (ex.loadNum!=null? curLoad(ex,st) : null);
+          var badge=(wEff!=null && (up || s.w!=null))
+            ? '<div class="setwadj mono" data-setadj="'+j+'" data-exadj="'+i+'" role="button" tabindex="0"'
+              +' aria-label="Adjust set '+(j+1)+', currently '+wEff+'">'+wEff+'</div>'
+            : (s.w!=null? '<div class="mono" style="font-size:9px;color:var(--amber)">'+s.w+'</div>':'');
           return '<div class="set '+(s.st!=='pend'?s.st:(up?'up':'lk'))+'" data-ex="'+i+'" data-set="'+j+'"'+(lk?' data-lk="1"':'')
-            +' role="button" tabindex="0" aria-label="Set '+(j+1)+', '+esc(dispName)+', '+(s.st!=='pend'?s.st:'not yet logged')+'"><div class="n">SET '+(j+1)+'</div><div class="v mono">'+v+'</div>'+(s.w!=null? '<div class="mono" style="font-size:9px;color:var(--amber)">'+s.w+'</div>':'')+'</div>';
+            +' role="button" tabindex="0" aria-label="Set '+(j+1)+', '+esc(dispName)+', '+(s.st!=='pend'?s.st:'not yet logged')+'"><div class="n">SET '+(j+1)+'</div><div class="v mono">'+v+'</div>'+badge+'</div>';
         }).join('');
       })()
       +'<div class="set" data-addset="'+i+'" role="button" tabindex="0" aria-label="Add a set to '+esc(dispName)+'" style="opacity:.78"><div class="n">ADD</div><div class="v mono">+</div></div>'
@@ -12218,6 +12359,15 @@ function wire(){
    }catch(e){}
  }; });
  document.querySelectorAll('[data-tset]').forEach(el=>el.onclick=()=>{ alertToast('Timed set \u2014 \u201CStart hold\u201D runs the clock'); });
+ // the weight badge under a set: opens the editor, never logs. Bound BEFORE the chip handler
+ // and stops propagation, so a tap on the number cannot reach the chip underneath it.
+ document.querySelectorAll('[data-setadj]').forEach(function(el){ el.onclick=function(ev){
+   if(ev && ev.stopPropagation) ev.stopPropagation();
+   if(dayLocked()){ alertToast('This session is logged \u2014 tap the lock to change it'); return; }
+   var i=+el.dataset.exadj, j=+el.dataset.setadj;
+   var ex=dayObj().exercises[i]; if(!ex) return;
+   var st=exState(i,ex);
+   st.open=(st.open===j? -1 : j); st.wopen=false; save(); render(); }; });
  document.querySelectorAll('.set[data-set]').forEach(el=>el.onclick=()=>{ if(el.dataset.set==null) return;
     ensureAudio();
     if(dayLocked()){ alertToast('This session is logged \u2014 tap the lock to change it'); return; }
@@ -12225,7 +12375,29 @@ function wire(){
     const i=+el.dataset.ex, j=+el.dataset.set, ex=dayObj().exercises[i], st=exState(i,ex), s=st.sets[j];
     if(el.dataset.holdset){
       st.open=(st.open===j? -1 : j); st.wopen=false; save(); render(); return; }
-    if(s.st==='pend'){s.st='hit';s.reps=null;s.rir=null;s.t=Date.now();st.open=-1; try{ tw().sets++; }catch(e){}}
+    if(s.st==='pend'){
+      // You cannot have finished a set you are still resting for. Logging one while the clock
+      // is counting down is nearly always a mistap - and it costs the rest, because a new set
+      // starts a new rest from zero. So the first tap asks and the second one commits. Once
+      // the rest has run out this is the normal flow and there is no prompt at all: the guard
+      // exists only for the window where the action contradicts what the card already knows.
+      var __b=null; try{ __b=lastCompletion(); }catch(e){}
+      var __resting = !!(__b && S.restDismiss!==__b.t && (Date.now()-__b.t) < __b.target*1000);
+      var __akey = i+'|'+j;
+      if(__resting && !(REST_ARM.k===__akey && (Date.now()-REST_ARM.t)<5000)){
+        REST_ARM={k:__akey, t:Date.now()};
+        alertToast('Still resting \u2014 tap again to log set '+(j+1)+' early', 5000);   // matches the arm window above
+        return;
+      }
+      REST_ARM={k:null,t:0};
+      var __stamped=(s.w==null); stampPerf(ex,st,s);
+      s.st='hit';s.reps=null;s.rir=null;s.t=Date.now();st.open=-1; try{ tw().sets++; }catch(e){}
+      undoToast('Logged set '+(j+1), function(){
+        s.st='pend'; s.reps=null; s.rir=null; delete s.t;
+        if(__stamped) delete s.w;      // undo the stamp too, or the set keeps a phantom override
+        try{ tw().sets--; }catch(e){}
+        save(); render(); });
+    }
     else if(s.st==='hit'){s.st='dev';s.reps=defReps(ex);st.open=j;}
     else { st.open=(st.open===j? -1 : j); }
     st.wopen=false; save(); render();
@@ -12330,6 +12502,8 @@ function wire(){
       ov.remove(); restoreBackup({ text: async function(){ return v; } });
     };
   };
+  const rescB=document.getElementById('rescueBtn');
+  if(rescB) rescB.onclick=function(){ rescueRestore(); };
   const rsB=document.getElementById('restoreBtn'); const rf=document.getElementById('restoreFile');
   if(rsB&&rf){ rsB.onclick=()=>rf.click(); rf.onchange=()=>{ if(rf.files&&rf.files[0]) restoreBackup(rf.files[0]); }; }
   document.querySelectorAll('[data-log]').forEach(el=>el.onclick=()=>openLog(el.dataset.log));
@@ -12823,7 +12997,12 @@ function recordPerf(){ const d=dayObj(); if(!S.lastPerf) S.lastPerf={};
   d.exercises.forEach((ex,i)=>{ const st=S.data[exKey(i)]; if(!st) return;
     const done=st.sets.filter(s=>s.st!=='pend'); if(!done.length) return;
     const nm=st.sub||ex.name; const numeric=st.sub? true: ex.loadNum!=null;
-    const w=st.sub? st.w : (numeric? curLoad(ex,st): null);
+    // The anchor for future sessions is the weight actually lifted, not the weight the plan
+    // asked for. Take the last completed set that carries its own weight - if the athlete
+    // adjusted mid-session, the weight they settled on is the one that should come forward.
+    var perf=null;
+    try{ for(var pi=done.length-1; pi>=0; pi--){ if(done[pi].w!=null){ perf=done[pi].w; break; } } }catch(e){}
+    const w=(perf!=null)? perf : (st.sub? st.w : (numeric? curLoad(ex,st): null));
     const reps=done.map(s=> s.st==='hit'? defReps(ex): (s.reps!=null? s.reps:'?')).join(',');
     // Effort was being collected on every set and then discarded at save: lastPerf carried
     // date, weight and reps, and nothing about how hard any of it was. That made reps-in-
@@ -12832,7 +13011,11 @@ function recordPerf(){ const d=dayObj(); if(!S.lastPerf) S.lastPerf={};
     // less about whether the load is right than the one that actually taxed him.
     var rirs=done.map(function(s){ return s.rir; }).filter(function(v){ return v!=null; });
     var hardest=rirs.length? Math.min.apply(null, rirs) : null;
-    S.lastPerf[nm]={d:S.when.date, w:(typeof w==='number'? w:null), r:reps, rir:hardest}; }); }
+    // Grind was in the same position rir used to be: collected on every set, then dropped on
+    // the floor at save. Carry it. Any completed set flagged a grind marks the exercise -
+    // one ugly set is the one that tells you the load is at its limit, not the average.
+    var grind=false; try{ grind=done.some(function(s){ return !!s.g; }); }catch(e){}
+    S.lastPerf[nm]={d:S.when.date, w:(typeof w==='number'? w:null), r:reps, rir:hardest, g:grind}; }); }
 function holdHTML(i){ const on=holdT&&holdT.i===i;
   var _tg=null; try{ _tg=holdTarget(dayObj().exercises[i]); }catch(e){}
   return '<div class="ed-row" style="padding:0 12px 10px;margin-top:0"><div class="ed-label" style="width:auto">Hold'
@@ -13128,16 +13311,58 @@ logs[k]=r.value; }catch(e){} } }
   showOverlay(ok? 'Backup copied \u2014 open Notes or Files, paste, and save it as '+fname
                : 'Copy this backup, then paste it into Notes or Files and save as '+fname, payload, ok);
 }
+// The snapshot restore takes before it overwrites anything. It was being written and never
+// surfaced: miss the fifteen-second undo and the copy sat on the phone with no way to reach
+// it. Which is a strange kind of safety net - one you cannot see and cannot climb into.
+var RESCUE=null;
+function rescueKey(){ try{ return (typeof curSKEY==='function'? curSKEY() : SKEY)+'|rescue'; }catch(e){ return null; } }
+async function rescuePeek(){
+  RESCUE=null;
+  try{
+    var k=rescueKey(); if(!k) return;
+    var v=await stGet(k); if(!v) return;
+    var o=JSON.parse(v);
+    if(o && o.t && o.S) RESCUE={t:o.t};
+  }catch(e){}
+}
+function rescueAge(){ try{ return RESCUE? (Date.now()-RESCUE.t) : null; }catch(e){ return null; } }
+async function rescueRestore(){
+  try{
+    var k=rescueKey(); if(!k) return;
+    var v=await stGet(k); if(!v){ alertToast('Nothing to put back'); return; }
+    var o=JSON.parse(v); if(!o || !o.S){ alertToast('Nothing to put back'); return; }
+    // Route it through restoreBackup so this restore gets the SAME protection as any other:
+    // the state being replaced is snapshotted first, and it can be undone straight back.
+    await restoreBackup({ text: async function(){ return JSON.stringify({S: JSON.parse(o.S)}); } });
+  }catch(e){ alertToast('Could not put it back'); }
+}
 async function restoreBackup(file){
   let committed=false;
+  // Restoring replaces EVERYTHING, and it is the easiest destructive action in the card to
+  // reach - one file picker, no confirmation, while erasing the phone has an arm step, an
+  // offer to back up first, and a hold to fire. Pick last month's backup by mistake and
+  // everything since was gone. So: snapshot what is here first, keep that snapshot in storage
+  // under its own key so it survives a reload and a stuck screen, and offer it straight back.
+  var __before=null, __rescueKey=null;
+  try{ __before=JSON.stringify(S); }catch(e){}
+  // the two cards key storage differently - the Training Card is roster-aware and computes its
+  // key, the Session Card has a single constant. Ask for whichever exists rather than assuming.
+  try{ __rescueKey=(typeof curSKEY==='function'? curSKEY() : SKEY)+'|rescue'; }catch(e){}
+  if(__before && __rescueKey){ try{ await stSet(__rescueKey, JSON.stringify({t:Date.now(), S:__before}));
+    RESCUE={t:Date.now()}; }catch(e){} }
   try{ const txt=await file.text(); const obj=JSON.parse(txt);
     if(!obj || !obj.S){ alertToast('Not a Training Card backup file'); return; }
-    S=obj.S; save(); committed=true;
+    S=mergeIntoShape(obj.S); save(); committed=true;
     // log refresh is best-effort: a quirky storage layer must never make a SUCCESSFUL
     // restore report failure over a stuck screen
     try{ if(storageOK && obj.logs){ for(const k in obj.logs){ try{ await stSet(k, obj.logs[k]); }catch(e){} } }
       logCache={}; await refreshLogs(); }catch(e2){}
-    render(); alertToast('Backup restored \u2713');
+    render();
+    if(__before) undoToast('Backup restored', function(){
+      try{ S=JSON.parse(__before); save(); render(); alertToast('Put back what was here before'); }
+      catch(e4){ alertToast('Could not undo the restore'); }
+    }, 15000);
+    else alertToast('Backup restored \u2713');
   }catch(e){ if(committed){ try{ render(); }catch(e3){} alertToast('Backup restored \u2713'); }
     else alertToast('Restore failed \u2014 bad file'); }
 }
@@ -13204,6 +13429,7 @@ document.addEventListener('click',function(e){ const t=e.target; if(!t) return;
   if(rext){ var bE=lastCompletion();
     if(bE){ if(!S.restExt||S.restExt.t!==bE.t) S.restExt={t:bE.t, add:0};
       S.restExt.add+=(+rext.getAttribute('data-restext')||30);
+      if(!(S.restExt.add>0)) S.restExt.add=0;      // never below the prescribed rest
       save(); try{ paintRest(true); }catch(e){} }
     return; }
   var lswap=t.closest&&t.closest('[data-lsswap]');
