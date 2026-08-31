@@ -1,6 +1,6 @@
 {
- "name": "Deadstop — Training Card",
- "short_name": "Deadstop TC",
+ "name": "Deadstop — Session Card",
+ "short_name": "Deadstop",
  "start_url": "./index.html",
  "scope": "./",
  "display": "standalone",
