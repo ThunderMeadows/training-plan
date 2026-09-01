@@ -38,5 +38,14 @@
    "type": "image/png",
    "purpose": "any"
   }
- ]
+ ],
+ "description": "Builds a strength block from your own tested lifts. Offline, on your phone, no account.",
+ "lang": "en",
+ "dir": "ltr",
+ "categories": [
+  "health",
+  "fitness",
+  "sports"
+ ],
+ "id": "./index.html"
 }

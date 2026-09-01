@@ -15,8 +15,31 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Deadstop">
 <meta name="theme-color" content="#1F4FD8" id="themeColor">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%23171A1F'/><line x1='8' y1='96' x2='184' y2='96' stroke='%23F0ECE4' stroke-width='4'/><rect x='53' y='54' width='20' height='84' rx='9' fill='none' stroke='%23E0A94C' stroke-width='6'/><rect x='119' y='54' width='20' height='84' rx='9' fill='none' stroke='%23E0A94C' stroke-width='6'/><rect x='37' y='70' width='12' height='51' rx='5' fill='none' stroke='%23E0A94C' stroke-width='4'/><rect x='143' y='70' width='12' height='51' rx='5' fill='none' stroke='%23E0A94C' stroke-width='4'/><rect x='3' y='91' width='6' height='10' rx='2.5' fill='%23F0ECE4'/><rect x='183' y='91' width='6' height='10' rx='2.5' fill='%23F0ECE4'/></svg>">
+<!-- iOS ignores or mangles an SVG apple-touch-icon; the PNG beside it in the deploy
+     folder is the one that renders on the home screen. Data-URI version removed 2026-09-02. -->
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='42' fill='%23171A1F'/><line x1='8' y1='96' x2='184' y2='96' stroke='%23F0ECE4' stroke-width='4'/><rect x='53' y='54' width='20' height='84' rx='9' fill='none' stroke='%23E0A94C' stroke-width='6'/><rect x='119' y='54' width='20' height='84' rx='9' fill='none' stroke='%23E0A94C' stroke-width='6'/><rect x='37' y='70' width='12' height='51' rx='5' fill='none' stroke='%23E0A94C' stroke-width='4'/><rect x='143' y='70' width='12' height='51' rx='5' fill='none' stroke='%23E0A94C' stroke-width='4'/><rect x='3' y='91' width='6' height='10' rx='2.5' fill='%23F0ECE4'/><rect x='183' y='91' width='6' height='10' rx='2.5' fill='%23F0ECE4'/></svg>">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<!-- Shared-link identity. Without these a shared card renders as a bare URL: no title,
+     no image, no description. The share sheet exists to be used, so the link has to
+     arrive looking like something. -->
+<meta name="description" content="Builds you a strength block from your own tested lifts, then keeps it honest session by session - offline, on your phone, no account.">
+<meta name="author" content="Deadstop">
+<meta name="application-name" content="Deadstop">
+<link rel="canonical" href="https://thundermeadows.github.io/training-plan/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Deadstop">
+<meta property="og:title" content="Deadstop — Training Card">
+<meta property="og:description" content="Builds you a strength block from your own tested lifts, then keeps it honest session by session - offline, on your phone, no account.">
+<meta property="og:url" content="https://thundermeadows.github.io/training-plan/">
+<meta property="og:image" content="https://thundermeadows.github.io/training-plan/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Deadstop — Training Card">
+<meta name="twitter:description" content="Builds you a strength block from your own tested lifts, then keeps it honest session by session - offline, on your phone, no account.">
+<meta name="twitter:image" content="https://thundermeadows.github.io/training-plan/icon-512.png">
 <title>Deadstop · Training Card</title>
 <style>
 :root{
@@ -8706,9 +8729,34 @@ var MAIL_FACES={
  reflective:'data:image/webp;base64,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'
 };
 function mailBox(){ if(!Array.isArray(S.mail)) S.mail=[]; return S.mail; }
+// FIELD-CAUGHT 2026-09-02: "clear read mail" brought everything straight back. mailPush
+// decided "already sent?" by scanning the MAILBOX, so clearing the mailbox erased the only
+// record that a letter had ever been sent - and the next render re-sent the lot. Sent history
+// has to outlive the letters. This ledger is ids only, pruned by age, and it is what the
+// dedupe reads; the mailbox is just what is currently on screen.
+function mailSent(){
+  if(!S.mailSent || typeof S.mailSent!=='object'){
+    S.mailSent={};
+    // first run after the fix: adopt whatever is already in the box so nothing resends
+    try{ mailBox().forEach(function(x){ S.mailSent[x.id]=x.d||shiftDate(); }); }catch(e){}
+  }
+  return S.mailSent;
+}
+function mailPrune(){
+  try{
+    var sent=mailSent(), cut=mailShiftIso(shiftDate(), -120), ks=Object.keys(sent);
+    ks.forEach(function(k){ if(String(sent[k])<cut) delete sent[k]; });
+    // hard ceiling as well, oldest first, so the ledger cannot grow without bound
+    ks=Object.keys(sent);
+    if(ks.length>400){ ks.sort(function(a,b){ return String(sent[a])<String(sent[b])? -1:1; })
+      .slice(0, ks.length-400).forEach(function(k){ delete sent[k]; }); }
+  }catch(e){}
+}
 function mailPush(id, txt, face){
-  var m=mailBox();
+  var m=mailBox(), sent=mailSent();
+  if(sent[id]) return false;                       // sent once, ever - cleared or not
   if(m.some(function(x){ return x.id===id; })) return false;
+  sent[id]=shiftDate();
   m.push({id:id, d:shiftDate(), txt:txt, face:(MAIL_FACES[face]? face : 'focused'), read:false});
   while(m.length>30){ var i=m.findIndex(function(x){ return x.read; }); if(i<0) break; m.splice(i,1); }
   save(); return true;
@@ -8724,12 +8772,26 @@ function mailShiftIso(iso, n){ var d=new Date(iso+'T12:00:00'); d.setDate(d.getD
   return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
 function mailMonday(iso){ var d=new Date(iso+'T12:00:00'); var back=(d.getDay()+6)%7;
   return mailShiftIso(iso, -back); }
+var MAIL_DONE=[
+  'Session banked. That is the whole job. Go eat something with protein in it.',
+  'Work is done and logged. The bar is tired now. I checked.',
+  'Already trained today. I have nothing to nag you about, which is unsettling for me.',
+  'Done and filed. Recovery starts now, and recovery is my specialty.'
+];
 function mailSweep(){
   try{
     var today=shiftDate();
-    // 1 - session-day greeting, only on a known training day
-    try{ if(calTrainDays().indexOf(new Date(today+'T12:00:00').getDay())>-1)
-      mailPush('greet-'+today, MAIL_GREET[new Date(today+'T12:00:00').getDate()%MAIL_GREET.length], 'playful'); }catch(e){}
+    mailPrune();
+    // 1 - session-day greeting, only on a known training day, and it KNOWS whether the work
+    // is already banked (field-caught 2026-09-02: Bulk said "the bar missed you" to a man who
+    // had already trained that morning). Trained already, he says so instead.
+    try{
+      if(calTrainDays().indexOf(new Date(today+'T12:00:00').getDay())>-1){
+        var didToday=false; try{ didToday=!!streakDayset()[today]; }catch(e2){}
+        if(didToday) mailPush('done-'+today, MAIL_DONE[new Date(today+'T12:00:00').getDate()%MAIL_DONE.length], 'encouraging');
+        else mailPush('greet-'+today, MAIL_GREET[new Date(today+'T12:00:00').getDate()%MAIL_GREET.length], 'playful');
+      }
+    }catch(e){}
     // 2 - streak guard, the day it matters
     try{ var rk=calStreakRisk();
       if(rk) mailPush('risk-'+today, 'Six days quiet. Train today or the '+rk+'-week streak dies tonight. I will be sad in a very large way.', 'tough'); }catch(e){}
@@ -8769,7 +8831,9 @@ function mailSweep(){
     // when that week actually held something.
     try{
       var mon=mailMonday(today);
-      if(today!==mon || true){
+      // Monday only. This read "if(today!==mon || true)" - scaffolding I left armed, so the
+      // books landed on whatever day the card was first opened that week.
+      if(today===mon){
         var lo=mailShiftIso(mon,-7), hi=mailShiftIso(mon,-1);
         var dsAll=streakDayset(), sess=Object.keys(dsAll).filter(function(k){ return k>=lo&&k<=hi; }).length;
         var recs=(S.prs||[]).filter(function(p){ return p&&p.d>=lo&&p.d<=hi; }).length;
@@ -11461,7 +11525,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c144';
+const BUILD = 'c148';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -11651,7 +11715,7 @@ function cardioLabel(){ const m=cmode();
   const nm = (m.sumLoaded && m.loadKey && cget(m.loadKey)>0)? m.sumLoaded : (m.sum || m.name.toLowerCase());
   return S.cardio.min+'min '+nm+(bits.length?' \u00b7 '+bits.join(' \u00b7 '):'');
 }
-let S = { week:1, day:PLAN.days[0].code, data:{}, cardio:{on:false,min:20,inc:10,mph:3.0,tstart:null,tacc:0,info:false}, notes:'', when:{date:'',time:''}, restDismiss:null, sound:true, weightLog:[], outs:{}, customs:{}, maxes:null, profile:null, ready:null, e1rm:{}, painLog:[] };
+let S = { week:1, day:PLAN.days[0].code, data:{}, cardio:{on:false,min:20,inc:10,mph:3.0,tstart:null,tacc:0,info:false}, notes:'', when:{date:'',time:''}, restDismiss:null, sound:true, weightLog:[], outs:{}, customs:{}, maxes:null, profile:null, ready:null, e1rm:{} };
 // A pristine copy of the shape S is supposed to have. load() already merges saved state over
 // this shape - "a saved state missing a section must not take the app down" - but restore
 // assigned obj.S raw, so a backup taken before a field existed left that field missing and the
@@ -15112,7 +15176,6 @@ function calIndex(){
   logKeys.forEach(k=>{ const c=calKeyDate(k); if(!c) return;
     if(!ix[c.d]) ix[c.d]={days:[],tag:c.tag,key:k};
     if(ix[c.d].days.indexOf(c.day)<0) ix[c.d].days.push(c.day); });
-  (S.painLog||[]).forEach(p=>{ if(!ix[p.date]) ix[p.date]={days:[],pain:p.lv}; else ix[p.date].pain=Math.max(ix[p.date].pain||0,p.lv); });
   (S.weightLog||[]).forEach(x=>{ if(ix[x.d]) ix[x.d].bw=x.w; else ix[x.d]={days:[],bw:x.w}; });
   return ix;
 }
@@ -16102,8 +16165,6 @@ function report(){
   if(gAll.length>=2 && gAll.every(g=>{ const p=g.split(':'); return (parseInt(p[0],10)*60+parseInt(p[1],10))<20; })) lines.push('Rest data: batch-logged after the fact (gaps are tap times, not real rests)');
   const VCr=volCaution(); if(VCr) lines.push((VCr.lv===2?'VOLUME WARNING: ':'VOLUME CAUTION: ')+VCr.v.ex+' exercises / '+VCr.v.sets+' sets this day');
   const ctimed = S.cardio.tacc + (S.cardio.tstart? Date.now()-S.cardio.tstart : 0);
-  const todaysPain=S.painLog.filter(p=>p.date===S.when.date);
-  if(todaysPain.length) lines.push('PAIN FLAGS: '+todaysPain.map(p=>p.ex+' ('+p.lv+'+/10)').join(', '));
   lines.push('Cardio: '+((S.cardio.on||ctimed>60000)? cardioLabel()+(ctimed>60000? ' (timed '+fmtDur(ctimed)+')':'') : 'none'));
   if(S.cardio.zone==='z3') lines.push('Cardio intensity: tempo '+(S.cardio.tempoZ==='z4'?'(zone 4 threshold)':'(zone 3 steady)'));
   if(S.cardio.zone==='hiit'){ const v=S.cardio.iv||{}; lines.push('Cardio intensity: intervals '+fmtIv(v.work||30)+'/'+fmtIv(v.rest||90)+' x '+(v.rounds||8)); }
