@@ -656,9 +656,38 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 }
 /* ===== backup nag ===== */
 .onb-mark{display:flex;justify-content:center;margin:8px 0 18px;opacity:.95;}
-#bootSplash{position:fixed;inset:0;z-index:220;background:#171A1F;display:flex;align-items:center;justify-content:center;
+#bootSplash{position:fixed;inset:0;z-index:420;background:#171A1F;display:flex;align-items:center;justify-content:center;
   transition:opacity .55s ease;}
 #bootSplash.bs-out{opacity:0;pointer-events:none;}
+/* The gate sits under the SPLASH (410 < 420 after the bump) so it is what the fade reveals,
+   but ABOVE the install sheet (400): shipped at 215, it let the install sheet cover the
+   disclaimer on a fresh phone, so the first thing an athlete met was "add to home screen"
+   and they acknowledged nothing. Nothing outranks the disclaimer. */
+.disc-wrap{position:fixed;inset:0;z-index:410;background:var(--bg);overflow-y:auto;
+  padding:28px 22px calc(28px + env(safe-area-inset-bottom));display:flex;align-items:center;}
+.disc-inner{max-width:480px;margin:0 auto;width:100%;}
+.disc-inner h2{font-size:22px;letter-spacing:-.01em;margin:0 0 12px;}
+.disc-inner p{font-size:14.5px;line-height:1.65;color:var(--chalk);margin:0 0 12px;}
+.disc-inner p b{color:var(--amber);}
+.mail-face{width:42px;height:42px;border-radius:21px;flex:0 0 42px;background:#000;}
+.mail-badge{position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;
+  background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:15px;text-align:center;padding:0 2px;}
+.cal-count{font-size:13px;color:var(--chalk);margin-bottom:6px;font-weight:700;}
+.cal-risk{background:var(--accent-soft);border:1px solid var(--amber);border-radius:10px;padding:8px 10px;font-size:13px;font-weight:800;margin:6px 0;}
+
+.disc-more{display:block;text-align:center;margin-top:14px;font-size:13px;color:var(--dim);
+  text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:8px;}
+/* Terms sits one layer above the gate (411) so it can be opened FROM the gate and closed
+   back to it - the gate keeps waiting underneath, still unacknowledged. */
+.terms-wrap{position:fixed;inset:0;z-index:411;background:var(--bg);overflow-y:auto;
+  padding:22px 20px calc(28px + env(safe-area-inset-bottom));}
+.terms-inner{max-width:520px;margin:0 auto;}
+.terms-inner h2{font-size:21px;margin:0 0 4px;letter-spacing:-.01em;}
+.terms-inner h3{font-size:14px;margin:20px 0 6px;color:var(--amber);letter-spacing:.02em;}
+.terms-inner p{font-size:14px;line-height:1.62;color:var(--chalk);margin:0 0 10px;}
+.terms-inner .tnote{font-size:12.5px;color:var(--dim);line-height:1.55;}
+.terms-x{position:sticky;top:0;float:right;background:var(--panel);border:2px solid var(--line);
+  border-radius:12px;padding:6px 14px;font-weight:800;font-size:13px;cursor:pointer;}
 .bs-wrap{animation:bsBreathe 5.4s ease forwards;}
 .bs-d{stroke-dasharray:1;stroke-dashoffset:1;animation:bsDraw 1.5s cubic-bezier(.55,0,.25,1) forwards;}
 .bs-cap{opacity:0;animation:bsCap .6s ease 2.6s forwards;}
@@ -3955,7 +3984,7 @@ function restToggleGrind(b){
   r.s.g=!r.s.g; save(); paintRest(true);
 }
 // ===== FATIGUE WATCHDOG =====
-// Uses only data the card already collects: readiness scores, e1RM movement, pain flags.
+// Uses only data the card already collects: readiness scores and e1RM movement.
 // One bad day means nothing; two independent signals pointing the same way is a pattern.
 function daysAgo(iso){ try{ return Math.round((new Date(shiftDate()+'T12:00:00')-new Date(iso+'T12:00:00'))/86400000); }catch(e){ return 999; } }
 function fatigueSignals(){
@@ -3974,11 +4003,6 @@ function fatigueSignals(){
       if(h.length>=3 && h[h.length-1].v <= h[h.length-3].v) stalled.push(mi.name);
     });
     if(stalled.length) sig.push('e1RM flat or falling on '+stalled.join(' and ')+' over the last 3 sessions');
-  }catch(e){}
-  try{
-    // 3. pain: two or more flags inside 10 days
-    var pn=(S.painLog||[]).filter(function(p){ return daysAgo(p.date)<=10; });
-    if(pn.length>=2) sig.push(pn.length+' pain flags in the last 10 days');
   }catch(e){}
   return sig;
 }
@@ -4000,7 +4024,7 @@ function fatigueHTML(){
 // happened — how the sets moved, what you slept, whether anything hurt — and then either offers
 // you extra work or tells you to go home. This reads the session before it opens its mouth.
 function sessionQuality(){
-  var q={grinds:0, devs:0, sets:0, pain:0, ready:null};
+  var q={grinds:0, devs:0, sets:0, ready:null};
   try{
     var d=(typeof effDay==='function')? effDay():dayObj();
     d.exercises.forEach(function(ex,i){
@@ -4010,7 +4034,6 @@ function sessionQuality(){
         if(s.st==='pend') return;
         q.sets++; if(s.g) q.grinds++; if(s.st==='dev') q.devs++;
       });
-      if(st.pain) q.pain++;
     });
     if(S.ready&&S.ready.date===shiftDate()) q.ready=readyScore();
   }catch(e){}
@@ -4018,12 +4041,11 @@ function sessionQuality(){
 }
 function finisherAdvice(){
   var q=sessionQuality(), g=(S.profile&&S.profile.goal)||'block1';
-  var hardDay = (q.ready!=null&&q.ready<3) || q.pain>0 || (q.sets&&(q.grinds/q.sets)>=0.34);
+  var hardDay = (q.ready!=null&&q.ready<3) || (q.sets&&(q.grinds/q.sets)>=0.34);
   var cardioDone = !!(S.cardio.on||S.cardio.tacc>0);
   if(hardDay){
     return {tone:'rest',
-      line: q.pain>0 ? 'You flagged pain today. Extra work is not what wins this week — recovery is.'
-          : (q.ready!=null&&q.ready<3) ? 'You came in under-recovered and still finished the work. That was the win. Bank it.'
+      line: (q.ready!=null&&q.ready<3) ? 'You came in under-recovered and still finished the work. That was the win. Bank it.'
           : 'That session took real effort out of you. Adding to it now buys fatigue, not fitness.',
       opts:[ {k:'z2', t:'Easy 10 min walk', why:'Blood flow only \u2014 helps you recover, costs nothing'},
              {k:'done', t:'Call it \u2014 I\u2019m done', why:'The right answer today'} ]};
@@ -4265,7 +4287,7 @@ function acBannerHTML(){
     var L=(S.acLog||[]); if(!L.length) return '';
     var last=L[L.length-1];
     if(S.acAck===last.d) return '';
-    var names={squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Overhead Press'};
+    var names={squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Overhead Press',row:'Barbell Row'};
     return '<div class="block" style="border-color:var(--green)">'
      +'<h3 style="color:var(--green)">Weights updated from your own sets</h3>'
      +'<div style="font-size:13px;line-height:1.7">'+last.changed.map(function(c){
@@ -4827,8 +4849,6 @@ var TOUR_STEPS=[
   b:'Tap this and every warm-up set appears as a drawing of the actual bar: each coloured block is a real plate at true relative size, listed per side beneath it. Load what the picture shows \u2014 no arithmetic between sets.'},
  {sel:'.set.up', tap:1, core:1, t:'The glowing set is the live one',
   b:'Sets log in order: only the breathing one accepts a tap, so a stray thumb can never log set 3 before set 1. Tap it when the set is done; tap a logged set to correct its reps. ADD gives you a bonus set; its UNDO takes it back.'},
- {sel:'[data-pain]', closest:'.ed-row', t:'The pain check',
-  b:'None, ache, or real pain \u2014 answer per exercise. Flag pain and the card remembers the day on your calendar and watches the pattern. Two flags in ten days and it will say something.'},
  {sel:'[data-feelbtn]', closest:'.ed-row', t:'Too heavy? Too light? Say so',
   b:'One tap tells the card how the prescription felt. This is direct evidence \u2014 alongside your logged reps, it feeds the numbers that write next week.'},
  {sel:'.howto, .howto-min', t:'Form notes on every movement',
@@ -7454,6 +7474,25 @@ function settingsBodyHTML(){
     +'</div>'
     +'<div class="exnote" style="padding:8px 0 0">Applies everywhere instantly and sticks across sessions. Daylight is the outdoor/bright-gym option.</div>'
     +'</div></div>';
+  h+='<div class="sub" style="margin-top:12px">Assessments</div>';
+  h+='<div class="ex"><div class="ex-head">'
+    +'<div class="target-label">Retest your main-lift numbers</div>'
+    +'<div class="exnote" style="padding:6px 0 8px">The same guided work-up from setup: a few climbing sets per lift, stop when it gets hard. Your plan, logs and history all stay \u2014 only the numbers move, and only for the lifts you retest. Nothing in this card is medical advice: if a movement hurts, stop and swap it \u2014 no reason needed \u2014 and see a qualified professional.</div>'
+    +'<div class="daybtn" data-retest="1">Redo the assessment</div>'
+    +'</div></div>';
+  h+='<div class="sub" style="margin-top:12px">Session length</div>';
+  h+='<div class="ex"><div class="ex-head">'
+    +'<div class="target-label">Target time in the gym</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +[['off','Off'],['60','1:00'],['75','1:15'],['90','1:30'],['105','1:45']].map(function(z){
+        var cur=sessTarget(); var on=(z[0]==='off')? !cur : (cur===+z[0]);
+        return '<div class="chip'+(on?' on':'')+'" data-slen="'+z[0]+'" style="flex:1;font-size:12.5px;padding:8px 0;text-align:center">'+z[1]+'</div>'; }).join('')
+    +'</div>'
+    +'<div class="exnote" style="padding:8px 0 0">Days shorter than the target grow, in this order: one extra set on the day\u2019s lightest accessories (never a main lift, three sets max), then a Zone 2 finisher of 10\u201330 minutes. A day already at target is left alone, and nothing is ever trimmed.</div>'
+    +'</div></div>';
+  h+='<div class="ex"><div class="ex-head">'
+    +'<div class="prof-edit" data-discshow="1" style="padding:6px 0">Read the training disclaimer</div>'
+    +'<div class="prof-edit" data-termsshow="1" style="padding:6px 0">Terms &amp; Privacy</div>'
+    +'</div></div>';
   h+='<div class="sub" style="margin-top:12px">Timer, sound &amp; loading</div>';
   h+='<div class="ex"><div class="ex-head">'
     +'<div class="target-label">Rest \u2014 every prescribed rest, adjusted</div><div class="chiprow" style="margin-top:6px;gap:6px">'
@@ -7976,7 +8015,7 @@ function gbHelpItems(){
   A('What is the readiness check?',
     'Sleep, soreness, stress and energy, answered in about twenty seconds. Today\u2019s loads move before you touch a bar, so a bad day runs lighter without you arguing with yourself about it.');
   A('Something hurts. What do I do?',
-    'Flag the pain on the exercise. The card records it, keeps it out of the "add more work" suggestions, and watches for a pattern across sessions.', 'pain');
+    'Stop the movement and use Swap to trade it for one that does not bother you \u2014 the card never asks why. Nothing in this card is medical advice: for pain or injury, see a qualified professional.', 'swap');
   A('Can I track my bodyweight?',
     'Yes, on the You screen. It charts a seven-day average rather than the daily noise, which is the only version worth reading.', 'bodywt');
 
@@ -8078,7 +8117,6 @@ var GB_GO={
   // 'today' is a sentinel, not a tab: these live on the session itself, and the athlete could
   // be sitting on any tab when they ask. Resolve it to whichever training day is current.
   swap:     {label:'Show me on today\u2019s card', day:'today', sel:'[data-swap]'},
-  pain:     {label:'Show me on today\u2019s card', day:'today', sel:'[data-pain]'},
   addset:   {label:'Show me on today\u2019s card', day:'today', sel:'[data-addset]'}
 };
 // The two cards do not carry identical features. A shortcut may name the function that builds
@@ -8415,6 +8453,356 @@ function bootIdent(){
     setTimeout(out, 5600);
   }catch(e){}
 }
+// ===== THE DISCLAIMER GATE =====
+// Added 2026-09-01, same posture as removing the injury intake: the card is a training tool,
+// not a medical one, and it says so once, plainly, before anyone trains. Acknowledged once
+// per DISC_V; bumping DISC_V (changed copy) shows it again. Re-readable from Settings.
+// NOTE FOR RELEASE: this exact copy is what a lawyer should bless before wide distribution.
+const DISC_V=1;
+var DISC_QUEUE=null;
+// true while an unacknowledged gate is on screen - boot-time prompts wait behind it
+function discPending(){ try{ return !(S.discAck && S.discAck.v>=DISC_V); }catch(e){ return false; } }
+function bootDisc(force){
+  try{
+    if(!force && S.discAck && S.discAck.v>=DISC_V) return;
+    if(document.getElementById('discGate')) return;
+    var v=document.createElement('div'); v.id='discGate'; v.className='disc-wrap';
+    v.innerHTML='<div class="disc-inner">'
+      +'<h2>Before you train</h2>'
+      +'<p>This card is a <b>training tool, not medical advice</b>, and nothing in it comes from a doctor.</p>'
+      +'<p><b>Check with a qualified professional before starting</b> this or any training program \u2014 especially with a medical condition, during pregnancy, or if something already hurts.</p>'
+      +'<p>If a movement causes pain, <b>stop it</b>. Swap it for one that doesn\u2019t bother you \u2014 the card never asks why \u2014 and see a professional.</p>'
+      +'<p>Lifting carries real risk. By continuing, you accept it: <b>you train at your own risk</b>.</p>'
+      +'<div class="daybtn" id="discOk" style="margin-top:16px">I understand</div>'
+      +'<div class="disc-more" data-termsshow="1">Terms &amp; Privacy</div>'
+      +'</div>';
+    document.body.appendChild(v);
+    var tl=v.querySelector('[data-termsshow]');
+    if(tl) tl.onclick=function(){ termsShow(); };   // opens ABOVE the gate; closing returns here
+    var ok=document.getElementById('discOk');
+    if(ok) ok.onclick=function(){
+      if(!force){ S.discAck={v:DISC_V, d:localDate()}; save(); }
+      try{ v.remove(); }catch(e){}
+      // whatever boot deferred behind the gate goes now - install sheet, tour, in order
+      if(!force){ var q=DISC_QUEUE; DISC_QUEUE=null; if(q) try{ q(); }catch(e){} }
+    };
+  }catch(e){}
+}
+// ===== TERMS & PRIVACY =====
+// The depth layer under the disclaimer gate (2026-09-01). The gate stays four lines because
+// short text gets read; this is where the detail lives, reachable from the gate and from
+// Settings. Read-only: it never writes state and never asks for a second acknowledgment.
+// [BRACKETED] markers are where a lawyer's language should replace this plain-English draft.
+function termsHTML(){
+  return '<div class="terms-inner">'
+   +'<div class="terms-x" id="termsX">Close</div>'
+   +'<h2>Terms &amp; Privacy</h2>'
+   +'<p class="tnote">Plain English, written by the people who built the card. Last updated 2026-09-01. Sections marked [LIKE THIS] are where a lawyer\u2019s language replaces ours before wide release.</p>'
+
+   +'<h3>1 \u00b7 Training carries risk</h3>'
+   +'<p>Lifting can injure you. Using this card, you accept that risk yourself. '
+   +'[LIMITATION OF LIABILITY \u2014 counsel to supply.] '
+   +'The card is provided as it is, with no promise that it is fit for your particular body, '
+   +'goals or circumstances. [NO WARRANTY / AS IS \u2014 counsel to supply.]</p>'
+
+   +'<h3>2 \u00b7 This is not medical advice</h3>'
+   +'<p>Nothing here comes from a doctor and nothing here is a diagnosis or a treatment. '
+   +'Check with a qualified professional before starting this or any training program \u2014 '
+   +'especially with a medical condition, during pregnancy, or if something already hurts.</p>'
+   +'<p>If a movement causes pain, stop it. Use Swap to trade it for one that does not bother you; '
+   +'the card never asks why. Then see a professional. The card does not assess injuries and does '
+   +'not adjust your training around them.</p>'
+
+   +'<h3>3 \u00b7 The numbers are estimates</h3>'
+   +'<p>Your training loads are calculated from an estimated one-rep max, and that estimate comes '
+   +'from your own reported effort \u2014 how many reps you felt you had left. It is a formula on '
+   +'top of a self-report, not a measurement. The card corrects it from the sets you actually log, '
+   +'but a prescription can still be wrong for you on any given day. Judgement stays yours: '
+   +'if a weight is wrong, change it.</p>'
+
+   +'<h3>4 \u00b7 Your log stays on your phone</h3>'
+   +'<p>There is no account and no sign-in. Your sessions, numbers and history are stored by your '
+   +'browser on your own device. We do not transmit them, we cannot see them, and there is no '
+   +'analytics or tracking in this card.</p>'
+   +'<p>One caveat worth knowing: because your data lives in browser storage, clearing your '
+   +'browsing data or site data will delete your training history \u2014 export it first if you '
+   +'want to keep it. Services the card touches are listed in section 6.</p>'
+
+   +'<h3>5 \u00b7 Consumer health data</h3>'
+   +'<p>Some state laws \u2014 Washington\u2019s My Health My Data Act among them \u2014 give people rights over health data that apps collect about them. Those laws turn on collection. This card does not collect your health data: it is not sent to us, to any server, or to anyone else, so there is nothing for us to share, sell, or hand over. Your data is on your device, under your control, and you delete it by clearing this site\u2019s data or by uninstalling the card.</p>'
+
+   +'<h3>6 \u00b7 Other services involved</h3>'
+   +'<p>The card is served as a static page from GitHub Pages, so GitHub receives your IP address when your browser loads it \u2014 the same as visiting any website. Exercise how-to videos are embedded from YouTube in privacy-enhanced mode; if you play one, YouTube receives your IP address. Each of those companies operates under its own terms and privacy policy. Nothing else is involved, and no third party ever receives your training data.</p>'
+
+   +'<h3>7 \u00b7 The card itself</h3>'
+   +'<p>The Deadstop name, the card and its contents belong to us. [INTELLECTUAL PROPERTY / LICENSE GRANT \u2014 counsel to supply. Decide deliberately: the card is a readable HTML file on a public host and can be copied. Reserve rights, or license it openly on purpose.]</p>'
+
+   +'<h3>8 \u00b7 Age</h3>'
+   +'<p>This card is not intended for children under 13, and setup does not accept an age below 13. '
+   +'[MINORS LANGUAGE \u2014 counsel to supply.]</p>'
+
+   +'<h3>9 \u00b7 The shop is separate</h3>'
+   +'<p>Anything you buy from the Deadstop store is a separate transaction under its own terms, '
+   +'privacy policy and return policy. Nothing on this page covers it, and the card itself never '
+   +'sends your training data to the store or anywhere else.</p>'
+
+   +'<h3>10 \u00b7 The card may change or stop</h3>'
+   +'<p>This card is free and is provided as a personal project. We may change it, or stop publishing it, at any time and without notice. There is no promise it will keep working or stay available. Your training history lives on your phone, not with us \u2014 export it if it matters to you.</p>'
+   +'<p>If these terms change materially, the disclaimer will appear again the next time you open the card, and the date at the top of this page will change. Continuing to use the card after that means you accept the new terms.</p>'
+
+   +'<h3>11 \u00b7 If there is a dispute</h3>'
+   +'<p>[GOVERNING LAW AND VENUE \u2014 counsel to supply. Default expectation: the State of Arizona, United States.]</p>'
+   +'<p>[DISPUTE RESOLUTION \u2014 counsel to supply, and to advise WHETHER to include binding arbitration and a class-action waiver at all. Most commercial fitness apps include both, but they carry revenue this card does not; mass-arbitration filing fees can exceed the exposure they avoid, and enforceability turns on how consent was presented. This is a decision, not a default.]</p>'
+   +'<p>[INDEMNIFICATION \u2014 counsel to supply.]</p>'
+
+   +'<h3>12 \u00b7 If part of this does not hold</h3>'
+   +'<p>Some places do not allow certain warranty disclaimers or limits on liability. Where that is true, those parts may not apply to you and you may have additional rights. Everything else on this page stays in force. [SEVERABILITY / ENTIRE AGREEMENT / WAIVER \u2014 counsel to supply.]</p>'
+
+   +'<h3>13 \u00b7 Reaching us</h3>'
+   +'<p>Questions about this page, a bug, or a safety problem with the card: [CONTACT \u2014 supply a monitored address before release. A policy nobody can answer is a policy nobody can rely on.]</p>'
+
+   +'<p class="tnote" style="margin-top:22px">Questions about this page belong with a qualified '
+   +'professional in the relevant field \u2014 medical questions with a clinician, legal ones with a lawyer.</p>'
+   +'</div>';
+}
+function termsShow(){
+  try{
+    if(document.getElementById('termsGate')) return;
+    var v=document.createElement('div'); v.id='termsGate'; v.className='terms-wrap';
+    v.innerHTML=termsHTML();
+    document.body.appendChild(v);
+    var x=document.getElementById('termsX');
+    // closes back to whatever it was opened from - the gate underneath keeps waiting
+    if(x) x.onclick=function(){ try{ v.remove(); }catch(e){} };
+  }catch(e){}
+}
+// ===== BLOCK CALENDAR, COUNTDOWNS, SCHEDULE EXPORT, STREAK GUARD (2026-09-01) =====
+// All of it runs off facts the card already keeps: PLAN.start/weeks, the banked-session
+// dayset, and the session-length estimate. Nothing here needs a network or a permission.
+function calEndIso(){ try{ var d=new Date(PLAN.start+'T12:00:00'); d.setDate(d.getDate()+PLAN.weeks*7-1);
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }catch(e){ return null; } }
+function calDaysLeft(){ try{ var e=new Date(calEndIso()+'T12:00:00'), n=new Date(shiftDate()+'T12:00:00');
+  return Math.max(0, Math.round((e-n)/86400000)); }catch(e){ return null; } }
+// Training weekdays: the athlete's setting first; failing that, read them off the log -
+// any weekday trained twice or more is treated as a training day. Read, not invented.
+function calTrainDays(){
+  try{
+    if(Array.isArray(S.trainDays)) return S.trainDays.slice();
+    var f=[0,0,0,0,0,0,0], ds=streakDayset();
+    Object.keys(ds).forEach(function(iso){ f[new Date(iso+'T12:00:00').getDay()]++; });
+    var out=[]; f.forEach(function(n,i){ if(n>=2) out.push(i); });
+    return out;
+  }catch(e){ return []; }
+}
+function calNextSession(){
+  try{
+    var td=calTrainDays(); if(!td.length) return null;
+    var n=new Date(shiftDate()+'T12:00:00');
+    for(var i=0;i<=7;i++){ var d=new Date(n.getTime()); d.setDate(d.getDate()+i);
+      var iso=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+      if(td.indexOf(d.getDay())>-1 && !(i===0 && streakDayset()[iso])) return i; }
+    return null;
+  }catch(e){ return null; }
+}
+// The streak is rolling seven-day windows; it survives tonight only if the last session is
+// six or fewer days back. At exactly six with nothing today, today is the last chance -
+// which is the only day this banner is worth pixels.
+function calStreakRisk(){
+  try{
+    var wk=streakWeeks(); if(!wk) return null;
+    var ds=streakDayset(), last=Object.keys(ds).sort().pop(); if(!last) return null;
+    var gap=Math.round((new Date(shiftDate()+'T12:00:00')-new Date(last+'T12:00:00'))/86400000);
+    return (gap===6)? wk : null;
+  }catch(e){ return null; }
+}
+function calCountHTML(){
+  var bits=[];
+  try{ bits.push('Week '+Math.min(S.week||1,PLAN.weeks)+' of '+PLAN.weeks); }catch(e){}
+  var dl=calDaysLeft(); if(dl!=null) bits.push(dl===0? 'Block ends today' : 'Block ends in '+dl+' day'+(dl===1?'':'s'));
+  var ns=calNextSession();
+  if(ns!=null) bits.push(ns===0? 'Session day: today' : 'Next session in '+ns+' day'+(ns===1?'':'s'));
+  calCountdownList(2).forEach(function(e){ bits.push(e.label); });
+  var rk=calStreakRisk();
+  var risk=rk? '<div class="cal-risk">Train today or the '+rk+'-week streak ends tonight.</div>' : '';
+  return '<div class="cal-count">'+bits.join(' \u00b7 ')+'</div>'+risk;
+}
+function icsEsc(t){ return String(t).replace(/[\\,;]/g,'').replace(/\n/g,' '); }
+// The whole remaining block as one .ics file: floating local times (a 5:30 session is 5:30
+// wherever the phone is), duration from what the session actually costs, and a one-hour
+// alarm the PHONE fires - the reliable reminder path, unlike web push. Colour is per
+// CALENDAR in every major client, so this ships as its own "Deadstop" calendar the athlete
+// colours once; per-event colour would be a promise the .ics format cannot keep.
+function icsForBlock(){
+  try{
+    var td=calTrainDays(); if(!td.length) return null;
+    var tm=(S.trainTime||'17:30').split(':'), hh=('0'+tm[0]).slice(-2), mi=('0'+(tm[1]||'00')).slice(-2);
+    var codes=PLAN.days.map(function(d){ return d.code; });
+    var ptr=Math.max(0, codes.indexOf(S.day));
+    var endIso=calEndIso(), ev=[], n=new Date(shiftDate()+'T12:00:00');
+    for(var i=0;i<120;i++){
+      var d=new Date(n.getTime()); d.setDate(d.getDate()+i);
+      var iso=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+      if(!endIso || iso>endIso) break;
+      if(td.indexOf(d.getDay())<0) continue;
+      if(i===0 && streakDayset()[iso]) continue;
+      var day=PLAN.days[ptr%PLAN.days.length]; ptr++;
+      var mins=60; try{ mins=sessionMinutes(Object.assign({},day,{exercises:applyOrder(day.code,day.exercises)}))||60; }catch(e){}
+      try{ if(sessTarget()) mins=Math.max(mins, sessTarget()); }catch(e){}
+      ev.push('BEGIN:VEVENT\r\nUID:ds-'+iso+'-'+day.code+'@deadstop\r\nDTSTAMP:20260901T000000Z'
+        +'\r\nDTSTART:'+iso.replace(/-/g,'')+'T'+hh+mi+'00'
+        +'\r\nDURATION:PT'+Math.round(mins)+'M'
+        +'\r\nSUMMARY:'+icsEsc('Deadstop \u2014 '+(day.title||day.code))
+        +'\r\nBEGIN:VALARM\r\nTRIGGER:-PT60M\r\nACTION:DISPLAY\r\nDESCRIPTION:'+icsEsc('Deadstop \u2014 '+(day.title||day.code))+'\r\nEND:VALARM\r\nEND:VEVENT');
+    }
+    if(!ev.length) return null;
+    return 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Deadstop//Card//EN\r\nX-WR-CALNAME:Deadstop\r\nCALSCALE:GREGORIAN\r\n'+ev.join('\r\n')+'\r\nEND:VCALENDAR\r\n';
+  }catch(e){ return null; }
+}
+// Slim strip for the day screen: the countdown and the streak guard live where the athlete
+// looks daily; the calendar itself is the CAL tab, which existed before this feature did -
+// c138 built a second grid underneath it without looking. One calendar, one place.
+// ===== CALENDAR ENTRIES (2026-09-01, his ask) =====
+// Notes, appointments, fitness tests - anything the athlete pins to a date, with a countdown
+// for the ones that matter. Entries are theirs: typed in, listed back, deletable. The card
+// never creates one on its own.
+function calNotes(){ if(!S.calNotes) S.calNotes={}; return S.calNotes; }
+function calNoteAdd(iso, e){
+  try{
+    if(!iso || !e || !String(e.t||'').trim()) return false;
+    var n=calNotes(); (n[iso]=n[iso]||[]).push({t:String(e.t).trim().slice(0,80), k:(e.k==='appt'||e.k==='test')?e.k:'note',
+      tm:(e.tm&&/^\d{2}:\d{2}$/.test(e.tm))?e.tm:null, cd:!!e.cd});
+    save(); return true;
+  }catch(x){ return false; }
+}
+function calNoteDel(iso, i){
+  try{ var n=calNotes(); if(!n[iso]) return; n[iso].splice(i,1); if(!n[iso].length) delete n[iso]; save(); }catch(x){}
+}
+// nearest future countdown entries, soonest first
+function calCountdownList(lim){
+  try{
+    var n=calNotes(), today=shiftDate(), out=[];
+    Object.keys(n).sort().forEach(function(iso){
+      if(iso<today) return;
+      n[iso].forEach(function(e){ if(e.cd) out.push({iso:iso, t:e.t, k:e.k}); });
+    });
+    return out.slice(0, lim||2).map(function(e){
+      var d=Math.round((new Date(e.iso+'T12:00:00')-new Date(today+'T12:00:00'))/86400000);
+      return {t:e.t, k:e.k, days:d, label:e.t+(d===0? ' today' : d===1? ' tomorrow' : ' in '+d+' days')};
+    });
+  }catch(x){ return []; }
+}
+var CN_ICON={note:'var(--dim)', appt:'var(--amber)', test:'var(--red)'};
+// ===== MAIL FROM BULK (2026-09-01, his ask) =====
+// A mailbox with no mail server: every message is generated ON THIS DEVICE from facts the
+// card already keeps, in Bulk's voice - athlete, coach, friend, pizza enthusiast. Each kind
+// has a deterministic id, so a sweep can run on every render and never send the same thing
+// twice. Bulk only writes when there is something true to say.
+// Five faces from his expression sheet (2026-09-01): the mood rides with the message.
+var MAIL_FACES={
+ focused:'data:image/webp;base64,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',
+ encouraging:'data:image/webp;base64,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',
+ tough:'data:image/webp;base64,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',
+ playful:'data:image/webp;base64,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',
+ reflective:'data:image/webp;base64,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'
+};
+function mailBox(){ if(!Array.isArray(S.mail)) S.mail=[]; return S.mail; }
+function mailPush(id, txt, face){
+  var m=mailBox();
+  if(m.some(function(x){ return x.id===id; })) return false;
+  m.push({id:id, d:shiftDate(), txt:txt, face:(MAIL_FACES[face]? face : 'focused'), read:false});
+  while(m.length>30){ var i=m.findIndex(function(x){ return x.read; }); if(i<0) break; m.splice(i,1); }
+  save(); return true;
+}
+function mailUnread(){ return mailBox().filter(function(x){ return !x.read; }).length; }
+var MAIL_GREET=[
+  'Training day. I already chalked up. I do not have hands, but the intent is there.',
+  'Training day. The bar missed you. It told me. We talk.',
+  'Training day. I stretched for both of us. You are welcome.',
+  'Training day. Plan says work. I say pizza after. Both are law.'
+];
+function mailSweep(){
+  try{
+    var today=shiftDate();
+    // 1 - session-day greeting, only on a known training day
+    try{ if(calTrainDays().indexOf(new Date(today+'T12:00:00').getDay())>-1)
+      mailPush('greet-'+today, MAIL_GREET[new Date(today+'T12:00:00').getDate()%MAIL_GREET.length], 'playful'); }catch(e){}
+    // 2 - streak guard, the day it matters
+    try{ var rk=calStreakRisk();
+      if(rk) mailPush('risk-'+today, 'Six days quiet. Train today or the '+rk+'-week streak dies tonight. I will be sad in a very large way.', 'tough'); }catch(e){}
+    // 3 - countdown milestones: a week out, three days, one, and the day itself
+    try{ calCountdownList(6).forEach(function(e){
+      if([7,3,1,0].indexOf(e.days)<0) return;
+      var line = e.days===0? e.t+' is TODAY. Everything you did got you here. Go collect.'
+        : e.days===1? e.t+' is tomorrow. Sleep like it is part of the program. It is.'
+        : e.t+' in '+e.days+' days. Nothing new between now and then - sharpen what you have.';
+      mailPush('cd-'+e.t.replace(/\W+/g,'')+'-'+e.days+'-'+today, line, e.days===0? 'encouraging':'focused'); }); }catch(e){}
+    // 4 - block landmarks
+    try{ var dl=calDaysLeft();
+      if(dl===7) mailPush('bend7-'+cyc(), 'One week left in the block. Finish it the way you started it, but stronger, because you are.', 'focused');
+      if(dl===0) mailPush('bend0-'+cyc(), 'Block ends today. Then we count what you built. I counted already. It is a lot.', 'reflective'); }catch(e){}
+    // 5 - deload week opens
+    try{ if(isDeload()) mailPush('deload-'+cyc(),
+      'Deload week. Lighter on purpose - the growing happens now. Rest is training. Pizza is rest.', 'reflective'); }catch(e){}
+    // 6 - yesterday's records
+    try{
+      var y=new Date(today+'T12:00:00'); y.setDate(y.getDate()-1);
+      var yi=new Date(y.getTime()-y.getTimezoneOffset()*60000).toISOString().slice(0,10);
+      var n=(S.prs||[]).filter(function(p){ return p&&p.d===yi; }).length;
+      if(n) mailPush('pr-'+yi, n+(n===1?' record':' records')+' yesterday. I told everyone at the gym. I am everyone at the gym.', 'encouraging');
+    }catch(e){}
+    // 7 - new build announces itself: the honest fix for stale copies
+    try{ mailPush('build-'+BUILD, 'I got an upgrade - this is '+BUILD+'. If another device still shows an older build, open it fresh so it catches up.', 'playful'); }catch(e){}
+  }catch(e){}
+}
+function mailShow(){
+  try{
+    if(document.getElementById('mailGate')) return;
+    var m=mailBox().slice().reverse();
+    var v=document.createElement('div'); v.id='mailGate'; v.className='terms-wrap'; v.style.zIndex='405';
+    v.innerHTML='<div class="terms-inner">'
+      +'<div class="terms-x" id="mailX">Close</div>'
+      +'<h2>Mail from Bulk</h2>'
+      +'<p class="tnote">Written on this phone, by the bear, from what the card knows. No server, no tracking - if Bulk knows it, it is because you logged it.</p>'
+      +(m.length? m.map(function(x,i){
+          return '<div class="block" style="margin-top:10px'+(x.read?';opacity:.62':'')+'">'
+            +'<div style="display:flex;gap:10px;align-items:flex-start">'
+            +'<img class="mail-face" src="'+(MAIL_FACES[x.face]||MAIL_FACES.focused)+'" alt="">'
+            +'<div style="flex:1;min-width:0">'
+            +'<div class="sleeve-label">BULK \u00b7 '+x.d+'</div>'
+            +'<div style="font-size:14.5px;line-height:1.6;margin-top:2px">'+String(x.txt).replace(/</g,'&lt;')+'</div>'
+            +'</div></div>'
+            +'</div>'; }).join('')
+        : '<p>Nothing today. Bulk only writes when there is something true to say.</p>')
+      +(m.some(function(x){ return x.read; })? '<div class="prof-edit" id="mailClear" style="padding:10px 0;text-align:center">Clear read mail</div>' : '')
+      +'</div>';
+    document.body.appendChild(v);
+    mailBox().forEach(function(x){ x.read=true; }); save();
+    var x=document.getElementById('mailX');
+    if(x) x.onclick=function(){ try{ v.remove(); }catch(e){} render(); };
+    var c=document.getElementById('mailClear');
+    if(c) c.onclick=function(){ S.mail=mailBox().filter(function(x2){ return !x2.read; }); save(); try{ v.remove(); }catch(e){} mailShow(); };
+  }catch(e){}
+}
+function calStripHTML(){
+  return '<div class="block" id="calStrip">'+calCountHTML()
+    +'<div class="prof-edit" data-gocal="1" style="padding:6px 0 0">Open the calendar</div></div>';
+}
+function calBlockHTML(){
+  var td=calTrainDays(), set=Array.isArray(S.trainDays);
+  var chips=['Su','Mo','Tu','We','Th','Fr','Sa'].map(function(nm,i){
+    return '<div class="chip'+(td.indexOf(i)>-1?' on':'')+'" data-tday="'+i+'" style="flex:1;text-align:center;font-size:12px;padding:6px 0">'+nm+'</div>'; }).join('');
+  return '<div class="block" id="calBlock">'
+    +calCountHTML()
+    +'<div class="exnote" style="padding:10px 0 4px">Training days'+(set? '' : ' (read from your log \u2014 tap to set your own)')+':</div>'
+    +'<div class="chiprow" style="gap:5px">'+chips+'</div>'
+    +'<div class="chiprow" style="gap:8px;align-items:center;margin-top:8px">'
+    +'<div class="exnote" style="font-style:normal">Session time</div>'
+    +'<input type="time" id="trainTime" value="'+(S.trainTime||'17:30')+'" style="background:var(--panel);color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:14px">'
+    +'</div>'
+    +'<div class="daybtn" data-icsdl="1" style="margin-top:12px">Send the rest of the block to my calendar</div>'
+    +'<div class="exnote" style="padding:6px 0 0">Opens as its own \u201cDeadstop\u201d calendar \u2014 give it a colour there. Each session is as long as it actually costs, with a one-hour reminder your phone fires itself.</div>'
+    +'</div>';
+}
 function sheetWho(){
   try{ if(S.profile&&S.profile.name) return S.profile.name; }catch(e){}
   return '';
@@ -8537,6 +8925,7 @@ function provenanceHTML(){
     ['Chosen','Endurance rests of 45 and 30 seconds','The source says up to 30. The main lift gets fifteen extra seconds so fifteen honest reps stay possible; the 50\u201360% on-ramp is ours as well.'],
     ['Chosen','Strength opens at 80%','The source floor is 85. The first two weeks climb through 80 and 82.5 on the way there \u2014 an on-ramp, not a disagreement.'],
     ['Chosen','The set labels','\u22645 STRENGTH, \u22648 HYPERTROPHY, \u226412 MUSCLE, 13+ ENDURANCE. Conventional boundaries, but we drew the lines.'],
+    ['Chosen','What a lagging lift is measured against','The block\u2019s priority lift is whichever sits furthest below where the others predict. Four of those expected ratios are the conventional strength-standard relationships; the row\u2019s \u2014 three quarters of your bench \u2014 is ours. Row-to-bench moves a long way with row style, so ours assumes the strict row the card cues, not one you heave.'],
     ['Chosen','Anatomy bands and the PR nudge','The colour thresholds on the muscle map and the \u201cbest within 6%\u201d trigger are display decisions, not measurements.']
   ];
   return '<div class="block"><h3>Where these numbers come from</h3>'
@@ -8808,7 +9197,7 @@ function introHTML(){
 function shareQRHTML(){
   try{
     if(typeof qrcode!=='function') return '';
-    var url=String(location.origin+location.pathname);
+    var url=cardURL();
     if(!/^https?:/.test(url)) return '';        // a file:// card has no address worth sharing
     var qr=qrcode(0,'H'); qr.addData(url); qr.make();
     var svg=qr.createSvgTag({cellSize:8, margin:8, scalable:true});
@@ -10422,7 +10811,50 @@ function shareCardDraw(cb){
 }
 function shareCardPaint(cb, LOGO, BEAR){
   try{
-    var W=1080, H=1350, c=document.createElement('canvas');
+    // ===== measure first, then size the sheet =====
+    // Rule set 2026-08-31: the sheet hides nothing - this is FOR sharing, so every logged
+    // movement prints. The canvas grows to fit the session instead of the session shrinking
+    // to fit the canvas. 1080x1350 (4:5) stays the minimum; a big day makes a taller image.
+    var prs=todayPRs();
+    (function(){ var by={}, order=[];
+      prs.forEach(function(p){ if(!p||!p.ex) return;
+        if(!by[p.ex]){ by[p.ex]={ex:p.ex, parts:[]}; order.push(p.ex); }
+        by[p.ex].parts.push(p.kind+' '+p.val+' (was '+p.prev+')'); });
+      prs=order.map(function(k){ return {ex:k, txt:by[k].parts.join('  \u00b7  ')}; });
+    })();
+    var rows=[];
+    try{
+      var dR=dayObj();
+      dR.exercises.forEach(function(ex,i){
+        var st=null; try{ st=S.data[exKey(i)]; }catch(e){} if(!st) return;
+        var done=st.sets.filter(function(s){ return s.st!=='pend'; }); if(!done.length) return;
+        var tgt=8; try{ tgt=defReps(ex); }catch(e){}
+        var wv=null; try{ wv=done[done.length-1].w!=null? done[done.length-1].w : curLoad(ex,st); }catch(e){}
+        rows.push([st.sub||ex.name, done.length+' \u00d7 '+tgt+(typeof wv==='number'? '  @  '+wv+uLbl():'')]);
+      });
+    }catch(e){}
+    var who='';
+    try{ who=((S.profileName||S.owner||'')+'').trim(); }catch(e){}
+    var ten=[];
+    try{
+      var wks=0; try{ wks=streakWeeks()||0; }catch(e){}
+      var sess=0;
+      try{ sess=(logKeys&&logKeys.length)||0; }catch(e){}
+      if(!sess){ try{ var dd={}; Object.keys(S.exHist||{}).forEach(function(k){
+        (S.exHist[k]||[]).forEach(function(r){ if(r&&r.d) dd[r.d]=1; }); });
+        sess=Object.keys(dd).length; }catch(e){} }
+      var wkNo=0; try{ wkNo=S.week||0; }catch(e){}
+      if(!wks && wkNo) wks=wkNo;
+      var allPR=0; try{ allPR=(S.prs||[]).length; }catch(e){}
+      if(sess) ten.push(sess+(sess===1?' session logged':' sessions logged'));
+      if(wks)  ten.push(wks+(wks===1?' week straight':' weeks straight'));
+      if(allPR) ten.push(allPR+(allPR===1?' record set':' records set'));
+    }catch(e){}
+    // mirror of the draw flow below - if an advance changes there, it changes here
+    var needH=110+(LOGO?112:68)+(who?118:44)+(ten.length?54:0)+44+186
+      +(prs.length? 76+Math.min(prs.length,3)*62+56 : 0)
+      +54+rows.length*58+286;
+    var W=1080, H=Math.max(1350, needH), c=document.createElement('canvas');
     c.width=W; c.height=H;
     var x=c.getContext('2d'); if(!x){ cb(null); return; }
     var css=function(n,f){ try{ var v=getComputedStyle(document.documentElement).getPropertyValue(n).trim(); return v||f; }catch(e){ return f; } };
@@ -10450,33 +10882,16 @@ function shareCardPaint(cb, LOGO, BEAR){
     try{ var d0=dayObj(); dn=(d0&&d0.name)?d0.name:''; }catch(e){}
     x.fillStyle=DIM; x.font=F(24,700);
     x.fillText(dt+(dn? '   \u00b7   '+dn : ''), W-72-x.measureText(dt+(dn? '   \u00b7   '+dn : '')).width, y-14);
-    y+=68;
+    // The drawn wordmark is 131px tall; a 68px advance parked ATHLETE underneath it.
+    y+=(LOGO? 112 : 68);
     // WHOSE card this is. The name is the headline - a portfolio belongs to somebody.
-    var who='';
-    try{ who=((S.profileName||S.owner||'')+'').trim(); }catch(e){}
+    // (who computed in the measuring pass above)
     x.fillStyle=DIM; x.font=F(24,800); x.letterSpacing='6px';
     x.fillText('ATHLETE', 72, y); x.letterSpacing='0px';
     if(who){ x.fillStyle=CHALK; x.font=F(64,800); x.fillText(who, 72, y+66); y+=118; }
     else { y+=44; }
     // and how long they have been at it - tenure earns as much respect as any single number
-    var ten=[];
-    try{
-      var wks=0; try{ wks=streakWeeks()||0; }catch(e){}
-      var sess=0;
-      try{ sess=(logKeys&&logKeys.length)||0; }catch(e){}
-      // logKeys only counts BANKED sessions. Today's, mid-share, is not in there yet, and on a
-      // fresh card it is empty entirely - so fall back to the exercise history, which is
-      // written the moment anything is finished.
-      if(!sess){ try{ var dd={}; Object.keys(S.exHist||{}).forEach(function(k){
-        (S.exHist[k]||[]).forEach(function(r){ if(r&&r.d) dd[r.d]=1; }); });
-        sess=Object.keys(dd).length; }catch(e){} }
-      var wkNo=0; try{ wkNo=S.week||0; }catch(e){}
-      if(!wks && wkNo) wks=wkNo;
-      var allPR=0; try{ allPR=(S.prs||[]).length; }catch(e){}
-      if(sess) ten.push(sess+(sess===1?' session logged':' sessions logged'));
-      if(wks)  ten.push(wks+(wks===1?' week straight':' weeks straight'));
-      if(allPR) ten.push(allPR+(allPR===1?' record set':' records set'));
-    }catch(e){}
+    // (ten computed in the measuring pass above)
     if(ten.length){
       x.fillStyle=AMBER; x.font=F(26,700);
       x.fillText(ten.join('   \u00b7   '), 72, y); y+=54;
@@ -10502,13 +10917,15 @@ function shareCardPaint(cb, LOGO, BEAR){
     var cw=(W-144)/stats.length;
     stats.forEach(function(s2,i){
       var cx2=72+cw*i;
-      x.fillStyle=CHALK; x.font=F(88,800); x.fillText(s2[0], cx2, y+70);
+      // Fit the number to its column - "23,850" at a fixed 88px ran into the next stat.
+      var fs=88; x.font=F(fs,800);
+      while(fs>40 && x.measureText(s2[0]).width>cw-56){ fs-=4; x.font=F(fs,800); }
+      x.fillStyle=CHALK; x.fillText(s2[0], cx2, y+70);
       x.fillStyle=DIM; x.font=F(24,800); x.letterSpacing='5px';
       x.fillText(s2[1], cx2, y+112); x.letterSpacing='0px';
     });
     y+=186;
-    // records
-    var prs=todayPRs();
+    // records (prs merged one-line-per-movement in the measuring pass above)
     if(prs.length){
       x.fillStyle=PANEL; x.strokeStyle=AMBER; x.lineWidth=2;
       var ph=76+prs.slice(0,3).length*62;
@@ -10519,37 +10936,41 @@ function shareCardPaint(cb, LOGO, BEAR){
       prs.slice(0,3).forEach(function(p,i){
         x.fillStyle=CHALK; x.font=F(32,800);
         x.fillText(p.ex, 104, y+108+i*62);
-        x.fillStyle=DIM; x.font=F(28,700);
-        var t2=p.kind+' '+p.val+'  (was '+p.prev+')';
+        var nw=x.measureText(p.ex).width;
+        // the merged line yields size, never overlap - it fits what the name leaves
+        var t2=p.txt, tf=28; x.font=F(tf,700);
+        while(tf>18 && x.measureText(t2).width>W-208-nw-32){ tf-=2; x.font=F(tf,700); }
+        x.fillStyle=DIM;
         x.fillText(t2, W-104-x.measureText(t2).width, y+108+i*62);
       });
       y+=ph+56;
     }
-    // the work
-    var rows=[];
-    try{
-      var d2=dayObj();
-      d2.exercises.forEach(function(ex,i){
-        var st=null; try{ st=S.data[exKey(i)]; }catch(e){} if(!st) return;
-        var done=st.sets.filter(function(s){ return s.st!=='pend'; }); if(!done.length) return;
-        var tgt=8; try{ tgt=defReps(ex); }catch(e){}
-        var wv=null; try{ wv=done[done.length-1].w!=null? done[done.length-1].w : curLoad(ex,st); }catch(e){}
-        rows.push([st.sub||ex.name, done.length+' \u00d7 '+tgt+(typeof wv==='number'? '  @  '+wv+uLbl():'')]);
-      });
-    }catch(e){}
+    // the work (rows computed in the measuring pass above; H already fits every one)
     x.fillStyle=DIM; x.font=F(24,800); x.letterSpacing='5px';
     x.fillText('THE WORK', 72, y); x.letterSpacing='0px'; y+=54;
     // Bulk owns the bottom-right corner. The rows stop before it rather than running underneath
     // him - the first version drew the loads straight behind the bear and they were unreadable.
     var BEARW=330, BEARH=380, BEARTOP=H-150-BEARH;
-    rows.slice(0,8).forEach(function(r){
+    // Every row prints - the canvas was sized for all of them in the measuring pass, so the
+    // list ends above the QR band by construction. Nothing is capped, nothing is hidden.
+    rows.forEach(function(r){
       var right=(y>BEARTOP-30 && BEAR)? (W-96-BEARW-24) : (W-72);
-      x.fillStyle=CHALK; x.font=F(32,700); x.fillText(r[0], 72, y);
+      // the prescription is the payload; the name gets what it leaves and yields with an
+      // ellipsis - long names were colliding head-on with their own numbers
+      x.font=F(32,800); var pw=x.measureText(r[1]).width;
+      var name=String(r[0]), budget=right-pw-36-72;
+      x.font=F(32,700);
+      if(x.measureText(name).width>budget){
+        while(name.length>3 && x.measureText(name+'\u2026').width>budget) name=name.slice(0,-1);
+        name+='\u2026';
+      }
+      x.fillStyle=CHALK; x.fillText(name, 72, y);
       x.fillStyle=AMBER; x.font=F(32,800);
-      x.fillText(r[1], right-x.measureText(r[1]).width, y);
+      x.fillText(r[1], right-pw, y);
       x.strokeStyle=LINE; x.lineWidth=1; x.beginPath(); x.moveTo(72,y+18); x.lineTo(right,y+18); x.stroke();
       y+=58;
     });
+
     // Bulk stands bottom-right, lit from his own glow - a signature, not a mascot parade.
     if(BEAR){
       try{
@@ -10574,7 +10995,7 @@ function shareCardPaint(cb, LOGO, BEAR){
     // in this build; a grid of squares cannot.
     var qrDrawn=false;
     try{
-      var url=String(location.origin+location.pathname);
+      var url=cardURL();
       if(/^https?:/.test(url) && typeof qrcode==='function'){
         var q=qrcode(0,'M'); q.addData(url); q.make();
         var n=q.getModuleCount(), box=150, pad=10, cell=(box-pad*2)/n;
@@ -10608,8 +11029,19 @@ function shareRecapImage(){
     if(!blob){ shareRecap(); return; }                 // no canvas: the text still goes
     try{
       var f=new File([blob], 'deadstop-session.png', {type:'image/png'});
-      if(navigator.canShare && navigator.canShare({files:[f]}) && navigator.share){
-        navigator.share({files:[f], title:'Training'}).catch(function(){}); return;
+      // Files-only shares open a BLANK composer in targets that only take text or a link
+      // (field bug: pick a social app from the sheet, get an empty page). Send text and the
+      // card's address alongside the image; fall back by dropping pieces, since platforms
+      // disagree on which combinations they accept.
+      var txt='Training session \u2014 Deadstop';
+      var u2=cardURL();
+      var tries=/^https?:/.test(u2)? [{files:[f],text:txt,url:u2},{files:[f],text:txt},{files:[f]}]
+                                   : [{files:[f],text:txt},{files:[f]}];
+      if(navigator.canShare && navigator.share){
+        for(var ti=0;ti<tries.length;ti++){
+          var ok2=false; try{ ok2=navigator.canShare(tries[ti]); }catch(e){}
+          if(ok2){ navigator.share(tries[ti]).catch(function(){}); return; }
+        }
       }
     }catch(e){}
     try{
@@ -10982,7 +11414,17 @@ function wireFocus(){
 var PLAN = {"block": "Starter Block - Full Body Strength", "start": "2026-08-16", "weeks": 6, "maxes": {"bench": 210.0, "ohp": 105.0, "squat": 220.0, "dead": 250.0}, "days": [{"code": "A", "title": "Push - Heavy", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "5", "load": "165", "loadNum": 165.0, "rir": "2, last set 1", "note": "78% of a 210 programming max", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [235, 235, 245, 245, 255, 135], "maxKey": "bench", "pct": [0.78333, 0.78333, 0.81667, 0.81667, 0.85, 0.45]}, {"name": "Overhead Press", "sets": 3, "reps": "8", "load": "75", "loadNum": 75.0, "rir": "2", "note": "Barbell - your other lagging lift. W1-2: eights. W3-4: ride reps to 9-10 at 75. W5: 80.", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [105, 105, 105, 105, 115, 55], "maxKey": "ohp", "pct": [0.7, 0.7, 0.7, 0.7, 0.76667, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Strict. No swinging.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Rope Pushdowns", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Straight-Bar Pushdown", "Overhead Rope Extension", "Bench Dips"], "cue": "Pin the elbows, split the rope at the bottom.", "wk": [30, 30, 35, 35, 40, 20], "maxKey": null, "pct": null}]}, {"code": "B", "title": "Pull - Heavy", "exercises": [{"name": "Cable Rows", "sets": 4, "reps": "8", "load": "100", "loadNum": 100.0, "rir": "2, last set 1", "note": "Pause a beat at the squeeze.", "perHand": false, "barbell": false, "deload": 60, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [140, 140, 150, 150, 160, 85], "maxKey": null, "pct": null}, {"name": "Lat Pulldown", "sets": 4, "reps": "8", "load": "90", "loadNum": 90.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 55, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [130, 130, 140, 140, 150, 80], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [65, 65, 70, 70, 75, 40], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "Fixed bars in 10s, no 55. Double progression: ride reps 8->10 at 60, then jump to 70.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [60, 60, 60, 70, 70, 35], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "10", "load": "45", "loadNum": 45.0, "rir": "1", "note": "35 broke form when pre-fatigued; start 30.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Replaces preacher - trains the biceps at full stretch (elbow behind the torso), works identically at both your gyms, and kills the PF-machine anchor problem. Start 20s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 4, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "C", "title": "Legs - Squat Priority", "exercises": [{"name": "Back Squat", "sets": 4, "reps": "5", "load": "170", "loadNum": 170.0, "rir": "2, last set 1", "note": "78% of 220. All four sets at 170 - do not climb.", "perHand": false, "barbell": true, "deload": 100, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [245, 245, 255, 265, 275, 145], "maxKey": "squat", "pct": [0.77778, 0.77778, 0.80952, 0.84127, 0.87302, 0.46032]}, {"name": "Leg Press", "sets": 3, "reps": "12", "load": "125", "loadNum": 125.0, "rir": "2", "note": "Extra quad volume for the lagging lift. Log your starting weight. Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 75, "rest": "2:00", "warmup": "", "subs": ["Hack Squat", "Bulgarian Split Squat", "Goblet Squat"], "cue": "Whole foot pressing, knees track the toes, never slam lockout.", "wk": [180, 190, 200, 210, 220, 110], "maxKey": null, "pct": null}, {"name": "Romanian Deadlift", "sets": 3, "reps": "8", "load": "135", "loadNum": 135.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "", "subs": ["DB Romanian Deadlift", "Good Morning", "Back Extension"], "cue": "Hips back until the hamstrings scream, bar drags the thighs.", "wk": [195, 205, 215, 225, 235, 115], "maxKey": null, "pct": null}, {"name": "Walking Lunges", "sets": 3, "reps": "10 per leg", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Bulgarian Split Squat", "Reverse Lunges", "Step-Ups"], "cue": "Long step, back knee straight down, drive through the front heel.", "wk": [35, 35, 40, 40, 45, 20], "maxKey": null, "pct": null}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Replaces hip thrust - glutes already get squat, leg press, RDL and lunges on this day, while hamstrings had only one direct slot all week. Seated for the lengthened position. Dial to RIR 1.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 5, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "10-15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}, {"name": "Side Plank", "sets": 3, "reps": "30-45s per side", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "Coverage fix - obliques had no direct work at all. Anti-rotation, not a crunch.", "perHand": false, "barbell": false, "deload": null, "rest": "1:00", "warmup": "", "subs": ["Pallof Press", "Cable Woodchop"], "cue": "Stack the shoulders and hips, squeeze the down-side glute, breathe.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "D", "title": "Push - Volume", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "10", "load": "145", "loadNum": 145.0, "rir": "2, last set 1", "note": "68% of 210", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [205, 205, 215, 215, 225, 115], "maxKey": "bench", "pct": [0.68333, 0.68333, 0.71667, 0.71667, 0.75, 0.38333]}, {"name": "Overhead Press", "sets": 3, "reps": "10", "load": "65", "loadNum": 65.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [95, 95, 95, 105, 105, 55], "maxKey": "ohp", "pct": [0.63333, 0.63333, 0.63333, 0.7, 0.7, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [55, 55, 60, 60, 65, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 4, "reps": "15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Overhead Rope Extension", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Upgraded from pushdowns on this day - overhead position grows the long head substantially more (Maeo 2023). Start 25 and dial to RIR 1; it will feel much lighter than pushdowns.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Elbows by your ears, full stretch behind the head, squeeze to lockout.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "E", "title": "Pull - Volume", "exercises": [{"name": "Lat Pulldown", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Cable Rows", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Straight-Arm Pulldown", "sets": 2, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Fixed from 57.5 - stacks move in 5s.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["DB Pullover", "Rope Straight-Arm Pulldown", "Cable Pullover"], "cue": "Arms long, push the bar down with your armpits.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [50, 50, 50, 60, 60, 30], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Incline DB Curl", "sets": 2, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Volume-day partner to Day B - lengthened-position biceps work. Start 15s, chase the stretch not the weight.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Bench at 45-60, arms hanging behind you - curl without the elbows drifting forward.", "wk": null, "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 4, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "F", "title": "Legs - Deadlift Focus", "exercises": [{"name": "Conventional Deadlift", "sets": 3, "reps": "6", "load": "165", "loadNum": 165.0, "rir": "3-4", "note": "65% of 250, deliberately easy. W1-2 groove the pattern at 165, then 180 / 190 / 200.", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "95 x5, 130 x3, 150 x1", "subs": ["Trap Bar Deadlift", "Rack Pull", "DB Romanian Deadlift"], "cue": "Wedge in, pull the slack out, push the floor away.", "wk": [235, 235, 255, 275, 285, 135], "maxKey": "dead", "pct": [0.65278, 0.65278, 0.70833, 0.76389, 0.79167, 0.375]}, {"name": "Back Squat", "sets": 3, "reps": "10", "load": "150", "loadNum": 150.0, "rir": "2", "note": "68% of 220. Second squat exposure - skill practice for the weak lift.", "perHand": false, "barbell": true, "deload": 90, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [215, 215, 225, 225, 235, 125], "maxKey": "squat", "pct": [0.68254, 0.68254, 0.71429, 0.71429, 0.74603, 0.39683]}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Seated beats lying for hamstring growth - hip flexed puts the hamstrings at length (Maeo 2021, +14 vs +9 percent). 70 is a guess anchor - dial to RIR 1 first session.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 5, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}, {"name": "Plank", "sets": 3, "reps": "max hold", "load": "bodyweight", "loadNum": null, "rir": "", "note": "You are tested on a max plank every six months and were training it zero times a week. Log the hold time in reps as seconds if you want it tracked.", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": [], "cue": "Squeeze glutes, ribs down, one straight line - the shake is the work.", "wk": null, "maxKey": null, "pct": null}, {"name": "Lateral Band Walk", "sets": 2, "reps": "15 per side", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "Coverage fix - abductors were carried entirely by squats and never trained directly. Cheap glute-medius insurance for the knees under a heavy squat.", "perHand": false, "barbell": false, "deload": null, "rest": "1:00", "warmup": "", "subs": ["Cable Hip Abduction", "Hip Abduction Machine"], "cue": "Band above the knees, half-squat, step wide - do not let the knees fall in.", "wk": null, "maxKey": null, "pct": null}, {"name": "Side Plank", "sets": 3, "reps": "30-45s per side", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "Coverage fix - obliques had no direct work at all. Anti-rotation, not a crunch.", "perHand": false, "barbell": false, "deload": null, "rest": "1:00", "warmup": "", "subs": ["Pallof Press", "Cable Woodchop"], "cue": "Stack the shoulders and hips, squeeze the down-side glute, breathe.", "wk": null, "maxKey": null, "pct": null}]}], "builtOn": "2026-08-16", "v": 18};
 var PLAN_DEFAULT=null; try{ PLAN_DEFAULT=JSON.parse(JSON.stringify(PLAN)); }catch(e){}
 const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
-const BUILD = 'c126';
+const BUILD = 'c142';
+// The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
+// the social payload) uses THIS, never the runtime address - a card opened from a download,
+// a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
+// shared PNG (field bug 2026-08-31: the sheet's QR sent scanners somewhere else entirely).
+// Empty string = fall back to location, for a card that has not been told its home yet.
+const CANON_URL = 'https://thundermeadows.github.io/training-plan/';
+function cardURL(){
+  try{ if(CANON_URL && /^https?:/.test(CANON_URL)) return CANON_URL; }catch(e){}
+  try{ return String(location.origin+location.pathname); }catch(e){ return ''; }
+}
 const CARD_NAME = 'DEADSTOP · TRAINING CARD';   // names bug reports and the share sheet
 // Filled in by the batch generator when a card is produced for a named person. Null on the
 // generic build, in which case nothing below it runs and the card onboards the user normally.
@@ -11223,7 +11665,11 @@ function dayObjRaw(){ const p=planDay();
   const cs=customsFor(p.code).map(c=>({name:c.name, sets:c.sets, reps:String(c.reps), load:String(c.load), loadNum:(isFinite(parseFloat(c.load))? parseFloat(c.load):null), rest:'1:30', rir:'1', perHand:!!c.perHand, custom:true, cid:c.cid}));
   return Object.assign({}, p, {exercises: p.exercises.concat(cs)}); }
 function dayObj(){ var d=dayObjRaw();
-  try{ return Object.assign({},d,{exercises:applyOrder(d.code,d.exercises)}); }catch(e){ return d; } }
+  try{
+    var ordered=applyOrder(d.code,d.exercises);
+    var f=sessApply(ordered, d.code);
+    return Object.assign({},d,{exercises:f.exercises, sessPlan:f.sp});
+  }catch(e){ return d; } }
 
 function dayLoad(){ const d=dayObj(); let ex=0, sets=0;
   d.exercises.forEach(e=>{ if(isOut(e.name)) return; ex++; sets+=(isDeload()?2:exSets(e)); });
@@ -11236,7 +11682,8 @@ const MAXINFO=[
  {k:'bench', name:'Bench Press', lifts:'Day A heavy + Day D volume'},
  {k:'squat', name:'Back Squat', lifts:'Day C heavy + Day F volume'},
  {k:'dead',  name:'Deadlift',   lifts:'Day F'},
- {k:'ohp',   name:'Overhead Press', lifts:'Day A + Day D'}
+ {k:'ohp',   name:'Overhead Press', lifts:'Day A + Day D'},
+ {k:'row',   name:'Barbell Row', lifts:'Pull days'}
 ];
 function rmEst(w,r){ if(!w) return null; r=r||3; return r===1? w : Math.round(w*(1+r/30)); }
 function topLoadPreview(k){
@@ -11266,6 +11713,68 @@ function sessionMinutes(d){
     return m>=20? m : null;
   }catch(e){ return null; }
 }
+// ===== SESSION LENGTH TARGET =====
+// Set 2026-08-31: "an hour and 30 minutes worth of training" on the Session Card. The gap
+// between the plan's clock cost and the target fills in a declared order that respects the
+// cut and the 10-20 weekly-set landmark: (1) +1 set to the day's lightest accessories -
+// never a main, three added sets max, no accessory past 4 - then (2) a Zone 2 finisher for
+// what remains, 10-30 min. A day already within ~4 min of target is left alone, and a day
+// OVER target is never trimmed - the card adds training, it does not take it away.
+const SESS_DEFAULT = null; // minutes; null = off until chosen in Settings
+function sessTarget(){ return (S.sessTarget===undefined)? SESS_DEFAULT : S.sessTarget; }
+function sessSecsExact(exs){
+  var sec=6*60;
+  (exs||[]).forEach(function(ex){
+    if(isOut(ex.name)) return;
+    var n=isDeload()? 2 : exSets(ex);
+    var r=String(exRest(ex)||'2:00'), mm=r.match(/^(\d+):(\d+)$/);
+    sec += n*(45+(mm? (+mm[1])*60+(+mm[2]) : (parseInt(r,10)||120)));
+  });
+  return sec;
+}
+function isMainEx(ex){ return !!(ex && (ex.maxKey || ex.pct)); }
+function sessEligible(exs){
+  return exs.map(function(ex,i){ return {ex:ex,i:i}; })
+     .filter(function(o){ return !isMainEx(o.ex) && !isOut(o.ex.name) && exSets(o.ex)<4; })
+     .sort(function(a,b){ return exSets(a.ex)-exSets(b.ex) || a.i-b.i; });
+}
+function sessAddCost(o){
+  var r=String(exRest(o.ex)||'1:30'), mm=r.match(/^(\d+):(\d+)$/);
+  return 45+(mm? (+mm[1])*60+(+mm[2]) : 90);
+}
+function sessPlanFor(exs, code){
+  var tgt=sessTarget(); if(!tgt || isDeload()) return null;
+  var base=sessSecsExact(exs), gap=tgt*60-base;
+  var elig=sessEligible(exs);
+  // Manual selection (2026-09-01, his directive): the athlete's choices beat the auto-fill.
+  // Every eligible accessory is a tappable chip and the finisher is a stepper; whatever they
+  // set is exactly what the day runs. Auto-fill only decides when they have not.
+  var m=(S.sessManual && code && S.sessManual[code]) || null;
+  var adds=[];
+  if(m && m.sel){
+    elig.forEach(function(o){
+      if(m.sel.indexOf(o.ex.name)>-1){ adds.push({i:o.i, name:o.ex.name}); gap-=sessAddCost(o); } });
+  } else {
+    if(gap<240) return null;
+    var budget=3;
+    elig.forEach(function(o){
+      if(!budget || gap<240) return;
+      adds.push({i:o.i, name:o.ex.name}); budget--; gap-=sessAddCost(o); });
+  }
+  var fin=0;
+  if(m && typeof m.fin==='number') fin=Math.max(0, Math.min(30, m.fin));
+  else if(gap>=480) fin=Math.min(30, Math.max(10, Math.round(gap/60)));
+  if(!adds.length && !fin && !m) return null;
+  return {adds:adds, fin:fin, tgt:tgt, manual:!!m, elig:elig.map(function(o){ return o.ex.name; })};
+}
+function sessApply(exs, code){
+  var sp=sessPlanFor(exs, code); if(!sp) return {exercises:exs, sp:null};
+  var out=exs.map(function(ex,i){
+    var a=sp.adds.filter(function(x){ return x.i===i; }).length;
+    return a? Object.assign({},ex,{sets:(exSets(ex)+a), tAdd:a}) : ex;
+  });
+  return {exercises:out, sp:sp};
+}
 function cyc(){ return S.cycle||1; }
 function exKey(i){ return cyc()+'c|'+S.week+'|'+S.day+'|'+i; }
 function exState(i, ex){
@@ -11275,6 +11784,9 @@ function exState(i, ex){
   }
   const st=S.data[exKey(i)];
   while(st.sets.length<n) st.sets.push({st:'pend',reps:null,rir:null});
+  // the session-length target can grow a day and later be turned off - untouched trailing
+  // sets leave with it, logged sets never do
+  while(st.sets.length>n && st.sets[st.sets.length-1].st==='pend') st.sets.pop();
   while(st.sets.length>n){ const Lz=st.sets[st.sets.length-1]; if(Lz.added || Lz.st!=='pend') break; st.sets.pop(); }
   if(st.open>=st.sets.length) st.open=-1;
   return st;
@@ -12579,7 +13091,9 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(!S.profile) S.profile={hFt:5,hIn:9,wt:200,goal:'block1'};
   if(S.ready===undefined) S.ready=null;
   if(!S.e1rm) S.e1rm={};
-  if(!S.painLog) S.painLog=[];
+  // pain flags left with the feature (2026-09-01) - stored answers go with the question
+  try{ if(S.painLog!==undefined) delete S.painLog;
+       Object.keys(S.data||{}).forEach(function(k){ var st=S.data[k]; if(st&&st.pain!==undefined) delete st.pain; }); }catch(e){}
   if(!S.lastPerf) S.lastPerf={};
   if(!S.e1rmH) S.e1rmH={};
   if(!S.pairs) S.pairs={};
@@ -12697,6 +13211,7 @@ function renderInner(){
     try{ startWire(); }catch(e){ oops('startWire',e); }
     return;
   }
+  try{ mailSweep(); }catch(e){}
   const d=dayObj(); const app=document.getElementById('app');
   let h='<header class="hdr-id">'
     +(S.avatar? '<img class="ava-mini" src="'+S.avatar+'" alt="Your photo \u2014 tap to enlarge" data-avabig="1" role="button" tabindex="0">' : '<span class="hdr-mark">'+brandMark(84)+'</span>')
@@ -12709,6 +13224,10 @@ function renderInner(){
         ? ' \u00b7 <span class="nist-tag lockfree" data-nist="1" role="button" tabindex="0">NOT INSTALLED</span>' : '')
       +'</div></div>'
     +((cyc()===1)? '<div class="hdr-help lockfree" data-tourcore="1" role="button" tabindex="0" aria-label="Replay the quick tour">?</div>' : '')
+    +'<div class="hdr-help lockfree" data-mailopen="1" role="button" tabindex="0" aria-label="Mail from Bulk" style="position:relative">'
+      +'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>'
+      +(mailUnread()? '<span class="mail-badge">'+Math.min(9,mailUnread())+'</span>':'')
+      +'</div>'
     +'<div class="hdr-help lockfree" data-setopen="1" role="button" tabindex="0" aria-label="Settings">'
       +'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">'
       +'<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6h.05A1.7 1.7 0 0 0 10.1 3V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.1 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.05A1.7 1.7 0 0 0 21 10.1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/>'
@@ -12749,8 +13268,10 @@ function renderInner(){
     h+='<div class="sub" style="margin-top:8px">Training calendar</div>';
     h+=calHTML();
     h+='<div class="rules">Green days are sessions you actually logged \u2014 the letters are which day you ran. '
-      +'Dashed amber marks a deload week computed from the block start date. A red outline is a pain flag. '
-      +'Small numbers are logged bodyweight. Tap any day to open it.</div>';
+      +'Solid amber outlines are your scheduled training days ahead; a red number is a scheduled day that went untrained. '
+      +'Dashed amber marks the deload week, \u2605 is block end, and small numbers are logged bodyweight. '
+      +'Dots are your own entries \u2014 grey notes, amber appointments, red fitness tests. Tap any day to open it or add to it.</div>';
+    h+=calBlockHTML();
     app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='MAX'){
@@ -12883,7 +13404,21 @@ function renderInner(){
     app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){} return;
   }
   h+='<div class="'+(isDeload()?'deload':'')+'"><div class="deload-banner">Deload week: 2 sets per exercise, light loads (roughly 40\u201350% \u2014 exact numbers below, already adjusted).</div></div>';
-  h+='<div class="sub" style="margin-top:8px">'+d.title+(function(){ var m=sessionMinutes(d); return m? ' \u00b7 about '+m+' min':''; })()+'</div>';
+  h+='<div class="sub" style="margin-top:8px">'+d.title+(function(){ var m=sessionMinutes(d); return m? ' \u00b7 about '+m+' min':''; })()
+    +(d.sessPlan? ' \u00b7 target '+Math.floor(d.sessPlan.tgt/60)+'h'+String(d.sessPlan.tgt%60).padStart(2,'0') : '')+'</div>';
+  if(d.sessPlan){
+    var sp2=d.sessPlan, selN={};
+    sp2.adds.forEach(function(a){ selN[a.name]=1; });
+    h+='<div class="exnote" style="padding:6px 0 0;font-style:normal">For the session-length target \u2014 tap to choose what fills the time:</div>'
+      +'<div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
+      +sp2.elig.map(function(nm){ return '<div class="chip'+(selN[nm]?' on':'')+'" data-ssel="'+esc(nm)+'" style="font-size:12px;padding:6px 10px">+1 set '+esc(nm)+'</div>'; }).join('')
+      +'</div>'
+      +'<div class="chiprow" style="margin-top:6px;gap:8px;align-items:center">'
+      +'<div class="chip" data-sfin="-5" style="font-size:13px;padding:6px 14px">\u22125</div>'
+      +'<div class="exnote" style="font-style:normal">Zone 2 finisher \u2014 '+sp2.fin+' min, conversational pace</div>'
+      +'<div class="chip" data-sfin="5" style="font-size:13px;padding:6px 14px">+5</div>'
+      +'</div>';
+  }
   const RL=readyLabel(); const rToday = S.ready && S.ready.date===shiftDate();
   const fam = /push/i.test(d.title)? 'push' : /pull/i.test(d.title)? 'pull' : /leg|squat|deadlift|lower/i.test(d.title)? 'legs' : 'full';
 
@@ -13007,12 +13542,9 @@ function renderInner(){
       +'</div>'
       + weightEditorHTML(i,ex,st)
       + wuHTML(i, ex, st, w)
-      +'<div class="ed-row" style="padding:0 12px 8px;margin-top:0"><div class="ed-label" style="width:auto">Pain?</div>'
-      +'<div class="feelchips" style="flex:0 1 260px">'
-      +[[0,'None'],[2,'Ache \u22643'],[4,'Pain \u22654']].map(p=>'<button class="fc'+((st.pain||0)===p[0]?' on':'')+'" data-pain="'+i+'" data-lv="'+p[0]+'">'+p[1]+'</button>').join('')
-      +'</div></div>'
-      +((st.pain||0)>=4? '<div class="cue" style="padding:0 12px 10px;color:var(--red)">Stop this movement today. '+painAlt(ex,st)+' Log it \u2014 repeat pain means we reroute the block.</div>'
-        : (st.pain===2? '<div class="exnote" style="padding:0 12px 8px">Ache noted \u2014 keep it \u22643/10, slow the eccentric, stop if it climbs.</div>':''))
+      // The pain question was removed 2026-09-01: an app that asks what hurts and then adjusts
+      // the training is practicing something adjacent to medicine (his call, pending a legal
+      // look). Swap stays - trade any movement, no reason asked.
       +'<div class="ed-row" style="padding:0 12px 8px;margin-top:0"><div class="ed-label" style="width:auto">Load?</div>'
       +'<div class="feelchips" style="flex:0 1 260px">'
       +FEELS.map((f,fv)=>'<button class="fc'+(st.feel===fv?' on':'')+'" data-feelbtn="'+i+'" data-fv="'+fv+'">'+f+'</button>').join('')
@@ -13345,14 +13877,35 @@ function avatarFromFile(file){
   }catch(e){ alertToast('Could not read that photo'); }
 }
 function dayUtilHTML(){
+  var CAL=''; try{ CAL=calStripHTML(); }catch(e){}
   // Session utilities live at the BOTTOM of the training day only - quiet text, out of the
   // way, present exactly where "reset this day" and "something looks wrong" can occur.
   var bk=''; try{ bk=backupBarHTML(); }catch(e){}
+  bk=CAL+bk;   // the block calendar leads the utility area
   var rk='dureset:'+S.day;
   var rlab=(armDel===rk)? '<span data-du="reset" class="warn">Wipe today\u2019s logged sets? Tap again</span>'
                         : '<span data-du="reset">Reset day</span>';
   return bk+'<div class="dayutil">'+rlab+'<span class="du-dot">\u00b7</span><span data-du="report">Report a problem</span></div>';
 }
+// ===== GLUE FIXED BARS TO THE VISIBLE BOTTOM =====
+// iOS pins position:fixed to the LAYOUT viewport, not the one on screen. Open the keyboard
+// (weight editor, notes) or zoom, and the visual viewport shrinks and pans - the deck bar
+// then floats mid-screen while scrolling (field bug 2026-08-31). Whenever the two viewports
+// disagree, translate the bars to hug the bottom the athlete can actually see.
+(function(){
+  var vv=window.visualViewport; if(!vv || !vv.addEventListener) return;
+  var raf=0;
+  function place(){
+    raf=0;
+    var dy=(vv.offsetTop+vv.height)-window.innerHeight;
+    var t=(Math.abs(dy)>1)? 'translateY('+dy+'px)' : '';
+    document.querySelectorAll('.footer,.stbar').forEach(function(el){ el.style.transform=t; });
+  }
+  function ask(){ if(!raf) raf=requestAnimationFrame(place); }
+  vv.addEventListener('resize', ask);
+  vv.addEventListener('scroll', ask);
+  window.addEventListener('orientationchange', function(){ setTimeout(ask,300); });
+})();
 function paintFoot(){ var el=document.getElementById('footInner'); if(!el) return;
   var training=false;
   try{ training=(S.setup!==false)&&['CAL','YOU','MAX','TEST','PLAN','RATE','LIB'].indexOf(S.day)<0&&focusMax()>0; }catch(e){}
@@ -13379,7 +13932,7 @@ function wire(){
     alertToast('Beta \u2014 actively improving from real training. Something off? \u201CReport a problem\u201D lives at the bottom of your training day.');
   }; });
   document.querySelectorAll('[data-sharelink]').forEach(function(el){ el.onclick=function(){
-    var u=String(location.origin+location.pathname);
+    var u=cardURL();
     try{ if(navigator.share){ navigator.share({title:(typeof CARD_NAME!=='undefined'?CARD_NAME:'Training card'), url:u}).catch(function(){}); return; } }catch(e){}
     try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(u).then(function(){ alertToast('Link copied'); }); return; } }catch(e){}
     alertToast(u);
@@ -13539,6 +14092,54 @@ function wire(){
     libFilter();
   }
   document.querySelectorAll('[data-radj]').forEach(b=>b.onclick=()=>{ S.restAdj=+b.dataset.radj; save(); render(); });
+  document.querySelectorAll('[data-slen]').forEach(b=>b.onclick=()=>{ var v=b.dataset.slen; S.sessTarget=(v==='off')? null : +v; save(); render(); });
+  document.querySelectorAll('[data-retest]').forEach(b=>b.onclick=()=>{
+    var o=ONB(); o.retest=true; o.resBak=Object.assign({}, o.res||{}); o.res={};
+    o.ramp=null; o.done=false; o.step=0; save(); render(); });
+  document.querySelectorAll('[data-ssel]').forEach(b=>b.onclick=()=>{
+    var d=dayObj(), sp=d.sessPlan; if(!sp) return;
+    S.sessManual=S.sessManual||{};
+    var cur=S.sessManual[d.code]||{sel:sp.adds.map(function(a){ return a.name; }), fin:null};
+    var nm=b.dataset.ssel, i=cur.sel.indexOf(nm);
+    if(i>-1) cur.sel.splice(i,1); else cur.sel.push(nm);
+    S.sessManual[d.code]=cur; save(); render(); });
+  document.querySelectorAll('[data-discshow]').forEach(b=>b.onclick=()=>{ bootDisc(true); });
+  document.querySelectorAll('[data-gocal]').forEach(b=>b.onclick=()=>{ S.day='CAL'; save(); render(); });
+  document.querySelectorAll('[data-mailopen]').forEach(b=>b.onclick=()=>{ mailShow(); });
+  document.querySelectorAll('[data-cntype]').forEach(b=>b.onclick=()=>{ S.cnType=b.dataset.cntype; save(); render(); });
+  document.querySelectorAll('[data-cncd]').forEach(b=>b.onclick=()=>{ S.cnCd=(S.cnCd===false); save(); render(); });
+  document.querySelectorAll('[data-cnadd]').forEach(b=>b.onclick=()=>{
+    var t=document.getElementById('cnTitle'), tm=document.getElementById('cnTime');
+    var ok=calNoteAdd(b.dataset.cnadd, {t:(t&&t.value)||'', k:S.cnType||'note', tm:(tm&&tm.value)||null, cd:S.cnCd!==false});
+    if(!ok){ alertToast('Give it a name first'); return; }
+    render();
+  });
+  document.querySelectorAll('[data-cndel]').forEach(b=>b.onclick=()=>{
+    var p=b.dataset.cndel.split('|'); calNoteDel(p[0], +p[1]); render(); });
+  document.querySelectorAll('[data-tday]').forEach(b=>b.onclick=()=>{
+    var td=calTrainDays(), i=+b.dataset.tday, at=td.indexOf(i);
+    if(at>-1) td.splice(at,1); else td.push(i);
+    S.trainDays=td.sort(); save(); render(); });
+  (function(){ var t=document.getElementById('trainTime');
+    if(t) t.onchange=function(){ S.trainTime=t.value||'17:30'; save(); }; })();
+  document.querySelectorAll('[data-icsdl]').forEach(b=>b.onclick=()=>{
+    var ics=icsForBlock();
+    if(!ics){ alertToast('Pick your training days first'); return; }
+    try{
+      var bl=new Blob([ics],{type:'text/calendar'});
+      var a=document.createElement('a'); a.href=URL.createObjectURL(bl);
+      a.download='deadstop-block.ics'; document.body.appendChild(a); a.click();
+      setTimeout(function(){ try{ URL.revokeObjectURL(a.href); a.remove(); }catch(e){} },2000);
+    }catch(e){ alertToast('Could not build the file'); }
+  });
+
+  document.querySelectorAll('[data-termsshow]').forEach(b=>b.onclick=()=>{ termsShow(); });
+  document.querySelectorAll('[data-sfin]').forEach(b=>b.onclick=()=>{
+    var d=dayObj(), sp=d.sessPlan; if(!sp) return;
+    S.sessManual=S.sessManual||{};
+    var cur=S.sessManual[d.code]||{sel:sp.adds.map(function(a){ return a.name; }), fin:null};
+    cur.fin=Math.max(0, Math.min(30, (typeof cur.fin==='number'? cur.fin : sp.fin)+(+b.dataset.sfin)));
+    S.sessManual[d.code]=cur; save(); render(); });
   document.querySelectorAll('[data-kaon]').forEach(b=>b.onclick=()=>{
     S.kaOn=!S.kaOn; if(!S.kaOn){ try{ kaStop(); }catch(e){} } save(); render();
     alertToast(S.kaOn? 'Beeps held open \u2014 this will pause your music' : 'Your music will keep playing');
@@ -13612,15 +14213,6 @@ function wire(){
   document.querySelectorAll('[data-feelbtn]').forEach(b=>b.onclick=()=>{
     const i=+b.dataset.feelbtn, ex=dayObj().exercises[i], st=exState(i,ex), fv=+b.dataset.fv;
     st.feel = (st.feel===fv)? null : fv; save(); render();
-  });
-  document.querySelectorAll('[data-pain]').forEach(b=>b.onclick=()=>{
-    const i=+b.dataset.pain, ex=dayObj().exercises[i], st=exState(i,ex), lv=+b.dataset.lv;
-    st.pain = (st.pain===lv)? 0 : lv;
-    if(st.pain>=4){
-      const nm=st.sub||ex.name, today=localDate();
-      if(!S.painLog.some(p=>p.date===today&&p.ex===nm)) S.painLog.push({date:today, ex:nm, lv:st.pain});
-    }
-    save(); render();
   });
   document.querySelectorAll('[data-wbtn]').forEach(el=>el.onclick=()=>{
     const i=+el.dataset.wbtn, ex=dayObj().exercises[i], st=exState(i,ex);
@@ -14458,7 +15050,6 @@ function blockHandoff(){
      : '- not enough logged squat sessions to measure movement\n');
   const wk=[]; for(let w=1;w<=PLAN.weeks;w++) wk.push('W'+w+':'+weekSets(cyc(),w));
   t+='\nADHERENCE BY WEEK (sets logged)\n- '+wk.join('  ')+'\n';
-  if(S.painLog&&S.painLog.length) t+='\nPAIN FLAGS: '+S.painLog.slice(-6).map(p=>p.ex+' ('+p.date+')').join(', ')+'\n';
   t+='\nQUESTION FOR NEXT BLOCK: did the gap close enough to keep this structure, or does Block 2 need different emphasis?';
   return t;
 }
@@ -14507,19 +15098,32 @@ function calHTML(){
     let bg='transparent', fg='var(--faint)', bd='1px solid var(--line)';
     if(e && e.days.length){ bg='var(--green)'; fg='#0d1108'; bd='1px solid var(--green)'; }
     else if(deload){ bg='transparent'; fg='var(--amber)'; bd='1px dashed var(--amber)'; }
-    if(e && e.pain>=4){ bd='2px solid var(--red)'; }
+    // pain outlines left with the pain feature (c131); scheduled/missed arrived with the
+    // block-calendar work (c139) - marks only exist where training days are actually known
+    var schedHere=false; try{ schedHere=calTrainDays().indexOf(new Date(iso+'T12:00:00').getDay())>-1
+      && iso>=PLAN.start && calEndIso() && iso<=calEndIso(); }catch(e2){}
+    if(schedHere && !(e&&e.days.length)){
+      if(iso>today) bd='1px solid var(--amber)';
+      else if(iso<today) fg='var(--red)';
+    }
     h+='<div data-calday="'+iso+'" style="min-height:44px;border:'+bd+';border-radius:8px;background:'+bg
       +';padding:3px 2px;text-align:center;cursor:pointer;'+(isToday?'box-shadow:0 0 0 2px var(--amber);':'')+'">'
-      +'<div class="mono" style="font-size:12px;font-weight:700;color:'+fg+'">'+d+'</div>'
+      +'<div class="mono" style="font-size:12px;font-weight:700;color:'+fg+'">'+d
+      +((iso===(function(){try{return calEndIso();}catch(e3){return null;}})())? ' <span style="font-size:8px;color:var(--amber)">\u2605</span>' : '')+'</div>'
       +(e&&e.days.length? '<div style="font-size:10px;font-weight:800;color:'+fg+'">'+e.days.join('')+'</div>':'')
       +(e&&e.bw!=null? '<div style="font-size:8px;color:'+(e.days.length?fg:'var(--faint)')+'">'+Math.round(isKg()? e.bw*0.45359237 : e.bw)+'</div>':'')
+      +(function(){ var ns=(calNotes()[iso]||[]); if(!ns.length) return '';
+        return '<div style="line-height:5px">'+ns.slice(0,3).map(function(x){
+          return '<span style="display:inline-block;width:5px;height:5px;border-radius:3px;margin:0 1px;background:'+CN_ICON[x.k]+'"></span>'; }).join('')+'</div>'; })()
       +'</div>';
   }
   h+='</div>';
   h+='<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:11px;color:var(--dim)">'
    +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--green);vertical-align:-1px"></span> trained</span>'
    +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:1px dashed var(--amber);vertical-align:-1px"></span> deload week</span>'
-   +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--red);vertical-align:-1px"></span> pain flagged</span>'
+   +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:1px solid var(--amber);vertical-align:-1px"></span> scheduled</span>'
+   +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;color:var(--red);text-align:center;font-size:9px;line-height:10px;font-weight:800;vertical-align:-1px">7</span> missed</span>'
+   +'<span><span style="color:var(--amber);font-size:10px">\u2605</span> block end</span>'
    +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;box-shadow:0 0 0 2px var(--amber);vertical-align:-1px"></span> today</span>'
    +'</div>';
   // month summary
@@ -14539,7 +15143,6 @@ function calDetailHTML(iso){
    +'<div style="font-weight:800;color:var(--amber)">'+iso+'</div>'
    +'<div class="sleeve-label">'+(wk? 'Block '+wk.cycle+' \u00b7 week '+wk.week+' of '+PLAN.weeks+(wk.week===PLAN.weeks?' \u00b7 DELOAD':'') : 'before this block started')+'</div>';
   if(e && e.bw!=null) h+='<div class="sleeve-label">bodyweight '+WV1(e.bw).toFixed(1)+' '+uLbl()+'</div>';
-  if(e && e.pain>=4) h+='<div class="cue" style="padding:6px 0 0;color:var(--red)">Pain flagged this day</div>';
   if(e && e.days.length){
     h+='<div class="cue" style="padding:6px 0 0">Logged: Day '+e.days.join(', Day ')+'</div>';
     const c=logCache[e.key];
@@ -14548,6 +15151,30 @@ function calDetailHTML(iso){
   } else {
     h+='<div class="cue" style="padding:6px 0 0">No session logged.</div>';
   }
+  // the athlete's own entries for this day
+  var ns=calNotes()[iso]||[];
+  if(ns.length){
+    h+='<div class="cue" style="padding:8px 0 2px">On this day:</div>';
+    ns.forEach(function(x,i){
+      h+='<div class="ed-row" style="margin-top:4px;align-items:center">'
+        +'<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:'+CN_ICON[x.k]+'"></span>'
+        +'<div style="flex:1;font-size:13.5px">'+String(x.t).replace(/</g,'&lt;')+(x.tm? ' <span style="color:var(--dim)">'+x.tm+'</span>':'')
+        +(x.cd? ' <span style="color:var(--amber);font-size:11px;font-weight:800">COUNTDOWN</span>':'')+'</div>'
+        +'<div class="prof-edit" data-cndel="'+iso+'|'+i+'" style="padding:2px 8px">\u00d7</div>'
+        +'</div>';
+    });
+  }
+  h+='<div class="cue" style="padding:10px 0 4px">Add to this day:</div>'
+    +'<input id="cnTitle" maxlength="80" placeholder="PT test, physio, note to self\u2026" style="width:100%;box-sizing:border-box;background:var(--panel);color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:14px">'
+    +'<div class="chiprow" style="gap:6px;margin-top:6px">'
+    +[['note','Note'],['appt','Appointment'],['test','Fitness test']].map(function(z){
+        return '<div class="chip'+((S.cnType||'note')===z[0]?' on':'')+'" data-cntype="'+z[0]+'" style="flex:1;text-align:center;font-size:12px;padding:7px 0">'+z[1]+'</div>'; }).join('')
+    +'</div>'
+    +'<div class="chiprow" style="gap:8px;align-items:center;margin-top:6px">'
+    +'<input type="time" id="cnTime" style="background:var(--panel);color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:13px">'
+    +'<div class="chip'+(S.cnCd!==false?' on':'')+'" data-cncd="1" style="flex:1;text-align:center;font-size:12px;padding:7px 0">Count down to it</div>'
+    +'</div>'
+    +'<div class="daybtn" data-cnadd="'+iso+'" style="margin-top:8px">Add</div>';
   h+='<div class="ed-row" style="margin-top:8px"><div class="daybtn" data-calclose="1" style="flex:1;color:var(--faint)">Close</div></div></div>';
   return h;
 }
@@ -15544,6 +16171,7 @@ document.getElementById('resetBtn').onclick=()=>{
 // behaves like an installed app. With no worker present - a bare file, or a plain upload - this
 // quietly does nothing.
 try{ bootIdent(); }catch(e){}
+try{ bootDisc(); }catch(e){}   // under the splash - it is what the fade reveals
 try{ gummyInit(); }catch(e){}
 try{ rosterLoad().then(function(){ try{ if(ROSTER.active) load().then(render); }catch(e){ oops('rosterBoot',e); } }); }catch(e){ oops('rosterBoot',e); }
 try{ loadClips(); }catch(e){}
@@ -15613,7 +16241,8 @@ load().then(async()=>{
   // the silent safety net under the whole install push: ask the browser to shield this
   // origin's storage from eviction, protecting the people who never install anything
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){}); }catch(e){}
-  try{ if(a2hsDue()) a2hsShow(); }catch(e){}
+  try{ if(a2hsDue()){ if(discPending()) DISC_QUEUE=function(){ try{ if(a2hsDue()) a2hsShow(); }catch(e){} };
+                     else a2hsShow(); } }catch(e){}
   setTimeout(function(){ try{
     var tourMaybe=function(){ try{
       if(TOUR.live) return;                   // already walking someone through it
@@ -15627,6 +16256,10 @@ load().then(async()=>{
       tourStart('core');
     }catch(e){} };
     // the very first thing a new phone sees: how to make the card an app. The tour waits its turn.
+    if(discPending()){                      // still reading the disclaimer - everything waits
+      DISC_QUEUE=function(){ try{ if(a2hsDue()){ a2hsAfter=tourMaybe; a2hsShow(); } else tourMaybe(); }catch(e){} };
+      return;
+    }
     if(a2hsDue()){ a2hsAfter=tourMaybe; a2hsShow(); return; }
     tourMaybe();
   }catch(e){} }, 700);
@@ -15949,7 +16582,11 @@ function PG_prefName(cfg, mk){
 // there is no tested row max; the card raises it from logged work like any other lift.
 var PG_MAINNAME={squat:'Back Squat', bench:'Bench Press', dead:'Conventional Deadlift',
   ohp:'Overhead Press', row:'Barbell Row'};
-var PG_NOMAXMAIN={row:1};        // a main lift with no tested max: sets and reps, not percentages
+// Empty since 2026-09-01: the row was the only entry, and it is assessed now, so every main
+// lift runs on percentages of a tested max. Kept as the mechanism - a future pattern whose
+// alpha cannot be safely tested (loaded carries, say) drops in here and is prescribed on
+// sets and reps instead.
+var PG_NOMAXMAIN={};
 // If the empty bar is already too heavy, the barbell lift is simply the wrong tool. These start at
 // a genuinely light load and climb from there, so somebody can train the same pattern today rather
 // than being handed a bar they cannot lift.
@@ -15983,10 +16620,21 @@ function PG_underBar(maxes, mk, sch){
 }
 
 // ratios say which lift is lagging; that lift earns the extra set and the day title
+// Expected-strength ratios. The row's (0.75 of bench) is OURS, not a published standard -
+// row-to-bench ratios move a long way with row style, so this one is pinned to the strict row
+// the card actually cues: hinged, flat back, no heaving. Declared as Chosen in Provenance.
+// The other four are the conventional strength-standard relationships.
+var PG_RATIO={
+  dead:  function(m){ return m.squat*1.2; },
+  bench: function(m){ return m.squat*0.75; },
+  ohp:   function(m){ return m.bench*0.62; },
+  squat: function(m){ return m.dead/1.2; },
+  row:   function(m){ return m.bench*0.75; }
+};
 function PG_diagnose(maxes){
-  var exp={dead:maxes.squat*1.2, bench:maxes.squat*0.75, ohp:maxes.bench*0.62, squat:maxes.dead/1.2};
+  var exp={}; Object.keys(PG_RATIO).forEach(function(k){ exp[k]=PG_RATIO[k](maxes); });
   var gaps={}, weak=null, worst=-8;
-  ['squat','bench','dead','ohp'].forEach(function(k){
+  Object.keys(PG_RATIO).forEach(function(k){
     gaps[k]=Math.round(((maxes[k]-exp[k])/exp[k])*100);
     if(gaps[k]<worst){ worst=gaps[k]; weak=k; }
   });
@@ -16142,8 +16790,11 @@ function PG_defaultDays(n){
            6:['MO','TU','WE','TH','FR','SA'], 7:['MO','TU','WE','TH','FR','SA','SU']})[n] || ['MO','WE','FR'];
 }
 function generatePlan(cfg){
-  // cfg: {maxes:{squat,bench,dead,ohp}, goal, days, limits:[], name}
-  var maxes={}; ['squat','bench','dead','ohp'].forEach(function(k){ maxes[k]=PG_r5(cfg.maxes[k]||95); });
+  // cfg: {maxes:{squat,bench,dead,ohp,row}, goal, days, limits:[], name}
+  // Normalise from PG_MAINNAME, not a hard-coded four: a max for a main lift that is not in
+  // this list is silently discarded, and the exercise then falls back to straight sets - which
+  // is exactly what happened to the row the moment it became assessable.
+  var maxes={}; Object.keys(PG_MAINNAME).forEach(function(k){ maxes[k]=PG_r5(cfg.maxes[k]||95); });
   var diag=PG_diagnose(maxes);
   // the athlete's answer to the priority question outranks the automatic diagnosis:
   // maybe the "weak" lift is weak because of an injury they are managing, or maybe they
@@ -16214,7 +16865,7 @@ function generatePlan(cfg){
   if(cfg.mins) days=PG_fitTime(days, cfg.mins);
   var out={
     block:'Starter Block - '+({strength:'Strength',muscle:'Muscle',lean:'Lean Out',general:'General Fitness'}[goal]||'General')
-      +(diag.weak? ' \u00b7 '+({squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Press'}[diag.weak])+' Priority':''),
+      +(diag.weak? ' \u00b7 '+({squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Press',row:'Row'}[diag.weak])+' Priority':''),
     start:iso, builtOn:iso, weeks:6, v:1,
     maxes:maxes, days:days, diag:diag, limits:(cfg.limits||[]),
     medical:((cfg.limits||[]).indexOf('bp')>-1)? 'Cleared-by-doctor training only. Effort stays conversational, no breath-holding grinds.' : null
@@ -16240,15 +16891,12 @@ var ONB_GOALS=[
  {id:'cut',         t:'Lose fat',          why:'Sets of 8, shorter rests. Lifting is here to keep your muscle.'},
  {id:'endurance',   t:'Muscular endurance',why:'Sets of 15 at 50\u201360%, short 30\u201345 second rests. The short rest IS the training.'}
 ];
-var ONB_LIMITS=[
- {id:'shoulder',t:'Shoulder issues'},{id:'knee',t:'Knee issues'},
- {id:'back',t:'Lower-back issues'},{id:'bp',t:'High blood pressure / heart condition'}
-];
 var ONB_LIFTS={
  squat:{n:'Back Squat',  cue:'Big air, brace, knees out. Depth before load.'},
  bench:{n:'Bench Press', cue:'Shoulder blades pinned, feet planted.'},
  dead: {n:'Deadlift',    cue:'Wedge in, pull the slack out, push the floor away.'},
- ohp:  {n:'Overhead Press', cue:'Glutes tight, ribs down, finish behind your ears.'}
+ ohp:  {n:'Overhead Press', cue:'Glutes tight, ribs down, finish behind your ears.'},
+ row:  {n:'Barbell Row', cue:'Hinge to about 45 degrees, flat back. Pull to the belly button, elbows leading. No heaving \u2014 a row you swing is not a row you tested.'}
 };
 var ONB_EXP=[
  {id:'new',  t:'New to these lifts', why:'Never trained them, or only occasionally'},
@@ -16258,11 +16906,15 @@ var ONB_EXP=[
 // A starting hypothesis for each lift, as a multiple of bodyweight. The ramp tests the hypothesis
 // and corrects it as it goes - it is a starting point, not a prediction we are stuck with.
 var ONB_BWM={squat:{new:.75,some:1.25,vet:1.75}, bench:{new:.50,some:.90,vet:1.30},
-             dead:{new:1.00,some:1.50,vet:2.10}, ohp:{new:.35,some:.55,vet:.80}};
+             dead:{new:1.00,some:1.50,vet:2.10}, ohp:{new:.35,some:.55,vet:.80},
+             row:{new:.40,some:.70,vet:1.00}};
 // Descending reps as the load climbs - the way any lifter actually works up to something heavy.
 // Five reps only while it is genuinely light; singles near the top. Total work stays about 14 reps.
 var ONB_SCHED=[{p:.40,r:5},{p:.60,r:3},{p:.75,r:2},{p:.85,r:1},{p:.92,r:1}];
-var ONB_ORDER=['squat','bench','dead','ohp'];
+// The row is assessed like any other main lift (2026-09-01, his call): it is the alpha of
+// every pull day, so prescribing it on feel while the press ran on percentages was the one
+// inconsistency left in the card. Horizontal pull now has a tested max of its own.
+var ONB_ORDER=['squat','bench','dead','ohp','row'];
 // ===== TWO DOORS =====
 // The full card answers "what do I do today and how do I log it" for someone who already
 // trains. A beginner's problem is not information - it is fear and friction: they do not know
@@ -16271,9 +16923,13 @@ var ONB_ORDER=['squat','bench','dead','ohp'];
 // optimising. Same engine underneath - the athlete is simply never asked to know any of it.
 // 'level' sits in BOTH lists at the same index: it is the fork itself, so it has to be
 // reachable before a mode exists. Everything after it differs.
-var ONB_STEPS_FULL=['welcome','level','goal','body','experience','schedule','length','emphasis','limits','prefs','calibrate','priority','review'];
-var ONB_STEPS_START=['welcome','level','place','days','pain','review'];   // same index for 'level'
+// The 'limits'/'pain' injury questions were removed 2026-09-01: asking what hurts and
+// adapting the plan is a medical-adjacent pattern (his call, pending a legal look).
+// The neutral 'prefs' step and the per-exercise Swap carry that job with no intake.
+var ONB_STEPS_FULL=['welcome','level','goal','body','experience','schedule','length','emphasis','prefs','calibrate','priority','review'];
+var ONB_STEPS_START=['welcome','level','place','days','review'];   // same index for 'level'
 function ONB_STEPS_FOR(){
+  try{ if(ONB().retest) return ['calibrate']; }catch(e){}  // redo the assessment alone - nothing else moves
   try{
     // A coach setting up an athlete never sees the beginner fork: Start is the card owner's
     // experience, and it would take over the screen the coach navigates with.
@@ -16300,7 +16956,7 @@ function isStartMode(){
 // the card can say the same thing, out loud, and let the athlete answer.
 function ONB_priorityDiag(){
   var o=ONB(), maxes={};
-  ONB_ORDER.forEach(function(l){ maxes[l]=(o.res[l]&&o.res[l].pm)||Math.round(o.wt*({squat:.6,bench:.45,dead:.8,ohp:.3})[l]); });
+  ONB_ORDER.forEach(function(l){ maxes[l]=(o.res[l]&&o.res[l].pm)||Math.round(o.wt*({squat:.6,bench:.45,dead:.8,ohp:.3,row:.4})[l]); });
   var d=PG_diagnose(maxes);
   var gap=(d.weak!=null)? d.gaps[d.weak] : 0;
   return {weak:d.weak, gap:gap, meaningful:(d.weak!=null && gap<=-8)};
@@ -16487,15 +17143,6 @@ function ONB_HTML(){
      +'</div><div class="cue" style="padding:8px 0 0">Pick what you will actually do. Two days you keep beats four days you quit \u2014 and you can train more whenever you feel like it; the card just moves to your next session.</div></div>'
      +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
-  if(st==='pain'){
-    var L=o.limits||[];
-    h+='<div class="block">'
-     +[['knee','Knees'],['shoulder','Shoulders'],['back','Lower back'],['none','Nothing hurts']]
-       .map(function(p){ var on=(p[0]==='none')? L.length===0 : L.indexOf(p[0])>-1;
-         return '<div class="onb-opt'+(on?' on':'')+'" data-onbpain="'+p[0]+'">'+p[1]+'</div>'; }).join('')
-     +'<div class="cue" style="padding:8px 0 0">Anything you pick gets swapped for a movement that does the same job without bothering it. This is not medical advice \u2014 if something actually hurts, see someone about it.</div></div>'
-     +'<div class="daybtn onb-go" data-onbnext="1">Build my plan</div>'; }
-
   if(st==='goal'){ h+='<div class="block">'+ONB_GOALS.map(function(g){
       return '<div class="onb-opt'+(o.goal===g.id?' on':'')+'" data-onbgoal="'+g.id+'">'+g.t
         +'<span class="onb-why">'+g.why+'</span></div>'; }).join('')+'</div>'
@@ -16565,7 +17212,7 @@ function ONB_HTML(){
 
   if(st==='priority'){
     var pd=ONB_priorityDiag();
-    var LN={squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Overhead press'};
+    var LN={squat:'Squat',bench:'Bench',dead:'Deadlift',ohp:'Overhead press',row:'Barbell row'};
     var autoLabel, autoWhy;
     if(pd.meaningful){
       autoLabel='Prioritize my '+LN[pd.weak].toLowerCase();
@@ -16577,19 +17224,13 @@ function ONB_HTML(){
     h+='<div class="block">'
      +'<div class="onb-opt'+((o.weak||'auto')==='auto'?' on':'')+'" data-onbweak="auto">'+autoLabel
        +'<span class="onb-why">'+autoWhy+'</span></div>'
-     +[['squat','Squat'],['bench','Bench'],['dead','Deadlift'],['ohp','Overhead press']].map(function(e){
+     +[['squat','Squat'],['bench','Bench'],['dead','Deadlift'],['ohp','Overhead press'],['row','Barbell row']].map(function(e){
         return '<div class="onb-opt'+(o.weak===e[0]?' on':'')+'" data-onbweak="'+e[0]+'">Prioritize my '+e[1].toLowerCase()+' anyway'
           +'<span class="onb-why">Your call - the block leans where you point it.</span></div>'; }).join('')
      +'<div class="onb-opt'+(o.weak==='none'?' on':'')+'" data-onbweak="none">No priority - balanced block'
        +'<span class="onb-why">Even attention everywhere.</span></div>'
      +'<div class="cue" style="padding:8px 0 0">This is how this card was born: one lifter, one lagging lift, one block built to fix it.</div></div>'
      +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
-
-  if(st==='limits'){ h+='<div class="block">'+ONB_LIMITS.map(function(l){
-      return '<div class="onb-opt'+(o.limits.indexOf(l.id)>-1?' on':'')+'" data-onblim="'+l.id+'">'+l.t+'</div>'; }).join('')
-    +(o.limits.indexOf('bp')>-1? '<div class="cue" style="padding:10px 0 0;color:var(--red)"><b>Get a doctor\u2019s clearance before starting.</b> The card will keep effort conversational and avoid breath-holding grinds, but it is a training aid, not medical advice.</div>':'')
-    +'<div class="cue" style="padding:8px 0 0">Flagged joints get friendlier movements automatically. Nothing here stops you training.</div></div>'
-    +'<div class="daybtn onb-go" data-onbnext="1">Continue</div>'; }
 
   if(st==='prefs'){
     o.prefs=o.prefs||{};
@@ -16665,8 +17306,13 @@ function ONB_HTML(){
             : '<div class="daybtn" data-onbramp="'+l+'" style="margin-top:8px">Test it</div>')
          +'</div>';
       });
-      if(done===ONB_ORDER.length) h+='<div class="daybtn onb-go" data-onbnext="1">Build my program</div>';
-      else h+='<div class="cue">'+done+' of 4 done. Spread these over two or three sessions if you need to.</div>';
+      if(o.retest){
+        if(done) h+='<div class="daybtn onb-go" data-onbretestapply="1">Apply my new numbers</div>';
+        h+='<div class="onb-restore" data-onbretestcancel="1" style="margin-top:10px;display:block;text-align:center">Keep my old numbers</div>';
+        if(done<ONB_ORDER.length) h+='<div class="cue" style="margin-top:8px">'+done+' of '+ONB_ORDER.length+' retested. Apply whenever \u2014 lifts you skip keep their current numbers.</div>';
+      }
+      else if(done===ONB_ORDER.length) h+='<div class="daybtn onb-go" data-onbnext="1">Build my program</div>';
+      else h+='<div class="cue">'+done+' of '+ONB_ORDER.length+' done. Spread these over two or three sessions if you need to.</div>';
     }
   }
 
@@ -16724,15 +17370,9 @@ function ONB_WIRE(){
     save(); render(); });
   q('[data-onbplace]',function(el){ o.place=el.dataset.onbplace; save(); render(); });
   q('[data-onbdays2]',function(el){ o.days=+el.dataset.onbdays2; save(); render(); });
-  q('[data-onbpain]',function(el){ var id=el.dataset.onbpain; o.limits=o.limits||[];
-    if(id==='none'){ o.limits=[]; }
-    else { var i=o.limits.indexOf(id); if(i>-1) o.limits.splice(i,1); else o.limits.push(id); }
-    save(); render(); });
   q('[data-onbmins]',function(el){ o.mins=+el.dataset.onbmins; save(); render(); });
   q('[data-onbpref]',function(el){ o.prefs=o.prefs||{};
     o.prefs[el.dataset.onbpref]=el.dataset.prefname; save(); render(); });
-  q('[data-onblim]',function(el){ var id=el.dataset.onblim, i=o.limits.indexOf(id);
-    if(i>-1) o.limits.splice(i,1); else o.limits.push(id); save(); render(); });
   q('[data-onbn]',function(el){ var k=el.dataset.onbn, d=+el.dataset.d;
     o[k]=Math.max(k==='age'?13:60, Math.min(k==='age'?85:500, Math.round((o[k]+d)*10)/10)); save(); render(); });
   // Bodyweight is a MEASUREMENT: 122 means 122, never the nearest 5. Loads computed from it
@@ -16744,6 +17384,15 @@ function ONB_WIRE(){
   q('[data-onbramp]',function(el){ var l=el.dataset.onbramp;
     o.ramp={lift:l, sets:[], est:ONB_seed(l), idx:0, next:null}; save(); render(); });
   q('[data-onbfb]',function(el){ if(!o.ramp) return; ONB_feedback(el.dataset.onbfb); });
+  q('[data-onbretestapply]',function(){
+    // apply ONLY what was retested - untested lifts keep their standing numbers, and the
+    // plan, logs and history stay exactly where they are: this is a retest, not a restart
+    ONB_ORDER.forEach(function(l){ if(o.res[l]&&o.res[l].pm) S.maxes[l]=o.res[l].pm; });
+    o.res=Object.assign({}, o.resBak||{}, o.res); delete o.resBak;
+    o.retest=false; o.done=true; o.ramp=null; save(); render(); });
+  q('[data-onbretestcancel]',function(){
+    o.res=o.resBak||o.res; delete o.resBak;
+    o.retest=false; o.done=true; o.ramp=null; save(); render(); });
   q('[data-onbfinish]',function(){ o.done=true; save(); render();
     // The guided tour's boot check correctly stands aside while onboarding is up - which meant
     // the one athlete it exists for never saw it. Fire it here, the moment their first session
@@ -16758,7 +17407,7 @@ function ONB_WIRE(){
       tourStart('core');
     }catch(e){} }, 600); });
 }
-var ONB_RAW_MAXES={squat:75, bench:55, dead:95, ohp:45};   // deliberately light training-max floor: below an average adult female's lifts, safe for essentially anyone. Auto-calibration climbs from real sets.
+var ONB_RAW_MAXES={squat:75, bench:55, dead:95, ohp:45, row:50};   // deliberately light training-max floor: below an average adult female's lifts, safe for essentially anyone. Auto-calibration climbs from real sets.
 function ONB_buildRaw(){
   // The "just start lifting" path: no questions, no calibration. Build a balanced, general 3-day plan
   // on the light floor and drop straight into training. Loads self-correct upward from logged sets.
@@ -16793,7 +17442,7 @@ function ONB_build(){
   // hand the athlete no session at all. Old logs keep their own block and stay in history.
   try{ if(typeof cycleHasLogs==='function' && cycleHasLogs()) S.cycle=cyc()+1; }catch(e){}
   var maxes={};
-  ONB_ORDER.forEach(function(l){ maxes[l]=(o.res[l]&&o.res[l].pm)||Math.round(o.wt*({squat:.6,bench:.45,dead:.8,ohp:.3})[l]); });
+  ONB_ORDER.forEach(function(l){ maxes[l]=(o.res[l]&&o.res[l].pm)||Math.round(o.wt*({squat:.6,bench:.45,dead:.8,ohp:.3,row:.4})[l]); });
   // Every field the generator reads is passed here, explicitly, even where the value is null.
   // Omitting one does not fail loudly - it silently discards an answer the athlete gave, which
   // is how the preference, the below-the-bar swaps AND the priority lift all went missing.
