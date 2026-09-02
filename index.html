@@ -6703,6 +6703,13 @@ function adStalled(){
       if(h.length<AD_STALL_MIN_SESSIONS) return;
       var last=h[h.length-1].v, prev=h[h.length-AD_STALL_MIN_SESSIONS].v;
       if(last>prev) return;                                  // still climbing, leave it alone
+      // FIELD-CAUGHT 2026-09-02: a flat estimate is what a correctly executed percentage block
+      // looks like. A stall needs STRUGGLE - two of the last three sessions with a missed rep,
+      // an adjusted set, or a grind to RIR 0. Points without the flag (recorded before this
+      // rule) are treated as clean: no evidence, no reset.
+      var recent=h.slice(-AD_STALL_MIN_SESSIONS);
+      var struggled=recent.filter(function(x){ return x.c===0; }).length;
+      if(struggled<2) return;                                // did the work as written - not a stall
       var lastReset=(S.adLog||[]).filter(function(x){ return x.kind==='stall' && x.lift===k; }).pop();
       if(lastReset && adDays(lastReset.d, shiftDate())<AD_STALL_COOLDOWN) return;
       out.push({lift:k, from:prev, to:last, n:h.length});
@@ -11723,7 +11730,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c165';
+const BUILD = 'c166';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -16011,6 +16018,14 @@ function updateE1RM(){
     const st=S.data[exKey(i)]; if(!st) return;
     const w=curLoad(ex,st); if(typeof w!=='number') return;
     const tgt=defReps(ex), baseRIR=firstInt(ex.rir,2);
+    // FIELD-CAUGHT 2026-09-02: was this session executed CLEAN - every set hit at target with a
+    // rep in reserve? A percentage block that rises 70x8 -> 75x6 -> 80x5 estimates the SAME max
+    // every week by design, so a flat estimate line is what compliance looks like, not a stall.
+    // The stall rule below now demands struggle, and struggle is recorded here, at the source.
+    let clean=1;
+    st.sets.forEach((s)=>{ if(s.st==='pend') return;
+      const rr=(s.rir!=null? s.rir : baseRIR), rp=(s.st==='hit'? tgt : (s.reps!=null? s.reps : tgt));
+      if(s.st!=='hit' || rp<tgt || rr<=0) clean=0; });
     st.sets.forEach((s)=>{
       if(s.st==='pend') return;
       const reps = s.st==='hit'? tgt : (s.reps!=null? s.reps : tgt);
@@ -16023,7 +16038,7 @@ function updateE1RM(){
       if(!S.e1rmH[ex.maxKey]) S.e1rmH[ex.maxKey]=[];
       const hd=S.when.date||localDate(); const hArr=S.e1rmH[ex.maxKey];
       const hix=hArr.findIndex(x=>x.d===hd);
-      if(hix>-1){ if(e>hArr[hix].v){ hArr[hix].v=e; hArr[hix].r=rAdj; } } else { hArr.push({d:hd,v:e,r:rAdj}); hArr.sort((a,b)=>a.d<b.d?-1:1); }
+      if(hix>-1){ if(e>hArr[hix].v){ hArr[hix].v=e; hArr[hix].r=rAdj; } hArr[hix].c=clean; } else { hArr.push({d:hd,v:e,r:rAdj,c:clean}); hArr.sort((a,b)=>a.d<b.d?-1:1); }
       if(hArr.length>60) S.e1rmH[ex.maxKey]=hArr.slice(-60);
       touched[ex.maxKey]=1;
     });
