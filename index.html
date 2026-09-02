@@ -702,6 +702,13 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 .disc-inner h2{font-size:22px;letter-spacing:-.01em;margin:0 0 12px;}
 .disc-inner p{font-size:14.5px;line-height:1.65;color:var(--chalk);margin:0 0 12px;}
 .disc-inner p b{color:var(--amber);}
+.fold{margin-top:10px;}
+.fold-h{display:flex;justify-content:space-between;align-items:center;min-height:44px;padding:8px 12px;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;cursor:pointer;font-weight:800;font-size:13.5px;
+  -webkit-tap-highlight-color:rgba(255,255,255,.12);touch-action:manipulation;}
+.fold-c{color:var(--amber);font-size:16px;padding-left:10px;}
+.fold-b{margin-top:6px;}
+
 .mail-face{width:42px;height:42px;border-radius:21px;flex:0 0 42px;background:#000;}
 .mail-badge{position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;
   background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:15px;text-align:center;padding:0 2px;}
@@ -5137,6 +5144,7 @@ function coachPaint(){
     try{ document.querySelectorAll('.coach-target').forEach(function(x){
       x.classList.remove('coach-target'); x.classList.remove('demo'); }); }catch(e){}
     var el=st.sel? document.querySelector(st.sel) : null;
+    if(!el && st.sel){ try{ foldOpenAll(); render(); el=document.querySelector(st.sel); }catch(e){} }
     // a step about a SECTION spotlights the section, not the one stepper it anchored on
     if(el && st.closest){ try{ var up=el.closest(st.closest); if(up) el=up; }catch(e){} }
     var box=null;
@@ -6465,7 +6473,13 @@ function rosterProgress(a){
     var raw=window.localStorage? window.localStorage.getItem('nsc:'+SKEY+':a:'+a.id) : null;
     if(!raw) return {assessed:false, sessions:0};
     var st=JSON.parse(raw);
-    var assessed=!!(st && st.onb && st.onb.done);
+    // FIELD-CAUGHT 2026-09-02: onb.done flips only when the athlete taps the final "start"
+    // button on the review screen. A coach who builds the plan and returns to the roster
+    // leaves done=false with a complete plan sitting there - and the roster said "needs the
+    // assessment". A built plan IS the assessment done; "started" is a separate fact.
+    var built=!!(st && st.genPlan && st.genPlan.days && st.genPlan.days.length);
+    var assessed=!!(st && ((st.onb && st.onb.done) || built));
+    var started=!!(st && st.onb && st.onb.done);
     var n=0;
     try{
       var pre='nsc:'+curLOGP()+a.id+':';
@@ -6473,7 +6487,7 @@ function rosterProgress(a){
         if(String(window.localStorage.key(i)).indexOf(pre)===0) n++;
       }
     }catch(e){}
-    return {assessed:assessed, sessions:n};
+    return {assessed:assessed, started:started, sessions:n};
   }catch(e){ return {assessed:false, sessions:0}; }
 }
 // A coach who does not train on this card has no program of their own - and must not be dragged
@@ -6534,7 +6548,7 @@ function rosterHTML(){
       +' aria-label="Open '+esc(a.name)+'\u2019s program">'
       +'<div class="ros-name">'+esc(a.name)+(on?' <span class="subtag">OPEN</span>':'')+'</div>'
       +'<div class="ros-meta">'+(p.assessed
-          ? (p.sessions? p.sessions+' session'+(p.sessions===1?'':'s')+' logged' : 'assessed \u00b7 not started')
+          ? (p.sessions? p.sessions+' session'+(p.sessions===1?'':'s')+' logged' : (p.started? 'assessed \u00b7 not started' : 'plan built \u00b7 open their card to start'))
           : '<span style="color:var(--amber)">needs the assessment</span>')+'</div>'
       +'<span class="ros-rm" data-rosrm="'+a.id+'" role="button" aria-label="Remove '+esc(a.name)+'">\u00d7</span>'
       +'</div>';
@@ -8184,6 +8198,7 @@ function gbGo(key){
       SET_OPEN=true; try{ settingsSync(); }catch(e){}
     } else {
       try{ SET_OPEN=false; settingsSync(); }catch(e){}
+      try{ foldOpenAll(); }catch(e){}
       if(g.day){
         var d=g.day;
         if(d==='today'){ try{ d=rtDay(); }catch(e){ try{ d=dayCodes()[0]; }catch(e2){ d=S.day; } } }
@@ -9006,6 +9021,22 @@ function galleryShare(iso){
   SHARE_SNAP=sn;
   try{ shareRecapImage(); } finally { setTimeout(function(){ SHARE_SNAP=null; }, 4000); }
 }
+// ===== FOLDS (2026-09-02, his ask: collapse anything that distracts) =====
+// A fold is a section with a header that opens and closes it. State is remembered per fold.
+// A closed fold does not even render its body - history and past sessions are heavy, and a
+// closed section costs nothing. Every fold is lockfree: a banked day must not freeze them.
+function foldOpen(id, def){ try{ if(S.fold && S.fold[id]!==undefined) return !!S.fold[id]; }catch(e){} return !!def; }
+function foldHTML(id, title, body, def){
+  if(!body) return '';
+  var open=foldOpen(id, def);
+  return '<div class="fold lockfree" data-fold="'+id+'">'
+    +'<div class="fold-h" data-foldtog="'+id+'" role="button" tabindex="0" aria-expanded="'+(open?'true':'false')+'">'
+    +'<span class="fold-t">'+title+'</span><span class="fold-c">'+(open?'\u25BE':'\u25B8')+'</span></div>'
+    +(open? '<div class="fold-b">'+body+'</div>' : '')+'</div>';
+}
+// help jumps and tour steps land on things that may live inside a closed fold: open them all
+// first, then find the target. Anyone who asked to be shown something wants to see it.
+function foldOpenAll(){ try{ S.fold=S.fold||{}; ['road','vol','hist','why','prov','caltools','gallery'].forEach(function(k){ S.fold[k]=true; }); save(); }catch(e){} }
 function calStripHTML(){
   var last=''; try{ var ds=galleryDates(1); if(ds.length && ds[0]!==shiftDate()) last='<div class="prof-edit" data-galopen="'+ds[0]+'" style="padding:6px 0 0">Last session’s wrap-up</div>'; }catch(e){}
   return '<div class="block lockfree" id="calStrip">'+calCountHTML()
@@ -11692,7 +11723,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c160';
+const BUILD = 'c165';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -12171,14 +12202,14 @@ function bwSets(ex){
 function exSets(ex){ const g=goalDef();
   // Start prescribes two sets on purpose. The goal's accessory volume is for people who
   // asked for a goal - a beginner never did, and four sets is how you lose them in week two.
-  if(isStartMode()) return ex.sets||2;
+  if(isStartProgram()) return ex.sets||2;
   if(g&&isMain(ex)) return g.sets;
   var bs=(typeof bwSets==='function')? bwSets(ex) : null;
   if(bs) return bs;                                   // tested bodyweight sets its own volume
   if(g&&g.accSets&&numericReps(ex)) return g.accSets;
   return ex.sets; }
 function exReps(ex){
-  if(isStartMode()) return ex.reps;          // the plan's plain "10", not a goal rep range
+  if(isStartProgram()) return ex.reps;       // the plan's plain "10", not a goal rep range
   // A tested bodyweight max OVERRIDES the goal's generic accessory range. Without this the
   // panel said "27 reps" while the card still prescribed 3x8 - two different answers on one
   // screen. The tested number wins: it is the only one measured on this athlete.
@@ -13581,7 +13612,7 @@ function renderInner(){
   if(S.day==='PLAN'){
     try{ h+=backupBarHTML(); }catch(e){}
     if(S.hist){ h+=histDetailHTML(S.hist); }
-    else { h+=printPickerHTML(); try{ h+=roadAheadHTML(false); }catch(e){} try{ h+=volumeHTML(); }catch(e){} h+=routineHTML(); h+=earlyCloseHTML(); h+=histListHTML(); h+=whyHTML(); try{ h+=provenanceHTML(); }catch(e){} h+=shareQRHTML(); h+=installHTML(); try{ h+=wipeHTML(); }catch(e){} }
+    else { h+=printPickerHTML(); try{ h+=foldHTML('road','The road ahead',roadAheadHTML(false),true); }catch(e){} try{ h+=foldHTML('vol','Weekly work',volumeHTML(),true); }catch(e){} h+=routineHTML(); h+=earlyCloseHTML(); h+=foldHTML('hist','Exercise history',histListHTML(),false); h+=foldHTML('why','Why these numbers',whyHTML(),false); try{ h+=foldHTML('prov','Where these numbers come from',provenanceHTML(),false); }catch(e){} h+=shareQRHTML(); h+=installHTML(); try{ h+=wipeHTML(); }catch(e){} }
     app.innerHTML=h; wire(); try{ anaPaintAll(); }catch(e){} try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='LIB'){
@@ -13600,8 +13631,8 @@ function renderInner(){
       +'Solid amber outlines are your scheduled training days ahead; a red number is a scheduled day that went untrained. '
       +'Dashed amber marks a banked deload-week session, and small numbers are logged bodyweight. '
       +'Dots are your own entries \u2014 grey notes, amber appointments, red fitness tests. Tap any day to open it or add to it.</div>';
-    h+=calBlockHTML();
-    try{ h+=galleryHTML(); }catch(e){}
+    h+=foldHTML('caltools','Training days & calendar export',calBlockHTML(),false);
+    try{ h+=foldHTML('gallery','Past sessions',galleryHTML(),false); }catch(e){}
     app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='MAX'){
@@ -13836,10 +13867,10 @@ function renderInner(){
           +'</select>';
       })()
       +(function(){var t=trainsFor(st.sub||ex.name);return t?'<div class="trains">'+t+'</div>':'';})()
-      +'<div class="target-label">'+(isStartMode()
+      +'<div class="target-label">'+(isStartProgram()
           ? 'Set the weight \u2014 tap to change'
           : (subbed?'Put this on the bar \u2014 tap to set':'Put this on the bar'+(numeric?' \u2014 tap to adjust':'')))+'</div>'
-      +(isStartMode()? '<div class="start-cue">Pick a weight you could do about <b>three more reps</b> with. Not sure? Go lighter \u2014 the first sessions are for finding your weights, not proving anything.</div>' : '')
+      +(isStartProgram()? '<div class="start-cue">Pick a weight you could do about <b>three more reps</b> with. Not sure? Go lighter \u2014 the first sessions are for finding your weights, not proving anything.</div>' : '')
       +'<div class="ex-rx">'
       +(numeric
         ? '<button class="loadbtn" data-wbtn="'+i+'"><span class="load mono">'+WV(shown)+'<small> '+uLbl()+(!subbed&&ex.perHand?' / hand':'')+'</small></span></button>'
@@ -14132,7 +14163,7 @@ function setEditorHTML(i, ex, st){
           return '<div class="step"><button data-e="reps" data-d="-'+stp+'">\u2212'+(stp>1?stp:'')+'</button>'
           +'<div class="val mono" data-edtype="1" role="button" tabindex="0" style="cursor:pointer;text-decoration:underline dotted">'+reps+'</div>'
           +'<button data-e="reps" data-d="'+stp+'">+'+(stp>1?stp:'')+'</button></div></div>'; })())
-    +((hEx||isStartMode())? '' : '<div class="ed-row"><div class="ed-label">RIR</div><div class="rirchips">'
+    +((hEx||isStartProgram())? '' : '<div class="ed-row"><div class="ed-label">RIR</div><div class="rirchips">'
     +[0,1,2,3,4].map(r=>'<button class="rc'+(s.rir===r?' on':'')+'" data-rir="'+r+'">'+(r===4?'4+':r)+'</button>').join('')
     +'</div></div>')
     +(function(){ const numeric = st.sub? true : ex.loadNum!=null;
@@ -14436,6 +14467,7 @@ function wire(){
   document.querySelectorAll('[data-discshow]').forEach(b=>b.onclick=()=>{ bootDisc(true); });
   document.querySelectorAll('[data-gocal]').forEach(b=>b.onclick=()=>{ S.day='CAL'; save(); render(); });
   document.querySelectorAll('[data-mailopen]').forEach(b=>b.onclick=()=>{ mailShow(); });
+  document.querySelectorAll('[data-foldtog]').forEach(b=>b.onclick=()=>{ var id=b.dataset.foldtog; S.fold=S.fold||{}; S.fold[id]=!foldOpen(id, b.getAttribute('aria-expanded')==='true'); save(); render(); });
   document.querySelectorAll('[data-stalekeep]').forEach(b=>b.onclick=()=>{ staleKeep(); });
   document.querySelectorAll('#app [data-galopen]').forEach(b=>b.onclick=()=>{ galleryOpen(b.dataset.galopen); });
   document.querySelectorAll('#app [data-galshare]').forEach(b=>b.onclick=()=>{ galleryShare(b.dataset.galshare); });
@@ -16021,8 +16053,13 @@ function waveBarsHTML(){
   PLAN.days.forEach(function(d){ d.exercises.forEach(function(ex){
     if(!ex.maxKey || !ex.wk) return;
     if(out.indexOf('data-wl="'+ex.maxKey+'"')>-1) return;    // one wave per lift
-    var mx=Math.max.apply(null, ex.wk);
-    var bars=ex.wk.map(function(v,wi){
+    // FOUND BY THE VISUALS AUDIT 2026-09-02: ex.wk is baked at generation time, but the live
+    // load recomputes from CURRENT maxes every session - so after an auto-adjust or a retest
+    // the wave showed loads the athlete no longer lifts. Read each week through the same
+    // path the card and the print sheet use; the baked array is only the fallback.
+    var wkLive=[]; try{ for(var wi0=1; wi0<=ex.wk.length; wi0++){ var lv=sheetLoad(ex,wi0); wkLive.push((typeof lv==='number')? lv : ex.wk[wi0-1]); } }catch(e){ wkLive=ex.wk.slice(); }
+    var mx=Math.max.apply(null, wkLive);
+    var bars=wkLive.map(function(v,wi){
       var hh=Math.max(8, Math.round((v/mx)*44));
       var dl=(wi===ex.wk.length-1);
       return '<div class="wv"><div class="wv-b'+(dl?' dl':'')+'" style="height:'+hh+'px"></div><div class="wv-v">'+v+'</div><div class="wv-w">'+(dl?'DL':'W'+(wi+1))+'</div></div>';
@@ -17282,6 +17319,13 @@ function ONB_STEPS_FOR(){
 }
 // legacy name kept: everything downstream indexes into this
 var ONB_STEPS=ONB_STEPS_FULL;
+// FOUND BY THE PARITY TEST 2026-09-02: isStartMode() returns false for a coached athlete so
+// the coach is not trapped in the Start SHELL - correct - but exSets/exReps used the same
+// guard for the PRESCRIPTION, so a coached beginner was handed the goal-scheme volume
+// (4 x 10-15) instead of the beginner floor (2 x 10). Two concerns, two functions:
+//   isStartProgram(): is this a Start PROGRAM - true for the athlete no matter who is looking
+//   isStartMode():    should the Start SHELL render - never for a coach on a roster
+function isStartProgram(){ try{ return S.mode==='start'; }catch(e){ return false; } }
 function isStartMode(){
   try{
     // A coached athlete NEVER runs the Start shell. Start replaces the entire screen -
