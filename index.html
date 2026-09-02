@@ -899,6 +899,8 @@ body.printing>*:not(#printSheet){display:none!important;}
 .sheet tbody td{padding:7px 6px;border-bottom:1px solid #ddd;vertical-align:top;font-size:10.5pt;}
 .sheet tbody tr:nth-child(even) td{background:#fafaf8;}
 .c-n{width:9%;text-align:center;font-variant-numeric:tabular-nums;}
+.c-r{width:9%;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.sh-fin{margin:6px 0 2px;font-size:11px;color:#444;font-weight:700;}
 .sheet thead .c-n{text-align:center;}
 .c-w{width:19%;font-variant-numeric:tabular-nums;font-weight:700;}
 .c-a{width:26%;}
@@ -8496,6 +8498,22 @@ const DISC_V=1;
 var DISC_QUEUE=null;
 // true while an unacknowledged gate is on screen - boot-time prompts wait behind it
 function discPending(){ try{ return !(S.discAck && S.discAck.v>=DISC_V); }catch(e){ return false; } }
+// The one accept path (2026-09-02, after a second field report of a dead "I understand").
+// Idempotent, and reachable three ways: the button's own handler, the keyboard, and a
+// WINDOW-level capture listener registered at load - which runs before any document-level
+// guard the card owns (the day-lock guard, the tour guard) can swallow the tap.
+function discAccept(){
+  try{
+    var v=document.getElementById('discGate'); if(!v) return;
+    if(v.__done) return; v.__done=true;
+    var force=!!v.__force;
+    if(!force){ S.discAck={v:DISC_V, d:localDate()}; save(); }
+    try{ v.remove(); }catch(e){}
+    if(!force){ var q=DISC_QUEUE; DISC_QUEUE=null; if(q) try{ q(); }catch(e){} }
+  }catch(e){}
+}
+try{ window.addEventListener('click', function(ev){
+  var t=ev.target; if(t && t.closest && t.closest('#discOk')){ discAccept(); } }, true); }catch(e){}
 function bootDisc(force){
   try{
     if(!force && S.discAck && S.discAck.v>=DISC_V) return;
@@ -8513,21 +8531,11 @@ function bootDisc(force){
     document.body.appendChild(v);
     var tl=v.querySelector('[data-termsshow]');
     if(tl) tl.onclick=function(){ termsShow(); };   // opens ABOVE the gate; closing returns here
+    v.__force=!!force;
     var ok=document.getElementById('discOk');
-    // a real <button>, and the accept path is also reachable by keyboard and by a delegated
-    // listener on the gate itself - if the direct binding ever fails, the tap still lands
     if(ok){ ok.addEventListener('keydown', function(ev){
-      if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); ok.click(); } }); }
-    v.addEventListener('click', function(ev){
-      var t=ev.target;
-      if(t && t.closest && t.closest('#discOk') && !ok.__fired){ ok.click(); } });
-    if(ok) ok.onclick=function(){
-      ok.__fired=true;
-      if(!force){ S.discAck={v:DISC_V, d:localDate()}; save(); }
-      try{ v.remove(); }catch(e){}
-      // whatever boot deferred behind the gate goes now - install sheet, tour, in order
-      if(!force){ var q=DISC_QUEUE; DISC_QUEUE=null; if(q) try{ q(); }catch(e){} }
-    };
+      if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); discAccept(); } }); }
+    if(ok) ok.onclick=function(){ discAccept(); };
   }catch(e){}
 }
 // ===== TERMS & PRIVACY =====
@@ -9059,29 +9067,44 @@ function weekSheetHTML(w){
         loadNum:(isFinite(parseFloat(c.load))?parseFloat(c.load):null),rir:'1',rest:'1:30',
         barbell:false,warmup:'',cue:'',custom:true}); }); }catch(e){}
     try{ list=applyOrder(d.code,list); }catch(e){}
+    // HIS RULE 2026-09-02: the sheet must be the card. Same session-length growth the day
+    // runs, and - for the week on screen - the athlete's swaps and added sets, read from the
+    // same state the card renders from. The sheet was printing base plan sets; the card was
+    // running more.
+    var sp=null; try{ var fx=sessApply(list,d.code); list=fx.exercises; sp=fx.sp; }catch(e){}
+    var liveByName={};
+    if(w===S.week){ try{ var keepD=S.day; S.day=d.code; var dd=dayObj();
+      dd.exercises.forEach(function(lx,i){ if(isOut(lx.name)) return; var st=exState(i,lx);
+        liveByName[lx.name]={sets:st.sets.length, sub:st.sub||null, load:(st.sub? subLoad(lx,st) : curLoad(lx,st))}; });
+      S.day=keepD; }catch(e){} }
     if(!list.length) return;
     h+='<section class="sh-day"><h2>'+d.code+' &nbsp;<span>'+(d.title||'')+'</span></h2>'
      +'<table><thead><tr>'
      +'<th class="c-ex">Exercise</th><th class="c-n">Sets</th><th class="c-n">Reps</th>'
-     +'<th class="c-n">Reps<br>left</th><th class="c-w">Weight</th><th class="c-a">Reps completed</th>'
+     +'<th class="c-n">Reps<br>left</th><th class="c-w">Weight</th><th class="c-r">Rest</th><th class="c-a">Reps completed</th>'
      +'</tr></thead><tbody>';
     list.forEach(function(ex){
       var n=(function(){ try{ return (typeof exSets==='function')? exSets(ex): ex.sets; }catch(e){ return ex.sets; } })();
       if(w===planWeeks()) n=Math.min(n,2);
       var reps=(function(){ try{ return exReps(ex); }catch(e){ return ex.reps; } })();
       var L=sheetLoad(ex,w);
+      var lv=liveByName[ex.name]; var shownName=ex.name;
+      if(lv){ n=lv.sets; if(lv.sub){ shownName=lv.sub; } if(typeof lv.load==='number') L=lv.load; }
+      var rest=(function(){ try{ return exRest(ex)||''; }catch(e){ return ex.rest||''; } })();
       var wtxt=(typeof L==='number')? WV(L)+' '+uLbl()+(ex.perHand?' / hand':'') : (ex.load||'bodyweight');
       var pl=sheetPlates(L,ex);
       var rir=(ex.rir===''||ex.rir==null)? '\u2014' : String(ex.rir).replace(/[^0-9\u2013-]/g,'')||String(ex.rir);
-      h+='<tr><td class="c-ex"><span class="nm">'+esc(ex.name)+'</span>'
+      h+='<tr><td class="c-ex"><span class="nm">'+esc(shownName)+'</span>'
        +(pl? '<span class="pl">'+pl+'</span>':'')
        +(ex.warmup? '<span class="wu">Warm-up: '+ex.warmup+'</span>':'')
        +'</td>'
        +'<td class="c-n">'+n+'</td><td class="c-n">'+reps+'</td><td class="c-n">'+rir+'</td>'
-       +'<td class="c-w">'+wtxt+'</td><td class="c-a">'
+       +'<td class="c-w">'+wtxt+'</td><td class="c-r">'+esc(rest)+'</td><td class="c-a">'
        + new Array(Math.max(1,Math.min(6,n))+1).join('<i></i>')+'</td></tr>';
     });
-    h+='</tbody></table></section>';
+    h+='</tbody></table>';
+    if(sp && sp.fin) h+='<div class="sh-fin">Zone 2 finisher \u2014 '+sp.fin+' min, conversational pace</div>';
+    h+='</section>';
   });
   h+='<div class="sh-foot"><div class="sh-rules">'
    +'<b>How to run it.</b> The <b>Reps left</b> column is how many more reps you should still have in you when you rack the weight \u2014 '
@@ -11669,7 +11692,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c159';
+const BUILD = 'c160';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -17718,6 +17741,7 @@ function ONB_WIRE(){
     // appears, with the same guards (skipped if they've logged anything or seen it before).
     setTimeout(function(){ try{
       if(TOUR.live) return;
+      if(typeof discPending==='function' && discPending()) return;   // never start a tour under the gate
       if(S.tour&&S.tour.done) return;
       var logged=false;
       try{ Object.keys(S.data||{}).forEach(function(k){
