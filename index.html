@@ -4057,7 +4057,7 @@ function fatigueHTML(){
     return '<div class="block" style="border-color:var(--amber)">'
      +'<h3 style="color:var(--amber)">Recovery check \u2014 the numbers are talking</h3>'
      +'<div style="font-size:13px;line-height:1.6">'+sig.map(function(s){ return '\u2022 '+s; }).join('<br>')+'</div>'
-     +'<div class="cue" style="padding:8px 0 0">Two independent signals pointing the same way. Recovery is losing the race: consider pulling the deload forward a week, or cut one accessory per day and hold loads instead of climbing. Deloading a week early costs nothing; grinding through costs the block.</div>'
+     +'<div class="cue" style="padding:8px 0 0">Two signs say the same thing: you are not recovering. Two good options: take your deload a week early, or drop one small exercise a day and keep the weights where they are. An early deload costs nothing. Pushing through can cost the whole block.</div>'
      +'<div class="daybtn" data-fatack="1" style="margin-top:10px;display:inline-block;padding:8px 14px;font-size:12px">Understood \u2014 hide for this week</div>'
      +'</div>';
   }catch(e){ return ''; }
@@ -4460,7 +4460,52 @@ function schedTodayCode(){
   var key=['SU','MO','TU','WE','TH','FR','SA'][idx];
   return m[key]||null;
 }
-function schedMap(){ return null; }   // weekday scheduling removed — kept as a null accessor so every no-map fallback below stays live
+// ===== TRAINING RHYTHM: Guided vs Open =====
+// Two honest models, and the athlete says which at setup.
+//
+//   GUIDED (default, and what the card has always done) - a playlist. The card holds the next
+//   session and nothing is ever lost: miss a day and the whole rotation shifts right. Right for
+//   the athlete who trains when they can, which is most people.
+//
+//   OPEN - the athlete picks. Any session in the CURRENT week is available, in any order, so
+//   A -> C is one tap. Optionally anchored to weekdays, which is the athlete whose week is
+//   already fixed: push Monday and Thursday, pull Tuesday and Friday, legs Wednesday and
+//   Saturday. Miss Wednesday and legs is still Wednesday's session - it does not walk into
+//   Sunday and drag everything with it.
+//
+// What Open does NOT touch, deliberately:
+//   - the integrity lock. A logged day stays closed against a stray thumb. That lock exists
+//     because of real field bugs and is a different job from the sequence lock, which is the
+//     only one Open lifts. Reopening a logged day is still a deliberate act.
+//   - one session per day. Recovery is part of the program in both rhythms.
+//   - the week. Weeks are time-paced in both rhythms; no rhythm jumps you into next week's
+//     loads. That was his ruling in August and it stands.
+//   - the logs. Rhythm is a lens over the same dated logs, so switching costs no history.
+// Its own weekday list rather than the generator's PG_DOW: the Session Card has no plan
+// generator at all, and a rhythm control that only half the cards can render is not a feature.
+var SPLIT_DOW=['MO','TU','WE','TH','FR','SA','SU'];
+function splitDefaultDays(n){
+  return ({2:['MO','TH'], 3:['MO','WE','FR'], 4:['MO','TU','TH','FR'], 5:['MO','TU','WE','FR','SA'],
+           6:['MO','TU','WE','TH','FR','SA'], 7:SPLIT_DOW.slice()})[n] || ['MO','WE','FR'];
+}
+function splitOpen(){ try{ return S.splitMode==='open'; }catch(e){ return false; } }
+// The weekday map, built rather than stored: selected weekdays in week order, the plan's own
+// day codes dealt across them in rotation. A 3-code split over 6 chosen days gives exactly
+// A B C A B C - push Mon/Thu, pull Tue/Fri, legs Wed/Sat - without anyone hand-assigning a
+// cell. Returns null unless the athlete is in Open AND has chosen days, which is what keeps
+// every no-map fallback in this file live and unchanged for everybody else.
+function schedMap(){
+  try{
+    if(!splitOpen()) return null;
+    var wd=(S.wd&&S.wd.length)? S.wd : null; if(!wd) return null;
+    var codes=(PLAN&&PLAN.days||[]).map(function(d){ return d.code; });
+    if(!codes.length) return null;
+    var order=SPLIT_DOW.filter(function(d){ return wd.indexOf(d)>-1; });   // week order, not tap order
+    if(!order.length) return null;
+    var m={}; order.forEach(function(d,i){ m[d]=codes[i%codes.length]; });
+    return m;
+  }catch(e){ return null; }
+}
 // ===== SESSION ROTATION (weekday-free) =====
 // You do sessions in order and the card points at the next one you have not yet saved a log
 // for THIS block. Nothing is tied to a weekday: a missed day just shifts the whole rotation right.
@@ -4519,6 +4564,15 @@ function syncToNext(){
   // session still in progress (no saved log yet) — only advance once the current one is banked.
   try{
     if(!PLAN.days.some(function(d){ return d.code===S.day; })) return;
+    // OPEN with a weekday map: land on the session this weekday actually owns, if it is still
+    // unlogged. The athlete can move off it freely - this is where the card OPENS, not a rail.
+    if(splitOpen()){
+      // and bring a stale pointer up to the calendar rather than stranding it in a spent week
+      if(S.week<timeWeek()) S.week=timeWeek();
+      var sc=schedTodayCode();
+      if(sc && !sessionLogged(timeWeek(), sc)){ S.day=sc; S.week=timeWeek(); return; }
+      if(!sessionLogged(S.week, S.day)) return;
+    }
     if(!sessionLogged(S.week, S.day)) return;
     var nx=nextSession(); if(nx){ S.day=nx.code; S.week=nx.week;
       // A repeat pass re-opens its cell: same split slot, same week, MORE training - the
@@ -5510,10 +5564,22 @@ function loggedToday(){
   }catch(e){ return false; }
 }
 function dayActiveNow(){
-  // the next session in sequence becomes ACTIVE on the first training day after the
+  // GUIDED: the next session in sequence becomes ACTIVE on the first training day after the
   // last log - one session per day, on the dot. Being behind the calendar never
   // gates anything: skip a week and your next session is simply active when you open.
+  // OPEN: every unlogged session in the CURRENT week is active, so the athlete jumps freely.
+  // Note what is unchanged in both: loggedToday() still ends the day, S.week must still be the
+  // week the calendar is actually in, and a session already banked is a visit, not a session.
   try{
+    if(splitOpen()){
+      // FIELD-CAUGHT 2026-09-02: this read `S.week!==timeWeek()`, which locked an athlete who
+      // was BEHIND the calendar out of every session - the exact "still getting the lock"
+      // report. Being behind must never gate anything; that rule is written three lines up and
+      // I broke it. Only the FUTURE is closed, because future weeks carry different loads.
+      if(S.week>timeWeek()) return false;
+      if(sessionLogged(S.week, S.day) && !rePassOn()) return false;   // banked: that is a visit, unless reopened for a repeat pass
+      return !loggedToday();                             // one session a day, both rhythms
+    }
     var nx=nextSession();
     if(!nx || nx.week!==S.week || nx.code!==S.day) return false;
     return !loggedToday();
@@ -5530,11 +5596,16 @@ function previewBarHTML(){
   try{
     if(!isPreviewing()) return '';
     var nx=nextSession();
-    var gated=nx && nx.week===S.week && nx.code===S.day && loggedToday();
+    // In Open there is no "next in sequence": the only thing that closes a same-week session
+    // is having trained today. Say that, not "next week".
+    var gated=splitOpen()? (loggedToday() && S.week<=timeWeek())
+                         : (nx && nx.week===S.week && nx.code===S.day && loggedToday());
     return '<div class="prevbar lockfree">'
       +'<span class="rv-txt">'+(gated
         ? 'Coming up \u2014 unlocks at 3:00 AM. One session a night; recovery is part of the program.'
-        : 'Coming up \u2014 the card will bring you here in order. Look, don\u2019t touch.')+'</span>'
+        : splitOpen()
+          ? 'Next week \u2014 your loads change when the week does, so this one waits for the calendar.'
+          : 'Coming up \u2014 the card will bring you here in order. Look, don\u2019t touch.')+'</span>'
       +'<span class="rv-btn" data-backlive="1" role="button" tabindex="0">Back to today</span>'
       +'</div>';
   }catch(e){ return ''; }
@@ -5543,6 +5614,8 @@ function isVisiting(){
   try{
     if(!PLAN.days.some(function(d){ return d.code===S.day; })) return false;
     if(!sessionLogged(S.week, S.day)) return false;
+    if(rePassOn()) return false;                        // reopened on purpose: it is a session again
+    if(splitOpen()) return true;                        // in Open every banked session is a document
     var live=nextSession();
     return !live || live.week!==S.week || live.code!==S.day;
   }catch(e){ return false; }
@@ -5561,6 +5634,40 @@ async function resaveVisitedLog(){
     alertToast('Log updated \u00b7 '+snap.date);
   }catch(e){ oops('resaveVisitedLog',e); alertToast('Could not update the log'); }
 }
+// ===== REPEAT PASS (Open only) =====
+// FIELD 2026-09-02: with every session in the week logged, Open had no door left. Every cell
+// read as a finished visit, nothing was active, and an athlete who trained the whole week early
+// was locked out until the calendar rolled. Guided has this door already - syncToNext() quietly
+// reopens the cell when the rotation comes back round - but quietly is exactly what Open must
+// not be: in Open the athlete is the one choosing, so the choice gets a button and a sentence.
+// The previous log is NOT touched. It keeps its own date, and every set in it still counts
+// toward volume and history - the same rule the Guided repeat pass has always followed.
+function rePassKey(){ try{ return cyc()+'|'+S.week+'|'+S.day; }catch(e){ return ''; } }
+// A repeat pass is a SAME-DAY intent. It carries the date it was opened on, so a door opened
+// and then walked away from is a document again tomorrow - and banking the pass closes it too.
+// Without this the reopened cell stayed live forever, which broke "a visited day is a document".
+function rePassOn(){ try{ var r=S.rePass; return !!(r && r.k===rePassKey() && r.d===String(shiftDate())); }catch(e){ return false; } }
+function canRePass(){
+  try{
+    if(!splitOpen()) return false;                       // Guided reopens on its own
+    if(!PLAN.days.some(function(d){ return d.code===S.day; })) return false;
+    if(!sessionLogged(S.week, S.day)) return false;      // nothing to repeat
+    if(S.week!==timeWeek()) return false;                // this week's loads only
+    if(loggedToday()) return false;                      // one session a day still holds
+    return !rePassOn();
+  }catch(e){ return false; }
+}
+function rePassGo(){
+  try{
+    var dk=cyc()+'|'+S.week+'|'+S.day;
+    if(S.locked) delete S.locked[dk];
+    if(S.dbf) delete S.dbf[dk];
+    var pref=cyc()+'c|'+S.week+'|'+S.day+'|';
+    Object.keys(S.data||{}).forEach(function(k){ if(k.indexOf(pref)===0) delete S.data[k]; });
+    S.rePass={k:dk, d:String(shiftDate())}; save(); render();
+    alertToast('Fresh card \u2014 your first pass is still in the log');
+  }catch(e){ oops('rePassGo',e); }
+}
 function reviewBarHTML(){
   try{
     if(!isVisiting()) return '';
@@ -5573,6 +5680,11 @@ function reviewBarHTML(){
         +' aria-label="Write your corrections into this session\u2019s log">'
         +'<span class="lk-ico" aria-hidden="true">\u270E</span>'
         +'<span class="lk-txt">Write changes into the log \u2014 keeps its original date</span></div>';
+    if(canRePass())
+      h+='<div class="lockbar lockfree" data-repass="1" role="button" tabindex="0"'
+        +' aria-label="Train this session again today">'
+        +'<span class="lk-ico" aria-hidden="true">\u21BB</span>'
+        +'<span class="lk-txt">Train this again \u2014 a fresh card. Your finished session stays in the log and still counts.</span></div>';
     return h;
   }catch(e){ return ''; }
 }
@@ -6110,7 +6222,7 @@ function restBody(b,e,go){
     // a hold's number is SECONDS - the rest screen speaks its language: no reps, no RIR,
     // just the clocked time (fixable if the stop was late) and the grind flag
     h+='<div class="rest-edit">'
-     +'<div class="rest-lab">'+(r.st.sub||r.ex.name)+' \u00b7 set '+(b.j+1)+' \u2014 held '+reps+'s. Fix it here if the clock ran long.</div>'
+     +'<div class="rest-lab">'+(r.st.sub||r.ex.name)+' \u00b7 set '+(b.j+1)+' \u2014 held '+holdFmt(reps)+'. Fix it here if the clock ran long.</div>'
      +'<div class="rest-row"><span class="rest-k">Seconds</span>'
      +'<button class="rest-step" data-restrep="-5" style="font-size:17px">\u22125</button>'
      +'<span class="rest-val mono">'+reps+'</span>'
@@ -6312,7 +6424,7 @@ window.addEventListener('unhandledrejection',function(ev){
 function __showErrBar(){
   var b=document.getElementById('errBar');
   if(!b){ b=document.createElement('div'); b.id='errBar';
-    b.style.cssText='position:fixed;left:8px;right:8px;bottom:96px;z-index:80;background:#2A1414;'
+    b.style.cssText='position:fixed;left:8px;right:8px;bottom:96px;z-index:430;background:#2A1414;'
      +'border:1px solid #E05C4B;border-radius:10px;padding:10px 12px;font-size:12px;color:#FFD9D3;'
      +'font-family:-apple-system,sans-serif;line-height:1.45';
     document.body.appendChild(b); }
@@ -6958,6 +7070,66 @@ function adaptUndo(){
     save();
   }catch(e){ oops('adaptUndo',e); }
 }
+// ===== ONE-TIME REPAIR: cuts the old stall rule should never have made =====
+// c166 corrected the rule going forward: a stall needs STRUGGLE, because a flat estimate is
+// what a correctly executed rising-percentage block looks like. That fixed nothing already
+// done. Cuts fired by the old rule were still sitting in S.maxes, and the only remedy was the
+// athlete finding "Put it back" - which only ever reverses the MOST RECENT batch, so a bad cut
+// with any adaptation after it was unreachable. The card made the mistake; the card undoes it.
+//
+// Deliberately narrow. A cut is reversed only when all four hold:
+//   1. nothing has moved that max since - if the athlete or a later climb changed it, their
+//      number wins and we say nothing;
+//   2. the corrected rule would not fire on that evidence (under two struggled sessions);
+//   3. the estimate at the time was FLAT, not falling. This is the discriminator that does not
+//      need the flags: flat is a compliant percentage block, falling is a real regression, and
+//      an athlete who genuinely went backwards keeps their back-off rather than being handed a
+//      bar 8% heavier by a repair pass;
+//   4. there is enough history to judge at all.
+// Everything else is left exactly where it is.
+function adRepairStalls(){
+  try{
+    if(S.adFixStall) return 0;                       // once per card, ever
+    S.adFixStall=1;
+    var log=S.adLog||[], fixed=[];
+    log.slice().forEach(function(a){
+      if(!a || a.kind!=='stall' || !a.lift || !a.from || !a.to) return;
+      if(!S.maxes || S.maxes[a.lift]!==a.to) return;              // 1. someone moved it since
+      var h=((S.e1rmH||{})[a.lift]||[]).filter(function(x){ return !a.d || x.d<=a.d; });
+      if(h.length<AD_STALL_MIN_SESSIONS) return;                  // 4. cannot judge
+      var win=h.slice(-AD_STALL_MIN_SESSIONS);
+      var struggled=win.filter(function(x){ return x.c===0; }).length;
+      if(struggled>=2) return;                                    // 2. the cut was earned
+      if(win[win.length-1].v < win[0].v) return;                  // 3. genuinely falling, leave it
+      S.maxes[a.lift]=a.from;
+      fixed.push({lift:a.lift, from:a.to, to:a.from, d:a.d});
+    });
+    if(!fixed.length){ save(); return 0; }
+    S.adLog=log.filter(function(a){
+      return !(a.kind==='stall' && fixed.some(function(f){ return f.lift===a.lift && f.d===a.d; }));
+    });
+    S.adFixed=fixed;                               // shown once, then dismissed by the athlete
+    try{ if(S.genPlan) applyMaxesToPlan(); }catch(e){}
+    save();
+    return fixed.length;
+  }catch(e){ oops('adRepairStalls',e); return 0; }
+}
+function adFixedHTML(){
+  try{
+    var f=S.adFixed||[]; if(!f.length) return '';
+    var LN={squat:'Back Squat', bench:'Bench Press', dead:'Deadlift', ohp:'Overhead Press'};
+    return '<div class="block adapt"><h3>Put back \u2014 the card was wrong</h3>'
+      +'<div class="cue" style="padding:0 0 6px">These were cut for \u201cthree sessions without '
+      +'progress\u201d while you were doing exactly what the card asked. A rising-percentage block '
+      +'estimates the same max every session by design \u2014 that is the block working, not a '
+      +'stall. The rule now needs a missed rep, an adjusted set or a grind before it backs '
+      +'anything off. Your numbers are restored.</div>'
+      +'<ul class="adapt-list">'+f.map(function(x){
+          return '<li><b>'+esc(LN[x.lift]||x.lift)+'</b> '+WV(x.from)+' \u2192 '+WV(x.to)+' '+uLbl()+'</li>';
+        }).join('')+'</ul>'
+      +'<div class="savelog" id="adFixedAck">Got it</div></div>';
+  }catch(e){ return ''; }
+}
 function adaptHTML(){
   try{
     var log=S.adLog||[];
@@ -6990,6 +7162,8 @@ function adaptHTML(){
 function adaptWire(){
   var b=document.getElementById('adaptUndoBtn');
   if(b) b.onclick=function(){ adaptUndo(); alertToast('Reverted'); render(); };
+  var fx=document.getElementById('adFixedAck');
+  if(fx) fx.onclick=function(){ S.adFixed=null; save(); render(); };
 }
 
 // ===== WHAT'S NEW =====
@@ -7002,7 +7176,24 @@ function adaptWire(){
 // It is deliberately NOT the BUILD constant: BUILD names the CARD ('v63' vs 'c21'), both cards
 // ship the same release, and BUILD is declared further down the file - referencing it here
 // throws on load and takes the whole card with it.
+// DELIVERY (2026-09-02, his ask): releases are announced by BULK, in a letter, not by a sheet.
+// Add an entry here with a `bulk:` line in his voice and the mail sweep sends it once to every
+// athlete who has used the card before - brand-new athletes get nothing, there is nothing to
+// catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
+// every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.02b', date:'2026-09-02', title:'The card fills your session time itself', items:[
+    'The \u201ctap to choose what fills the time\u201d chips are gone. Set a session-length target in Settings and the card fills the gap on its own: an extra set on the lightest accessories, then a recommended exercise for the muscle your week is shortest on, then a Zone 2 finisher.',
+    'Logged work is never removed. Turn the target down and the card only takes back what it added and you never trained.'
+  ], bulk:'Small one. Those \u201cpick what fills your time\u201d chips on the day are gone \u2014 you were adding sets by hand anyway. Set your session time in Settings and I fill the rest: a set on the light stuff first, then a movement for whatever your week is short on, then some Zone 2. If you have already lifted it, it stays. Go lift.'},
+  {build:'2026.09.02', date:'2026-09-02', title:'Light, training rhythm, and a put-back', items:[
+    'Every theme now comes in a day and a night version. Settings \u2192 Light picks Day, Night, or Auto \u2014 Auto follows your phone.',
+    'Training rhythm: let the card run your split in order, or choose \u201cI do\u201d and pick any session this week yourself \u2014 fix them to weekdays if your week is set. A finished session can be trained again with \u201cTrain this again\u201d.',
+    'If a training max was backed off for \u201cthree sessions without progress\u201d while you were hitting every set, it has been put back. There is a note on the Plan tab.',
+    'Two themes renamed: Night Ops is now Ops, Daylight is now Brass. Night is folded into Coach.'
+  ], bulk:'Card update. Three things. One: Settings has a Light switch now \u2014 Day, Night, or Auto, which follows your phone. Every theme comes in both. '
+    +'Two: Training rhythm. Let the card run your split in order like always, or tell it \u201cI do\u201d and pick any session this week yourself \u2014 fix them to weekdays if your week is set. Finished one and want it again? Tap Train this again. '
+    +'Three: if I ever cut a max on you for \u201cno progress\u201d while you were hitting every rep, that was me being wrong, and it is back. Note on the Plan tab. Go lift.'},
   {build:'2026.08.22', date:'2026-08-22', title:'Sessions close when you log them', items:[
     'Logging a session now locks it. A stray thumb cannot rewrite a day you have finished.',
     'Tap the lock on a closed day to reopen it \u2014 nothing is ever stuck.',
@@ -7071,9 +7262,27 @@ function whatsNewBusy(){
   }catch(e){}
   return false;
 }
+// Release letters from Bulk. One per release, oldest first so the box reads in order, ids keyed
+// on the release tag so the send ledger makes them once-ever. Then the release is marked seen,
+// which is what stops the sheet from ALSO announcing it.
+function mailUpdates(){
+  try{
+    var rel=whatsNewPending(); if(!rel.length) return 0;
+    var n=0;
+    rel.slice().reverse().forEach(function(r){
+      var txt=r.bulk || ('Card update \u2014 '+r.title+'. '+(r.items||[]).join(' '));
+      if(mailPush('update-'+r.build, txt, 'focused')) n++;
+    });
+    S.seenBuild=WHATSNEW[0].build; save();
+    return n;
+  }catch(e){ oops('mailUpdates',e); return 0; }
+}
 function whatsNewBoot(){
   try{
     if(!S.seenBuild){ S.seenBuild=WHATSNEW.length? WHATSNEW[0].build : BUILD; save(); return; }
+    // Bulk delivers releases now. The sheet stays in the file as a fallback for a card with no
+    // mailbox, but where Bulk exists the letter is the announcement and the sheet never pops.
+    if(typeof mailPush==='function'){ mailUpdates(); return; }
     if(whatsNewBusy()) return;
     if(whatsNewPending().length){ S.wnOpen=true; render(); }
   }catch(e){ oops('whatsNewBoot',e); }
@@ -7482,7 +7691,7 @@ function libraryHTML(){
     });
     h+='</div>';
   });
-  h+='<div class="rules">Every How opens the same sheet you see inside a session \u2014 a filmed clip or curated video first, a precise search as the fallback.</div>';
+  h+='<div class="rules">Tap How on any exercise to see a short video of it.</div>';
   h+='</div>';
   return h;
 }
@@ -7520,6 +7729,9 @@ function settingsBodyHTML(){
     +'<div class="target-label">Theme</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
     +THEMES.map(t=>'<div class="chip'+((S.theme||'iron')===t.id?' on':'')+'" data-thm="'+t.id+'" style="flex:1 1 30%;min-width:90px;font-size:12px;padding:9px 0">'+t.name+'</div>').join('')
     +'</div>'
+    +'<div class="target-label" style="margin-top:12px">Light</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +[['day','Day'],['night','Night'],['auto','Auto']].map(z=>'<div class="chip'+(lightMode()===z[0]?' on':'')+'" data-lightmode="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
+    +'</div>'
     +'<div class="target-label" style="margin-top:12px">Font</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
     +FONTS.map(f=>'<div class="chip'+((S.font||'system')===f.id?' on':'')+'" data-fnt="'+f.id+'" style="flex:1 1 44%;min-width:110px;font-size:13px;padding:9px 0;font-family:'+f.f.replace(/"/g,'&quot;')+'">'+f.name+'</div>').join('')
     +'</div>'
@@ -7529,13 +7741,33 @@ function settingsBodyHTML(){
     +'<div class="target-label" style="margin-top:12px">Coaching text</div><div class="chiprow" style="margin-top:6px;gap:6px">'
     +[['full','Full'],['min','Minimal']].map(z=>'<div class="chip'+((S.uiMode||'full')===z[0]?' on':'')+'" data-uimode="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
     +'</div>'
-    +'<div class="exnote" style="padding:8px 0 0">Applies everywhere instantly and sticks across sessions. Daylight is the outdoor/bright-gym option.</div>'
+    +'<div class="exnote" style="padding:8px 0 0">Changes apply right away and stay. Every theme has a day look and a night look. Light picks which one. Auto follows your phone.</div>'
     +'</div></div>';
   h+='<div class="sub" style="margin-top:12px">Assessments</div>';
   h+='<div class="ex"><div class="ex-head">'
     +'<div class="target-label">Retest your main-lift numbers</div>'
     +'<div class="exnote" style="padding:6px 0 8px">The same guided work-up from setup: a few climbing sets per lift, stop when it gets hard. Your plan, logs and history all stay \u2014 only the numbers move, and only for the lifts you retest. Nothing in this card is medical advice: if a movement hurts, stop and swap it \u2014 no reason needed \u2014 and see a qualified professional.</div>'
     +'<div class="daybtn" data-retest="1">Redo the assessment</div>'
+    +'</div></div>';
+  h+='<div class="sub" style="margin-top:12px">Training rhythm</div>';
+  h+='<div class="ex"><div class="ex-head">'
+    +'<div class="target-label">Who picks the session</div><div class="chiprow" style="margin-top:6px;gap:6px">'
+    +[['guided','The card'],['open','I do']].map(function(z){
+        return '<div class="chip'+((S.splitMode||'guided')===z[0]?' on':'')+'" data-splitmode="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>'; }).join('')
+    +'</div>'
+    +(splitOpen()? '<div class="target-label" style="margin-top:12px">Fix them to weekdays (optional)</div>'
+       +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
+       +SPLIT_DOW.map(function(d){ return '<div class="chip'+((S.wd||[]).indexOf(d)>-1?' on':'')+'" data-setwd="'+d+'" style="flex:0 0 auto;min-width:44px;font-size:12px;padding:8px 10px">'+d+'</div>'; }).join('')
+       +'</div>'
+       +(schedMap()? '<div class="exnote" style="padding:8px 0 0">'+SPLIT_DOW.filter(function(d){ return (S.wd||[]).indexOf(d)>-1; })
+            .map(function(d){ return d+' \u00b7 '+esc(schedMap()[d]); }).join('   ')+'</div>'
+         : '<div class="exnote" style="padding:8px 0 0">Pick none and you still choose freely \u2014 the card just will not suggest one.</div>')
+      : '')
+    +'<div class="exnote" style="padding:8px 0 0">'
+    +(splitOpen()
+       ? 'You choose which session you are doing, in any order, from the day chips. A missed day stays missed rather than pushing the rest of your week along.'
+       : 'The card points at your next session and keeps the order. Miss a day and nothing is lost \u2014 everything shifts along.')
+    +' One session a day either way, weeks turn over on the calendar either way, and finished sessions stay finished. Switching costs you no history.</div>'
     +'</div></div>';
   h+='<div class="sub" style="margin-top:12px">Session length</div>';
   h+='<div class="ex"><div class="ex-head">'
@@ -7544,7 +7776,7 @@ function settingsBodyHTML(){
         var cur=sessTarget(); var on=(z[0]==='off')? !cur : (cur===+z[0]);
         return '<div class="chip'+(on?' on':'')+'" data-slen="'+z[0]+'" style="flex:1;font-size:12.5px;padding:8px 0;text-align:center">'+z[1]+'</div>'; }).join('')
     +'</div>'
-    +'<div class="exnote" style="padding:8px 0 0">Days shorter than the target grow, in this order: one extra set on the day\u2019s lightest accessories (never a main lift, three sets max), then a Zone 2 finisher of 10\u201330 minutes. A day already at target is left alone, and nothing is ever trimmed.</div>'
+    +'<div class="exnote" style="padding:8px 0 0">If a day is shorter than this, the card fills the time for you. It adds a set to the light exercises first, then an exercise you need, then some easy cardio. It never removes work you have logged.</div>'
     +'</div></div>';
   h+='<div class="ex"><div class="ex-head">'
     +'<div class="prof-edit" data-discshow="1" style="padding:6px 0">Read the training disclaimer</div>'
@@ -9310,7 +9542,7 @@ function startScreenHTML(){
 
       +(hold
         ? '<div class="st-sets">'+st.sets.map(function(s,j){
-            return '<span class="st-pill'+(s.st!=='pend'?' on':'')+'">'+(s.reps!=null? s.reps+'s' : 'Set '+(j+1))+'</span>'; }).join('')+'</div>'
+            return '<span class="st-pill'+(s.st!=='pend'?' on':'')+'">'+(s.reps!=null? holdFmt(s.reps) : 'Set '+(j+1))+'</span>'; }).join('')+'</div>'
           +'<div class="st-note">Hold it as long as you can with good form. The clock counts for you \u2014 start it, hold, then stop.</div>'
           +holdHTML(i)
           +(holdT && holdT.i===i ? '' : '<div class="st-note" style="margin-top:-4px">Tap <b>Start hold</b> above when you are in position.</div>')
@@ -9490,7 +9722,7 @@ function shareQRHTML(){
 function printPickerHTML(){
   var n=planWeeks(), cur=S.week||1;
   var h='<div class="block"><h3>Print this plan</h3>'
-   +'<div class="cue" style="padding:0">Pick a week for a rack sheet you can write on \u2014 or print the full plan: every load for every week, the shape of the block, and the road ahead.</div>'
+   +'<div class="cue" style="padding:0">Print one week to take to the gym, or print the whole plan.</div>'
    +'<div class="chiprow" style="margin-top:12px;flex-wrap:wrap">';
   for(var i=1;i<=n;i++) h+='<div class="chip'+(i===cur?' on':'')+'" data-printwk="'+i+'">W'+i+(i===n?'':'')+'</div>';
   h+='</div>'
@@ -10409,7 +10641,7 @@ function volumeHTML(){
     }).join('');
 
     var head='<div class="block"><h3>Weekly volume</h3>'
-      +'<div class="cue" style="padding:0 0 8px">Sets per muscle across one full rotation of your split \u2014 each set counts fully for the muscle it targets, half for the ones it assists. '
+      +'<div class="cue" style="padding:0 0 8px">Sets per muscle for one full round of your split. A set counts in full for its main muscle and half for the ones that help. '
       +'Each muscle carries its own weekly target \u2014 the tick on the track. Supporting muscles like forearms and lower back '
       +'earn credit from the lifts that work them, so they fill up without being trained directly.</div>';
     var summ=under.length
@@ -10424,7 +10656,7 @@ function routineHTML(){
   var codes=dayCodes(), c=rtDay();
   var plan=planExercises(c), cust=rtCustoms(c), outs=rtOut(c);
   var h=splitControlHTML()+'<div class="block"><h3>Your routine</h3>'
-   +'<div class="cue" style="padding:0">Remove anything your gym does not have, add whatever you want, and it sticks for every session on that day. Removing a movement never deletes the work you already logged.</div></div>';
+   +'<div class="cue" style="padding:0">Remove anything your gym does not have. Add anything you want. It stays that way for this day. Removing an exercise never deletes work you already logged.</div></div>';
   h+='<div class="pickers"><div class="chiprow" style="flex-wrap:wrap">'
    +codes.map(function(x){ return '<div class="chip'+(x===c?' on':'')+'" data-rtday="'+x+'">'+x+'</div>'; }).join('')
    +'</div></div>';
@@ -10845,9 +11077,16 @@ function recordHistory(){
     }
     histPush(nm,rec);
   });
+  // FIELD 2026-09-02: the banner showed "Incline DB Press - weight 65 (was 60)" twice. History
+  // replaces a same-date record (histPush), but this ledger only ever APPENDED - so banking a
+  // session, then banking it again after "+ set" or a correction, filed every record that still
+  // stood a second time. A re-bank now replaces today's entries for the exercises it judged,
+  // which also retires a record a correction took away, instead of leaving a stale one.
+  if(!S.prs) S.prs=[];
+  var dt=(S.when&&S.when.date)||localDate();
+  var judged={}; d.exercises.forEach(function(ex,i){ try{ var st=S.data[exKey(i)]; if(st) judged[st.sub||ex.name]=1; }catch(e){} });
+  S.prs=S.prs.filter(function(p){ return !(p && p.d===dt && judged[p.ex]); });
   if(out.length){
-    if(!S.prs) S.prs=[];
-    var dt=(S.when&&S.when.date)||localDate();
     out.forEach(function(p){ S.prs.push({d:dt,ex:p.ex,kind:p.kind,val:p.val,prev:p.prev}); });
     if(S.prs.length>200) S.prs=S.prs.slice(-200);
     S.prShow=out;
@@ -11730,7 +11969,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c166';
+const BUILD = 'c181';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -11777,19 +12016,45 @@ let holdT=null;
 var aMark={sec:null, go:null};
 let wlSent=null;
 let AC=null; const audioMark={sec:null,go:null};
-const THEMES=[{id:'coach',name:'Coach',v:{}},
- // Iron: the mark's native world - cast-iron ground, burnished amber, chalk ink. The boot
- // ident draws on this exact background, so startup fades from logo to app without a seam.
- {id:'iron', name:'Iron', v:{'--bg':'#14161A','--panel':'#1C2026','--panel2':'#22262D','--line':'#2E333B','--chalk':'#F0ECE4','--dim':'#A8AEB8','--faint':'#6C727C','--amber':'#E0A94C','--amber-ink':'#171A1F','--green':'#8FBF6F','--red':'#E2574C'}},
- {id:'night',name:'Night',v:{'--bg':'#12151A','--panel':'#1A1F27','--panel2':'#232A34','--line':'#333C48','--chalk':'#EDF1F5','--dim':'#9BA6B3','--faint':'#6B7683','--amber':'#5B8CFF','--amber-ink':'#0A1226','--green':'#5BD98A','--red':'#FF6B5E'}},
- {id:'nightops',name:'Night Ops',v:{'--bg':'#0B0E11','--panel':'#12161B','--panel2':'#1A2027','--line':'#2A333D','--chalk':'#E8EDF2','--dim':'#9AA7B4','--faint':'#66727E','--amber':'#4FC3F7','--amber-ink':'#04222E','--green':'#5BD6A0','--red':'#FF6B5E'}},
- {id:'desert', name:'Desert Tan', v:{'--bg':'#1B140C','--panel':'#251C11','--panel2':'#2F2416','--line':'#4A3A22','--chalk':'#F4EBDD','--dim':'#C4B49A','--faint':'#8F8168','--amber':'#E0A458','--amber-ink':'#2A1A05','--green':'#9DB86A','--red':'#E2574C'}},
- {id:'redline',name:'Redline',    v:{'--bg':'#140D0D','--panel':'#1D1212','--panel2':'#271818','--line':'#452525','--chalk':'#F5E9E7','--dim':'#C0A5A2','--faint':'#8A6F6C','--amber':'#E2574C','--amber-ink':'#2B0703','--green':'#8FA34A','--red':'#FF8A80'}},
- {id:'forest', name:'Forest',     v:{'--bg':'#0D140F','--panel':'#131D16','--panel2':'#1A271E','--line':'#2C4234','--chalk':'#EAF2EC','--dim':'#A8BFAF','--faint':'#71857A','--amber':'#7BC96F','--amber-ink':'#0A2408','--green':'#A3D977','--red':'#E2574C'}},
- {id:'rose',   name:'Rose',       v:{'--bg':'#170D12','--panel':'#21121A','--panel2':'#2B1822','--line':'#4A2A3A','--chalk':'#F7EAF0','--dim':'#C7A3B6','--faint':'#8F6F80','--amber':'#F06FA8','--amber-ink':'#33081C','--green':'#5BD98A','--red':'#FF6B5E'}},
- {id:'violet', name:'Violet',     v:{'--bg':'#100D18','--panel':'#171226','--panel2':'#1F1832','--line':'#362A55','--chalk':'#EFEAF7','--dim':'#B0A3C7','--faint':'#7C6F8F','--amber':'#9B7BFF','--amber-ink':'#150A33','--green':'#5BD98A','--red':'#FF6B5E'}},
- {id:'ember',  name:'Ember',      v:{'--bg':'#170F0A','--panel':'#211610','--panel2':'#2B1D15','--line':'#4A3222','--chalk':'#F7EEE7','--dim':'#C7AE9A','--faint':'#8F7A68','--amber':'#FF8A50','--amber-ink':'#331103','--green':'#7BC96F','--red':'#FF5A72'}},
- {id:'daylight',name:'Daylight',  v:{'--bg':'#F2EFE6','--panel':'#FFFFFF','--panel2':'#EDE9DC','--line':'#CFC9B4','--chalk':'#26241B','--dim':'#5C594A','--faint':'#8B8877','--amber':'#B8860B','--amber-ink':'#FFF8E1','--green':'#4A7C2A','--red':'#C0392B'}}
+// Every theme is one identity in two lights. The palette the card has always shipped for a
+// theme is kept verbatim as that theme's NATIVE variant (nat), so nobody's card changes colour
+// on update; the other variant is the same room lit differently - same hue family, inverted
+// ground, accent re-weighted so ink still reads on it. Day/Night/Auto picks which one renders.
+const THEMES=[
+ // Coach IS the blueprint: base stylesheet by day, and by night it wears the palette the card
+ // shipped as the separate 'Night' theme. That theme was Coach's dark counterpart and nothing
+ // else - once every theme carries both lights it was a duplicate of this one, so it folds in
+ // here and its athletes migrate across to the identical colours.
+ {id:'coach',name:'Coach',nat:'day',
+   d:{},
+   n:{'--bg':'#12151A','--panel':'#1A1F27','--panel2':'#232A34','--line':'#333C48','--chalk':'#EDF1F5','--dim':'#9BA6B3','--faint':'#6B7683','--amber':'#5B8CFF','--amber-ink':'#0A1226','--green':'#5BD98A','--red':'#FF6B5E'}},
+ {id:'iron',name:'Iron',nat:'night',
+   d:{'--bg':'#EFEDE8','--panel':'#FFFFFF','--panel2':'#E4E1DA','--line':'#CFCBC1','--chalk':'#1A1D22','--dim':'#565C66','--faint':'#868D97','--amber':'#8A5A12','--amber-ink':'#FFF6E6','--green':'#2E6B34','--red':'#B03024'},
+   n:{'--bg':'#14161A','--panel':'#1C2026','--panel2':'#22262D','--line':'#2E333B','--chalk':'#F0ECE4','--dim':'#A8AEB8','--faint':'#6C727C','--amber':'#E0A94C','--amber-ink':'#171A1F','--green':'#8FBF6F','--red':'#E2574C'}},
+ {id:'nightops',name:'Ops',nat:'night',
+   d:{'--bg':'#EDF1F2','--panel':'#FFFFFF','--panel2':'#E0E6E8','--line':'#C6CFD2','--chalk':'#10161A','--dim':'#4E5A61','--faint':'#7E8B93','--amber':'#00697F','--amber-ink':'#EAFBFF','--green':'#16704F','--red':'#BE3A2C'},
+   n:{'--bg':'#0B0E11','--panel':'#12161B','--panel2':'#1A2027','--line':'#2A333D','--chalk':'#E8EDF2','--dim':'#9AA7B4','--faint':'#66727E','--amber':'#4FC3F7','--amber-ink':'#04222E','--green':'#5BD6A0','--red':'#FF6B5E'}},
+ {id:'desert',name:'Desert Tan',nat:'night',
+   d:{'--bg':'#F2EADD','--panel':'#FFFDF8','--panel2':'#E8DECC','--line':'#D2C3A6','--chalk':'#241C10','--dim':'#5E5340','--faint':'#8C7F66','--amber':'#8A5A16','--amber-ink':'#FFF6E4','--green':'#4F6B22','--red':'#B0392A'},
+   n:{'--bg':'#1B140C','--panel':'#251C11','--panel2':'#2F2416','--line':'#4A3A22','--chalk':'#F4EBDD','--dim':'#C4B49A','--faint':'#8F8168','--amber':'#E0A458','--amber-ink':'#2A1A05','--green':'#9DB86A','--red':'#E2574C'}},
+ {id:'redline',name:'Redline',nat:'night',
+   d:{'--bg':'#F5EDEC','--panel':'#FFFFFF','--panel2':'#EBDEDC','--line':'#D6C0BD','--chalk':'#211416','--dim':'#5F4C4E','--faint':'#8E7679','--amber':'#B32B1E','--amber-ink':'#FFF2F0','--green':'#4A6B22','--red':'#8E1F14'},
+   n:{'--bg':'#140D0D','--panel':'#1D1212','--panel2':'#271818','--line':'#452525','--chalk':'#F5E9E7','--dim':'#C0A5A2','--faint':'#8A6F6C','--amber':'#E2574C','--amber-ink':'#2B0703','--green':'#8FA34A','--red':'#FF8A80'}},
+ {id:'forest',name:'Forest',nat:'night',
+   d:{'--bg':'#ECF2ED','--panel':'#FFFFFF','--panel2':'#DFE9E1','--line':'#C2D2C6','--chalk':'#101A13','--dim':'#4C5B50','--faint':'#7C8C81','--amber':'#1F6B33','--amber-ink':'#F2FFF4','--green':'#2E7D3A','--red':'#B3372A'},
+   n:{'--bg':'#0D140F','--panel':'#131D16','--panel2':'#1A271E','--line':'#2C4234','--chalk':'#EAF2EC','--dim':'#A8BFAF','--faint':'#71857A','--amber':'#7BC96F','--amber-ink':'#0A2408','--green':'#A3D977','--red':'#E2574C'}},
+ {id:'rose',name:'Rose',nat:'night',
+   d:{'--bg':'#F8EDF2','--panel':'#FFFFFF','--panel2':'#EFDDE6','--line':'#D9BECC','--chalk':'#22141A','--dim':'#614C56','--faint':'#8F7683','--amber':'#A81F62','--amber-ink':'#FFF0F6','--green':'#2E6B44','--red':'#B83A2C'},
+   n:{'--bg':'#170D12','--panel':'#21121A','--panel2':'#2B1822','--line':'#4A2A3A','--chalk':'#F7EAF0','--dim':'#C7A3B6','--faint':'#8F6F80','--amber':'#F06FA8','--amber-ink':'#33081C','--green':'#5BD98A','--red':'#FF6B5E'}},
+ {id:'violet',name:'Violet',nat:'night',
+   d:{'--bg':'#F0EDF8','--panel':'#FFFFFF','--panel2':'#E4DEF0','--line':'#C9BFE0','--chalk':'#17131F','--dim':'#554C66','--faint':'#837A93','--amber':'#5B34C4','--amber-ink':'#F6F2FF','--green':'#2E6B44','--red':'#B3372A'},
+   n:{'--bg':'#100D18','--panel':'#171226','--panel2':'#1F1832','--line':'#362A55','--chalk':'#EFEAF7','--dim':'#B0A3C7','--faint':'#7C6F8F','--amber':'#9B7BFF','--amber-ink':'#150A33','--green':'#5BD98A','--red':'#FF6B5E'}},
+ {id:'ember',name:'Ember',nat:'night',
+   d:{'--bg':'#F7EDE6','--panel':'#FFFFFF','--panel2':'#EEDFD3','--line':'#DCC4B0','--chalk':'#211610','--dim':'#5F4C3E','--faint':'#8E7A69','--amber':'#B3521A','--amber-ink':'#FFF4EC','--green':'#4F6B22','--red':'#B02F3F'},
+   n:{'--bg':'#170F0A','--panel':'#211610','--panel2':'#2B1D15','--line':'#4A3222','--chalk':'#F7EEE7','--dim':'#C7AE9A','--faint':'#8F7A68','--amber':'#FF8A50','--amber-ink':'#331103','--green':'#7BC96F','--red':'#FF5A72'}},
+ {id:'daylight',name:'Brass',nat:'day',
+   d:{'--bg':'#F2EFE6','--panel':'#FFFFFF','--panel2':'#EDE9DC','--line':'#CFC9B4','--chalk':'#26241B','--dim':'#5C594A','--faint':'#8B8877','--amber':'#B8860B','--amber-ink':'#FFF8E1','--green':'#4A7C2A','--red':'#C0392B'},
+   n:{'--bg':'#16130D','--panel':'#1F1B12','--panel2':'#292317','--line':'#443B25','--chalk':'#F6F1E4','--dim':'#BFB59A','--faint':'#8A8270','--amber':'#E3B657','--amber-ink':'#2A1F04','--green':'#9CC06B','--red':'#E2574C'}}
 ];
 // Countdown voices: each is a complete character - its own tick and its own GO signature -
 // run through the same sample-accurate scheduler. The pitch setting (Deep/Standard/Bright)
@@ -11837,11 +12102,51 @@ const FONTS=[
  {id:'rounded',   name:'Rounded',    f:'ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN","Nunito","Segoe UI",sans-serif'},
  {id:'typewriter',name:'Typewriter', f:'ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace'}
 ];
+
+// ===== DAY / NIGHT =====
+// The theme chip picks the character. This picks the light it is seen in.
+// Auto follows the phone's own light/dark setting - a setting the athlete has already made
+// once, for every app. Where matchMedia is missing (old webview, jsdom, a bare file), Auto
+// falls back to the theme's NATIVE light rather than guessing, so a card that has always been
+// dark stays dark instead of flashing white in a squat rack.
+function sysPrefersDark(){
+  try{
+    // NB the short-circuit trap this replaces: `!!(window.matchMedia && ...)` reports FALSE
+    // when matchMedia is absent, and false means "the phone says light". A missing feature is
+    // not a preference. No signal must come back as null, or a card that has always been dark
+    // opens white on every browser too old to answer.
+    if(!window.matchMedia) return null;
+    var mq=window.matchMedia('(prefers-color-scheme: dark)');
+    // a browser that does not understand the query normalises it to 'not all' rather than
+    // failing - matches would read false there too, for the same wrong reason
+    if(!mq || mq.media==='not all') return null;
+    return !!mq.matches;
+  }catch(e){ return null; }
+}
+function themeDef(){ return THEMES.find(x=>x.id===(S.theme||'iron'))||THEMES[0]; }
+function lightMode(){ var m=S.lightMode; return (m==='day'||m==='night'||m==='auto')? m : 'auto'; }
+function lightNow(){
+  var m=lightMode();
+  if(m==='day'||m==='night') return m;
+  var d=sysPrefersDark();
+  if(d===null) return themeDef().nat||'night';   // no signal: the theme's own light
+  return d? 'night':'day';
+}
+// The palette actually rendering right now. Tests read this rather than reaching into the
+// table, so a check can never disagree with the card about which variant is up.
+function themeVars(t){
+  t = t || themeDef();
+  var side = (lightNow()==='day') ? 'd' : 'n';
+  return t[side] || t[side==='d'?'n':'d'] || {};
+}
 function applyTheme(){
-  const t=THEMES.find(x=>x.id===(S.theme||'iron'))||THEMES[0];
+  const t=themeDef();
+  const v=themeVars(t);
   const r=document.documentElement.style;
   ['--bg','--panel','--panel2','--line','--chalk','--dim','--faint','--amber','--amber-ink','--green','--red'].forEach(k=>r.removeProperty(k));
-  Object.keys(t.v||{}).forEach(k=>r.setProperty(k,t.v[k]));
+  Object.keys(v).forEach(k=>r.setProperty(k,v[k]));
+  // one attribute anything downstream can read without recomputing the rule
+  try{ document.documentElement.setAttribute('data-light', lightNow()); }catch(e){}
   const f=FONTS.find(x=>x.id===(S.font||'system'))||FONTS[0];
   document.body.style.fontFamily=f.f;
   // text size: zoom reflows layout correctly in WebKit/Blink and modern Firefox,
@@ -12058,30 +12363,93 @@ function sessAddCost(o){
   var r=String(exRest(o.ex)||'1:30'), mm=r.match(/^(\d+):(\d+)$/);
   return 45+(mm? (+mm[1])*60+(+mm[2]) : 90);
 }
+// ===== ENGINE FILL (2026-09-02, his ruling: "take it off - I'll let the machine decide") =====
+// The manual chips are gone. The athlete sets a target in Settings; the engine fills the gap
+// with its own judgement, in this order, and never asks:
+//   1. +1 set on the day's lightest accessories - never a main, three added sets max, no
+//      accessory past four (the 10-20 weekly-set landmark).
+//   2. If the day is still short, ADD an exercise: the recommended movement (VOL_PICK, the
+//      same table the volume adaptation reads) for the day's own muscle that is furthest
+//      under its weekly target, from the day's own family, not already on the day. Up to two.
+//      Added through the custom-exercise path so it is a real slot with a real load and real
+//      set state, tagged fill:true so the engine can take it back if the target drops and
+//      nothing was logged on it. Logged work is never removed.
+//   3. What remains, a Zone 2 finisher, 10-30 min.
 function sessPlanFor(exs, code){
   var tgt=sessTarget(); if(!tgt || isDeload()) return null;
   var base=sessSecsExact(exs), gap=tgt*60-base;
-  var elig=sessEligible(exs);
-  // Manual selection (2026-09-01, his directive): the athlete's choices beat the auto-fill.
-  // Every eligible accessory is a tappable chip and the finisher is a stepper; whatever they
-  // set is exactly what the day runs. Auto-fill only decides when they have not.
-  var m=(S.sessManual && code && S.sessManual[code]) || null;
-  var adds=[];
-  if(m && m.sel){
-    elig.forEach(function(o){
-      if(m.sel.indexOf(o.ex.name)>-1){ adds.push({i:o.i, name:o.ex.name}); gap-=sessAddCost(o); } });
-  } else {
-    if(gap<240) return null;
-    var budget=3;
-    elig.forEach(function(o){
-      if(!budget || gap<240) return;
-      adds.push({i:o.i, name:o.ex.name}); budget--; gap-=sessAddCost(o); });
-  }
+  if(gap<240) return null;
+  var elig=sessEligible(exs), adds=[], budget=3;
+  elig.forEach(function(o){
+    if(!budget || gap<240) return;
+    adds.push({i:o.i, name:o.ex.name}); budget--; gap-=sessAddCost(o); });
   var fin=0;
-  if(m && typeof m.fin==='number') fin=Math.max(0, Math.min(30, m.fin));
-  else if(gap>=480) fin=Math.min(30, Math.max(10, Math.round(gap/60)));
-  if(!adds.length && !fin && !m) return null;
-  return {adds:adds, fin:fin, tgt:tgt, manual:!!m, elig:elig.map(function(o){ return o.ex.name; })};
+  if(gap>=480) fin=Math.min(30, Math.max(10, Math.round(gap/60)));
+  if(!adds.length && !fin) return null;
+  return {adds:adds, fin:fin, tgt:tgt, elig:elig.map(function(o){ return o.ex.name; })};
+}
+function sessFamily(code){
+  try{ var d=PLAN.days.filter(function(x){ return x.code===code; })[0]; var t=(d&&d.title)||'';
+    return /push/i.test(t)? 'push' : /pull/i.test(t)? 'pull' : /leg|squat|deadlift|lower/i.test(t)? 'legs' : null; }catch(e){ return null; }
+}
+// The day's muscle that is furthest under its weekly target, and the recommended movement for
+// it that fits the day and is not already there. Null when the day has nothing to offer.
+function sessPickExercise(code, exs){
+  try{
+    var have={}; (exs||[]).forEach(function(ex){ have[ex.name]=1; });
+    var fam=sessFamily(code), vol=plannedVolume()||{};
+    var dayMus={};
+    (exs||[]).forEach(function(ex){ var mm=volMuscles(ex.name); if(mm) for(var m in mm) dayMus[m]=1; });
+    var best=null;
+    Object.keys(dayMus).forEach(function(m){
+      var tg=ANA_TGT[m]; if(!tg) return;
+      var ratio=(vol[m]||0)/tg;
+      var cands=(VOL_PICK[m]||[]).filter(function(n){
+        var r=libRow(n); if(!r || have[n]) return false;
+        return !fam || r[1]===fam; });
+      if(!cands.length) return;
+      if(!best || ratio<best.ratio) best={muscle:m, ratio:ratio, name:cands[0]};
+    });
+    return best;
+  }catch(e){ oops('sessPickExercise',e); return null; }
+}
+// Runs when the day is composed - boot and after the target changes - never inside render.
+// Adds or retires fill exercises for the CURRENT day only; other days are composed when they
+// come up, from that day's own numbers.
+function sessFillDay(code){
+  try{
+    if(!code || !PLAN.days.some(function(d){ return d.code===code; })) return 0;
+    var tgt=sessTarget(), cs=custList(code), changed=0;
+    // retire fills that never got logged if the target is gone or the day no longer needs them
+    var logged=function(nm){ try{ var ex=effectiveExercises(code), i=ex.findIndex(function(x){ return x.name===nm; });
+      if(i<0) return false; var st=S.data[cyc()+'c|'+S.week+'|'+code+'|'+i]; return !!(st && (st.sets||[]).some(function(s){ return s && s.st!=='pend'; })); }catch(e){ return true; } };
+    if(!tgt || isDeload()){
+      for(var i=cs.length-1;i>=0;i--) if(cs[i].fill && !logged(cs[i].name)){ cs.splice(i,1); changed++; }
+      if(changed) save(); return changed;
+    }
+    var exs=effectiveExercises(code);
+    var withoutFills=exs.filter(function(ex){ return !cs.some(function(c){ return c.fill && c.name===ex.name; }); });
+    var sp=sessPlanFor(withoutFills, code);
+    var secs=sessSecsExact(withoutFills)+(sp? sp.adds.reduce(function(a,x){ return a+sessAddCost({ex:withoutFills[x.i]}); },0) : 0);
+    var gap=tgt*60-secs, n=0;
+    // add: only when sets alone leave the day 8+ min short, two at most, 3-set cost each
+    var fills=cs.filter(function(c){ return c.fill; }).length;
+    while(gap>=480 && fills+n<2){
+      var pick=sessPickExercise(code, effectiveExercises(code)); if(!pick) break;
+      var r=libRow(pick.name), d=libDefaults(r), est=null;
+      try{ est=estAccessory(pick.name); }catch(e){}
+      if(est==null){ var an=libAnchor(pick.name); if(an && S.maxes && S.maxes[an.base]!=null){
+        var step=(an.unit==='sled')?10:5; est={val:Math.max(step,Math.round(an.f*S.maxes[an.base]/step)*step)}; } }
+      cs.push({b:cyc(), w:S.week, cid:Date.now()+n, name:pick.name, fill:true, why:pick.muscle,
+        load:(r[5]==='bw'?'BW':(est&&est.val!=null? est.val : 25)), sets:3, reps:d.reps, perHand:(r[5]==='perHand')});
+      gap-=3*(45+90); n++; changed++;
+    }
+    // retire: a fill the day no longer needs (target lowered) and nothing logged on it
+    if(n===0){ var over=sessSecsExact(effectiveExercises(code))-tgt*60;
+      for(var j=cs.length-1;j>=0 && over>=480;j--) if(cs[j].fill && !logged(cs[j].name)){ cs.splice(j,1); over-=3*(45+90); changed++; } }
+    if(changed) save();
+    return changed;
+  }catch(e){ oops('sessFillDay',e); return 0; }
 }
 function sessApply(exs, code){
   var sp=sessPlanFor(exs, code); if(!sp) return {exercises:exs, sp:null};
@@ -12357,6 +12725,13 @@ function bwOutgrown(i, ex){
 // Field-caught on the Training Card, where plans are written by whoever is coaching.
 // Now: any time-based prescription counts, plus known isometrics by name.
 var HOLD_NAMES=/\b(plank|side plank|wall ?sit|dead ?hang|bar hang|l-?sit|hollow (body )?hold|superman hold|glute bridge hold|iso ?hold|isometric|copenhagen|handstand hold|chin-?up hold|static hold)\b/i;
+// Hold times print as m:ss once they pass a minute (2026-09-02, his ask: "1:30", not "90s").
+// Display only. Storage stays seconds - every log, PR and trend keeps comparing on one number.
+function holdFmt(sec){
+  var n=Math.round(+sec); if(!isFinite(n) || n<0) return String(sec);
+  if(n<60) return n+'s';
+  return Math.floor(n/60)+':'+String(n%60).padStart(2,'0');
+}
 function isHoldEx(ex){
   try{
     if(!ex) return false;
@@ -12753,7 +13128,23 @@ function baseLoad(ex){
   if(isDeload() && ex.deload!=null) return adj(ex.deload);
   return adj(ex.loadNum);
 }
-function curLoad(ex, st){ return st.w!=null ? st.w : baseLoad(ex); }
+function curLoad(ex, st){
+  if(st && st.w!=null) return st.w;                 // the athlete's own adjustment always wins
+  // FIELD 2026-09-02: "+ set" showed 215 beside five sets done at 200. He trained under a cut
+  // max, the update's repair pass restored it mid-day, and the header plus every set added
+  // afterwards re-prescribed from the LIVE max. Rule: once a set of this exercise is logged,
+  // the session's prescription is what was lifted - read off the first logged set, which is
+  // the day's effective prescription (a rest-screen drop on set 3 is that set's own weight,
+  // never the day's - presctest). Tomorrow gets the new max; today does not move under the
+  // athlete's feet. Live day and visited day alike; only a max moving mid-session ever
+  // makes this differ from baseLoad(), so nothing changes for anyone in the normal case.
+  // Legacy logs from before stampPerf carry no stamp and fall through unchanged.
+  try{
+    var done=(st&&st.sets||[]).filter(function(x){ return x && x.st!=='pend' && typeof x.w==='number' && isFinite(x.w); });
+    if(done.length) return done[0].w;
+  }catch(e){}
+  return baseLoad(ex);
+}
 // Stamp the weight a set was ACTUALLY done at, the moment it is logged.
 // The exercise-level weight is deliberately adjustable mid-session - the card says so, and
 // shows "adjusted from X" when it differs from the plan. But sets carried no weight of their
@@ -13335,6 +13726,7 @@ async function saveSessionLog(quiet){
          S.locked=S.locked||{}; S.locked[dk]=true; }catch(e){ oops('lockOnSave',e); }
     if(String(S.notes||'').trim()){ S.noteStash=S.notes; S.noteStashKey=key; }
     S.notes='';
+    try{ if(S.rePass && S.rePass.k===cyc()+'|'+S.week+'|'+S.day) S.rePass=null; }catch(e){}   // the pass is banked: the door closes
     save();
     await refreshLogs();
     try{ blockDoneCheck(); }catch(e){ oops("saveSessionLog",e); }   // AFTER the write + refresh, so the final session counts
@@ -13498,8 +13890,20 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(S.calSel===undefined) S.calSel=null;
   if(!S.cycleLog) S.cycleLog=[];
   if(S.cycleAck==null) S.cycleAck=0;
+  // one-time tidy for ledgers written before the re-bank fix: same day, same lift, same kind
+  // is one record. The later entry wins (it is the re-bank's number).
+  try{ if(Array.isArray(S.prs) && S.prs.length){ var seen={}; S.prs=S.prs.slice().reverse().filter(function(p){
+    if(!p) return false; var k=p.d+'|'+p.ex+'|'+p.kind; if(seen[k]) return false; seen[k]=1; return true; }).reverse(); } }catch(e){}
   if(!S.theme) S.theme='iron';            // startup wears the mark's tones - splash to app, one world
   if(S.theme==='nova') S.theme='iron';    // Nova WAS dark-and-amber - Iron is its faithful heir
+  // 'Night' was Coach's dark counterpart back when a theme was one light only. It is Coach's
+  // night variant now, with the same colours, so anyone on it moves across and sees no change
+  // - but their light must be pinned to night HERE, before the default below reads Coach's
+  // nat of 'day' and turns a dark card white.
+  if(S.theme==='night'){ S.theme='coach'; if(S.lightMode===undefined) S.lightMode='night'; }
+  // Migration, once: a card that already has a theme keeps exactly the light it has been wearing.
+  // Auto is the default for a NEW profile only - nobody who updates gets a surprise repaint.
+  if(S.lightMode===undefined) S.lightMode = S.seenBuild ? ((THEMES.find(x=>x.id===S.theme)||{}).nat||'night') : 'auto';
   if(!S.font) S.font='system';
   if(!S.readyH) S.readyH=[];
   if(S.fatAck===undefined) S.fatAck=null;
@@ -13618,6 +14022,7 @@ function renderInner(){
   }
   if(S.day==='PLAN'){
     try{ h+=backupBarHTML(); }catch(e){}
+    try{ h+=adFixedHTML(); }catch(e){}   // top level, never inside a fold: it is an apology, not a detail
     if(S.hist){ h+=histDetailHTML(S.hist); }
     else { h+=printPickerHTML(); try{ h+=foldHTML('road','The road ahead',roadAheadHTML(false),true); }catch(e){} try{ h+=foldHTML('vol','Weekly work',volumeHTML(),true); }catch(e){} h+=routineHTML(); h+=earlyCloseHTML(); h+=foldHTML('hist','Exercise history',histListHTML(),false); h+=foldHTML('why','Why these numbers',whyHTML(),false); try{ h+=foldHTML('prov','Where these numbers come from',provenanceHTML(),false); }catch(e){} h+=shareQRHTML(); h+=installHTML(); try{ h+=wipeHTML(); }catch(e){} }
     app.innerHTML=h; wire(); try{ anaPaintAll(); }catch(e){} try{ settingsSync(); }catch(e){} return;
@@ -13771,21 +14176,17 @@ function renderInner(){
     try{ h+=coachToggleHTML()+rosterHTML(); }catch(e){ oops('rosterHTML',e); }
     app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){} return;
   }
-  h+='<div class="'+(isDeload()?'deload':'')+'"><div class="deload-banner">Deload week: 2 sets per exercise, light loads (roughly 40\u201350% \u2014 exact numbers below, already adjusted).</div></div>';
+  h+='<div class="'+(isDeload()?'deload':'')+'"><div class="deload-banner">Deload week: 2 sets per exercise at light weights. The numbers below are already lowered for you.</div></div>';
   h+='<div class="sub" style="margin-top:8px">'+d.title+(function(){ var m=sessionMinutes(d); return m? ' \u00b7 about '+m+' min':''; })()
     +(d.sessPlan? ' \u00b7 target '+Math.floor(d.sessPlan.tgt/60)+'h'+String(d.sessPlan.tgt%60).padStart(2,'0') : '')+'</div>';
-  if(d.sessPlan){
-    var sp2=d.sessPlan, selN={};
-    sp2.adds.forEach(function(a){ selN[a.name]=1; });
-    h+='<div class="exnote" style="padding:6px 0 0;font-style:normal">For the session-length target \u2014 tap to choose what fills the time:</div>'
-      +'<div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
-      +sp2.elig.map(function(nm){ return '<div class="chip'+(selN[nm]?' on':'')+'" data-ssel="'+esc(nm)+'" style="font-size:12px;padding:6px 10px">+1 set '+esc(nm)+'</div>'; }).join('')
-      +'</div>'
-      +'<div class="chiprow" style="margin-top:6px;gap:8px;align-items:center">'
-      +'<div class="chip" data-sfin="-5" style="font-size:13px;padding:6px 14px">\u22125</div>'
-      +'<div class="exnote" style="font-style:normal">Zone 2 finisher \u2014 '+sp2.fin+' min, conversational pace</div>'
-      +'<div class="chip" data-sfin="5" style="font-size:13px;padding:6px 14px">+5</div>'
-      +'</div>';
+  if(d.sessPlan && (d.sessPlan.adds.length || d.sessPlan.fin)){
+    var sp2=d.sessPlan;
+    var fillsHere=(function(){ try{ return custList(d.code).filter(function(c){ return c.fill; }).map(function(c){ return c.name; }); }catch(e){ return []; } })();
+    h+='<div class="exnote" style="padding:6px 0 0;font-style:normal">Filled to your target: '
+      +[].concat(sp2.adds.length? ['+1 set on '+sp2.adds.map(function(a){ return esc(a.name); }).join(', ')] : [],
+                 fillsHere.length? [fillsHere.map(esc).join(' and ')+' added'] : [],
+                 sp2.fin? ['a '+sp2.fin+' min Zone 2 finisher'] : []).join(' \u00b7 ')
+      +'. Change the target in Settings.</div>';
   }
   const RL=readyLabel(); const rToday = S.ready && S.ready.date===shiftDate();
   const fam = /push/i.test(d.title)? 'push' : /pull/i.test(d.title)? 'pull' : /leg|squat|deadlift|lower/i.test(d.title)? 'legs' : 'full';
@@ -13926,7 +14327,7 @@ function renderInner(){
           return '<div class="howto-min" data-howto="'+i+'">Form notes \u203a</div>';
         return '<div class="howto"'+(S.uiMode==='min'?' data-howto="'+i+'"':'')+'><div class="k">How to do it</div><p>'+t+'</p></div>'; })()
       +(function(){ var hEx=isHoldEx(ex);
-        if(hEx && !dayLocked()) return '<div class="exnote" style="padding:0 0 6px">Timed sets \u2014 \u201CStart hold\u201D runs the clock, \u201CStop\u201D logs the seconds. Tap a finished set to fix its time.</div>';
+        if(hEx && !dayLocked()) return '<div class="exnote" style="padding:0 0 6px">Timed sets \u2014 \u201CStart hold\u201D runs the clock, \u201CStop\u201D logs the time. Tap a finished set to fix it.</div>';
         return (tw().sets<6 && !dayLocked())? '<div class="exnote" style="padding:0 0 6px">Tap the glowing set when it\u2019s done \u2014 tap it again if it didn\u2019t go to plan.</div>' : ''; })()
       +'<div class="sets">'
       +(function(){
@@ -13947,7 +14348,7 @@ function renderInner(){
             if(s.st==='pend') return '<div class="set tset '+(up?'up':'lk')+'" data-tset="1"'
               +' aria-label="Set '+(j+1)+', '+esc(dispName)+', timed hold, pending"><div class="n">SET '+(j+1)+'</div><div class="v mono">'+v+'</div></div>';
             return '<div class="set '+s.st+'" data-ex="'+i+'" data-set="'+j+'" data-holdset="1"'
-              +' role="button" tabindex="0" aria-label="Set '+(j+1)+', '+esc(dispName)+', held '+(s.reps!=null?s.reps:'?')+' seconds, tap to edit"><div class="n">SET '+(j+1)+'</div><div class="v mono">'+(s.reps!=null? s.reps+'s' : v)+'</div></div>';
+              +' role="button" tabindex="0" aria-label="Set '+(j+1)+', '+esc(dispName)+', held '+(s.reps!=null?holdFmt(s.reps):'?')+', tap to edit"><div class="n">SET '+(j+1)+'</div><div class="v mono">'+(s.reps!=null? holdFmt(s.reps) : v)+'</div></div>';
           }
           // The weight under the set is its own tap target. Tapping the chip logs the set; that
           // was the ONLY thing a pending set could do, so coming back to adjust it a second
@@ -14163,7 +14564,7 @@ function setEditorHTML(i, ex, st){
   const hEx=isHoldEx(ex);
   const reps=s.reps!=null? s.reps: (hEx? 0 : defReps(ex));
   return '<div class="editor open" data-ed="'+i+'">'
-    +'<div class="ed-row"><div class="ed-label">Set '+(st.open+1)+(hEx?' seconds':' reps')+'</div>'
+    +'<div class="ed-row"><div class="ed-label">Set '+(st.open+1)+(hEx?' hold (seconds)':' reps')+'</div>'
     +(hEx
       ? '<div class="step"><button data-e="reps" data-d="-5">−5</button><div class="val mono">'+reps+'</div><button data-e="reps" data-d="5">+5</button></div></div>'
       : (function(){ var stp=repStep(reps);
@@ -14449,6 +14850,17 @@ function wire(){
   document.querySelectorAll('[data-blkearlyno]').forEach(b=>b.onclick=()=>{ S.earlyAsk=null; save(); render(); });
   document.querySelectorAll('[data-blkhand]').forEach(b=>b.onclick=()=>{ copyHandoff(); });
   document.querySelectorAll('[data-thm]').forEach(b=>b.onclick=()=>{ S.theme=b.dataset.thm; save(); applyTheme(); render(); });
+  document.querySelectorAll('[data-repass]').forEach(b=>b.onclick=()=>{ rePassGo(); });
+  document.querySelectorAll('[data-splitmode]').forEach(b=>b.onclick=()=>{
+    S.splitMode=b.dataset.splitmode;
+    if(S.splitMode!=='open') S.wd=null;                 // the map belongs to Open only
+    else if(!S.wd || !S.wd.length) S.wd=splitDefaultDays((PLAN&&PLAN.days||[]).length||4).slice();
+    save(); try{ syncToNext(); }catch(e){} render(); });
+  document.querySelectorAll('[data-setwd]').forEach(b=>b.onclick=()=>{
+    var d=b.dataset.setwd, wd=(S.wd||[]).slice(), i=wd.indexOf(d);
+    if(i>-1) wd.splice(i,1); else wd.push(d);           // no cap here: the athlete owns their week
+    S.wd=wd; save(); render(); });
+  document.querySelectorAll('[data-lightmode]').forEach(b=>b.onclick=()=>{ S.lightMode=b.dataset.lightmode; save(); applyTheme(); render(); });
   document.querySelectorAll('[data-fnt]').forEach(b=>b.onclick=()=>{ S.font=b.dataset.fnt; save(); applyTheme(); render(); });
   document.querySelectorAll('[data-tsz]').forEach(b=>b.onclick=()=>{ S.tsize=b.dataset.tsz; save(); applyTheme(); render(); });
   document.querySelectorAll('[data-uimode]').forEach(b=>b.onclick=()=>{ S.uiMode=b.dataset.uimode; save(); render(); });
@@ -14460,17 +14872,16 @@ function wire(){
     libFilter();
   }
   document.querySelectorAll('[data-radj]').forEach(b=>b.onclick=()=>{ S.restAdj=+b.dataset.radj; save(); render(); });
-  document.querySelectorAll('[data-slen]').forEach(b=>b.onclick=()=>{ var v=b.dataset.slen; S.sessTarget=(v==='off')? null : +v; save(); render(); });
+  document.querySelectorAll('[data-slen]').forEach(b=>b.onclick=()=>{ var v=b.dataset.slen; S.sessTarget=(v==='off')? null : +v; save(); try{ sessFillDay(S.day); }catch(e){} render(); });
   document.querySelectorAll('[data-retest]').forEach(b=>b.onclick=()=>{
     var o=ONB(); o.retest=true; o.resBak=Object.assign({}, o.res||{}); o.res={};
-    o.ramp=null; o.done=false; o.step=0; save(); render(); });
-  document.querySelectorAll('[data-ssel]').forEach(b=>b.onclick=()=>{
-    var d=dayObj(), sp=d.sessPlan; if(!sp) return;
-    S.sessManual=S.sessManual||{};
-    var cur=S.sessManual[d.code]||{sel:sp.adds.map(function(a){ return a.name; }), fin:null};
-    var nm=b.dataset.ssel, i=cur.sel.indexOf(nm);
-    if(i>-1) cur.sel.splice(i,1); else cur.sel.push(nm);
-    S.sessManual[d.code]=cur; save(); render(); });
+    o.ramp=null; o.done=false; o.step=0; save();
+    // FIELD 2026-09-03: the retest rendered into the app UNDER the open settings sheet (z 200),
+    // so "Assessments" looked dead - the warm-up test was running behind the sheet. Anything
+    // that navigates the app must close the sheet first; the sheet's own wrapper suppresses
+    // the app rebuild while it is up, which is exactly right for chips and exactly wrong here.
+    try{ SET_OPEN=false; settingsSync(); }catch(e){}
+    render(); });
   document.querySelectorAll('[data-discshow]').forEach(b=>b.onclick=()=>{ bootDisc(true); });
   document.querySelectorAll('[data-gocal]').forEach(b=>b.onclick=()=>{ S.day='CAL'; save(); render(); });
   document.querySelectorAll('[data-mailopen]').forEach(b=>b.onclick=()=>{ mailShow(); });
@@ -14507,12 +14918,6 @@ function wire(){
   });
 
   document.querySelectorAll('[data-termsshow]').forEach(b=>b.onclick=()=>{ termsShow(); });
-  document.querySelectorAll('[data-sfin]').forEach(b=>b.onclick=()=>{
-    var d=dayObj(), sp=d.sessPlan; if(!sp) return;
-    S.sessManual=S.sessManual||{};
-    var cur=S.sessManual[d.code]||{sel:sp.adds.map(function(a){ return a.name; }), fin:null};
-    cur.fin=Math.max(0, Math.min(30, (typeof cur.fin==='number'? cur.fin : sp.fin)+(+b.dataset.sfin)));
-    S.sessManual[d.code]=cur; save(); render(); });
   document.querySelectorAll('[data-kaon]').forEach(b=>b.onclick=()=>{
     S.kaOn=!S.kaOn; if(!S.kaOn){ try{ kaStop(); }catch(e){} } save(); render();
     alertToast(S.kaOn? 'Beeps held open \u2014 this will pause your music' : 'Your music will keep playing');
@@ -14542,7 +14947,12 @@ function wire(){
   if(avF){ avF.onchange=function(){ if(avF.files&&avF.files[0]) avatarFromFile(avF.files[0]); }; }
   if(avR) avR.onclick=function(){ S.avatar=null; save(); render(); };
   document.querySelectorAll('[data-du]').forEach(b=>b.onclick=()=>{
-    if(b.dataset.du!=='reset'){ const m=document.getElementById('copyBtn'); if(m) m.click(); return; }
+    // FIELD 2026-09-03: this said "Report a problem" and did something else - it copied the
+    // SESSION REPORT to the clipboard, BANKED THE SESSION as a side effect (locking a day the
+    // athlete was mid-way through), and showed an overlay that sat at z 40. It now opens the
+    // same reporter the BETA pill and Settings open. The session-report copy still exists
+    // behind the hidden #copyBtn for the error path that needs it.
+    if(b.dataset.du!=='reset'){ S.rptOpen=true; S.rptKind=S.rptKind||'bug'; save(); render(); return; }
     // Reset is destructive, so it obeys the card's two-tap rule - and it ALWAYS answers,
     // because a silent reset on an empty day is indistinguishable from a broken button.
     const rk='dureset:'+S.day;
@@ -14771,7 +15181,7 @@ function wire(){
   if(rpB) rpB.onclick=function(){
     let ov=document.getElementById('repOv');
     if(!ov){ ov=document.createElement('div'); ov.id='repOv'; document.body.appendChild(ov); }
-    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:40;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:420;display:flex;align-items:center;justify-content:center;padding:16px;';
     ov.innerHTML='<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:560px;width:100%;padding:14px;">'
       +'<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700;margin-bottom:8px">Paste your backup</div>'
       +'<textarea id="rpTxt" placeholder=\'Paste the whole backup here - it starts with {"v":1\' style="width:100%;height:38vh;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--chalk);padding:10px;font-size:12px;font-family:ui-monospace,Menlo,monospace;"></textarea>'
@@ -16057,8 +16467,32 @@ function painAlt(ex,st){
   const alts=(ex.subs||[]).filter(s=>s!==cur);
   return alts.length? 'Swap to '+alts[0]+' or finish with what does not hurt.' : 'Finish with movements that do not hurt.'; }
 
+// PRINT 2026-09-03, his ask: soldiers will run the printed plan with no app and no engine.
+// Main lifts already ramp on paper (percentages of a max). Accessories did not: the engine
+// climbs them from logged sets - fill the rep range, go up one step - so with no logs the sheet
+// printed the same number for five weeks and nobody on paper was ever told to add weight.
+// The sheet now prints that climb FORWARD for future weeks, in the app's own step (5 lb, 2.5 on
+// light dumbbells, the bar's jump on a barbell) and the template's shape: two weeks, up one,
+// two weeks, up one more. Past and current weeks still come from baseLoad(), so a card user's
+// sheet matches their card today (sheettest2), and the deload week keeps its own number.
+function planStep(ex, live){
+  try{
+    if(ex.barbell) return Math.max(5, wStepLb(true));
+    // the LIVE number decides, not the template's nominal: a 15 lb lateral raise steps by 2.5
+    // (dbRound's own rule under 20), a 40 lb curl by 5
+    return (typeof live==='number' && live<20)? 2.5 : 5;
+  }catch(e){ return 5; }
+}
 function planLoadsRow(ex){ const keepW=S.week, keepR=S.ready; S.ready=null; const out=[];
+  var isMain=!!(ex.maxKey||ex.pct), cur=keepW||1, live=null;
+  try{ S.week=cur; live=baseLoad(ex); }catch(e){ live=null; }
+  var OFF=[0,0,1,1,2,2,3,3];           // climbs per week index: two weeks, then up one
   for(let w=1;w<=PLAN.weeks;w++){ S.week=w; let v=null; try{ v=baseLoad(ex); }catch(e){ v=null; }
+    var future=(w>cur && w<PLAN.weeks);
+    if(future && !isMain && typeof live==='number' && live>0 && !isHoldEx(ex)){
+      var climbs=(OFF[w-1]||0)-(OFF[cur-1]||0); if(climbs<0) climbs=0;
+      v=live+climbs*planStep(ex, live);
+    }
     out.push((v==null||v!==v)? String(ex.load||'-') : String(WV(v))); }
   S.week=keepW; S.ready=keepR; return out; }
 function waveBarsHTML(){
@@ -16148,7 +16582,8 @@ function printPlanHTML(){
     h+='</tbody></table></section>';
   });
   h+=roadAheadHTML(true);
-  h+='<div class="sh-foot"><div class="sh-rules"><b>Deload week</b> \u2014 2 sets per exercise at the deload load. Hit every prescribed rep at the target RIR, then the next block earns more. '
+  h+='<div class="sh-foot"><div class="sh-rules"><b>Weights</b> \u2014 main lifts follow the numbers as printed. Smaller exercises climb in the later weeks; if you did not hit every rep last week, stay on last week\u2019s number until you do. '
+    +'<b>Deload week</b> \u2014 2 sets per exercise at the deload load. Hit every prescribed rep at the target RIR, then the next block earns more. '
     +'<b>The rule</b> \u2014 leave 2 in the tank: stop every set with two clean reps still in you. Generated by the Training Card.</div>'
     +'<div class="sh-sign"><span>Athlete</span><i></i></div></div>';
   return h+'</div>';
@@ -16413,7 +16848,8 @@ function report(){
     const parts=st.sets.filter(s=>!(s.added&&s.st==='pend')).map(s=>{
       if(s.st==='pend') return '·';
       if(s.st==='hit') return '✓'+(s.g?'!':'');
-      return (s.reps!=null?s.reps:'?')+(s.rir!=null?'@'+s.rir:'')+(s.g?'!':'');
+      var rp=(s.reps!=null)? ((typeof isHoldEx==='function' && isHoldEx(ex))? holdFmt(s.reps) : s.reps) : '?';
+      return rp+(s.rir!=null?'@'+s.rir:'')+(s.g?'!':'');
     });
     let line=nm+' '+w+(!st.sub&&ex.perHand?'/hand':'')+': '+parts.join(', ');
     if(st.sets.some(s=>s.w!=null)){ const base=(typeof w==='number')? w:null;
@@ -16531,10 +16967,14 @@ async function tryCopy(t){
       const ok=document.execCommand('copy'); ta.remove(); if(ok) return true; } }catch(e){}
   return false;
 }
+// FIELD 2026-09-03: these overlays sat at z 40 - UNDER the settings sheet (200) they are opened
+// from - so Backup's copied-text box and the paste-restore box appeared behind the sheet and
+// looked dead. 420 clears the sheet and the disclaimer gate (410); nothing should ever cover a
+// box the athlete just asked for.
 function showOverlay(title, text, copied){
   let ov=document.getElementById('repOv');
   if(!ov){ ov=document.createElement('div'); ov.id='repOv'; document.body.appendChild(ov); }
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:40;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:420;display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.innerHTML='<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:560px;width:100%;padding:14px;">'
     +'<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700;margin-bottom:8px">'+title
     +(copied?' \u00b7 <span style="color:var(--green)">copied \u2713</span>':' \u00b7 <span style="color:var(--amber)">long-press \u2192 Select All \u2192 Copy</span>')+'</div>'
@@ -16578,6 +17018,16 @@ try{ (function(){ var el=document.getElementById('themeColor');
   }catch(e){ oops('themeColor',e); } };
   sync(); var r=render; render=function(){ var v=r.apply(this,arguments); sync(); return v; };
 })(); }catch(e){ oops('themeColorInit',e); }
+// Auto has to keep following: a phone that flips to dark at sunset, or an athlete changing it
+// in Control Center mid-session, must move the card with it - and must NOT touch a card whose
+// athlete has pinned Day or Night.
+try{ (function(){
+  if(!window.matchMedia) return;
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  var onFlip=function(){ try{ if(lightMode()!=='auto') return; applyTheme(); render(); }catch(e){ oops('lightFlip',e); } };
+  if(mq.addEventListener) mq.addEventListener('change', onFlip);
+  else if(mq.addListener) mq.addListener(onFlip);
+})(); }catch(e){ oops('lightWatch',e); }
 try{
   if('serviceWorker' in navigator && String(location.protocol).indexOf('http')===0){
     window.addEventListener('load', function(){
@@ -16606,6 +17056,8 @@ load().then(async()=>{
   if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs(); try{ syncToNext(); }catch(e){}
   try{ if(S._avaPick){ profEdit=true; S._avaPick=null; save(); } }catch(e){}
   try{ if(S.avaBig){ delete S.avaBig; save(); } }catch(e){}   // strip the legacy persisted viewer flag
+  try{ adRepairStalls(); }catch(e){ oops('adRepairStalls',e); }   // before the first paint, so the restored numbers are what the athlete sees
+  try{ sessFillDay(S.day); }catch(e){ oops('sessFillDay',e); }      // compose today's day to the target before it is drawn
   applyTheme(); render();
   // First open: bring the coach in on its own. Only for someone who has not started training yet,
   // and never on top of onboarding, which is its own guided flow.
@@ -17320,16 +17772,20 @@ var ONB_ORDER=['squat','bench','dead','ohp','row'];
 // The 'limits'/'pain' injury questions were removed 2026-09-01: asking what hurts and
 // adapting the plan is a medical-adjacent pattern (his call, pending a legal look).
 // The neutral 'prefs' step and the per-exercise Swap carry that job with no intake.
-var ONB_STEPS_FULL=['welcome','level','goal','body','experience','schedule','length','emphasis','prefs','calibrate','priority','review'];
+var ONB_STEPS_FULL=['welcome','level','goal','body','experience','schedule','rhythm','weekdays','length','emphasis','prefs','calibrate','priority','review'];
 var ONB_STEPS_START=['welcome','level','place','days','review'];   // same index for 'level'
 function ONB_STEPS_FOR(){
   try{ if(ONB().retest) return ['calibrate']; }catch(e){}  // redo the assessment alone - nothing else moves
   try{
     // A coach setting up an athlete never sees the beginner fork: Start is the card owner's
     // experience, and it would take over the screen the coach navigates with.
+    // The weekday grid is only a question if the athlete asked for it. Guided never sees it.
+    var full=ONB_STEPS_FULL.filter(function(s){
+      return !(s==='weekdays' && ONB().rhythm!=='open');
+    });
     if(typeof ROSTER!=='undefined' && ROSTER && ROSTER.active)
-      return ONB_STEPS_FULL.filter(function(s){ return s!=='level'; });
-    return (ONB().mode==='start')? ONB_STEPS_START : ONB_STEPS_FULL;
+      return full.filter(function(s){ return s!=='level'; });
+    return (ONB().mode==='start')? ONB_STEPS_START : full;
   }catch(e){ return ONB_STEPS_FULL; }
 }
 // legacy name kept: everything downstream indexes into this
@@ -17462,6 +17918,15 @@ function ONB_feedback(fb){
   if(R.sets.length>=12){ ONB_finish(); return; }
   save(); render();
 }
+// One place, called by every builder. The first cut wrote this only into ONB_finish, so an
+// athlete who chose "I run it" and built through the review step (ONB_build) or the skip
+// path (ONB_buildRaw) landed on Guided. Found by the end-to-end audit, not the unit suite.
+function ONB_applyRhythm(o){
+  try{
+    S.splitMode=(o.rhythm==='open')?'open':'guided';
+    S.wd=(o.rhythm==='open' && o.wd && o.wd.length)? o.wd.slice() : null;
+  }catch(e){ oops('ONB_applyRhythm',e); }
+}
 function ONB_finish(){
   var o=ONB(), R=o.ramp, top=null;
   // only a set within a couple of reps of failure is valid evidence of a maximum
@@ -17493,24 +17958,24 @@ function ONB_HTML(){
   var o=ONB(), STEPS=ONB_STEPS_FOR(), st=STEPS[o.step], h='';
   var done=ONB_ORDER.filter(function(l){ return !!o.res[l]; }).length;
   h+='<header>'+((o.step>0 && st!=='review')?'<div class="onb-back" data-onbback="1" role="button" tabindex="0" aria-label="Back to the previous question">\u2190 Back</div>':'')+'<div class="eyebrow">Setup</div><h1>'+({welcome:'Let\u2019s build your program.',goal:'What are you training for?',
-      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',prefs:'Pick your movements.',priority:'Your numbers say something.',weekdays:'Which days can you train?',schedule:'How do you want your sessions arranged?',length:'How long is a session for you?',level:'Where are you starting from?',place:'Where will you train?',days:'How many days can you show up?',pain:'Anything that hurts?',limits:'Anything to work around?',
+      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',prefs:'Pick your movements.',priority:'Want to focus on one lift?',weekdays:'Which days can you train?',schedule:'How do you want your sessions arranged?',length:'How long is a session for you?',level:'Where are you starting from?',place:'Where will you train?',days:'How many days can you show up?',pain:'Anything that hurts?',limits:'Anything to work around?',
       calibrate:'Find your starting weights',review:'Ready to go.'}[st])+'</h1></header>';
 
   if(st==='welcome'){
    if(o.skipPeek){
     h+='<div class="onb-mark">'+brandMark(250)+'</div>'
-     +'<div class="block"><h3 style="margin:0 0 8px">Before you skip &mdash; here&rsquo;s the trade.</h3>'
-     +'<div class="cue" style="padding:0;line-height:1.65">'
-     +'Setup is about two minutes: four short warm-up sets per lift that stop the moment one feels hard &mdash; you are <b>never</b> asked to max out. In return the card starts you at <b>the weights you can actually handle today</b>, and the questions shape the plan itself &mdash; your goal sets the rep ranges, your days pick the split, and anything sore swaps to friendlier movements.'
-     +'<br><br><b>Skip it and everyone starts on the same deliberately light floor</b> &mdash; lighter than most adults need, set that low so it is safe for literally anyone to pick up cold. It is not broken, just generic: a balanced 3-day plan, no goal tailoring, no injury swaps. The card <i>will</i> climb toward your real weights on its own &mdash; but that auto-correction takes <b>a couple of weeks of sessions</b>, and those are weeks you spend lifting well under what you are capable of.'
-     +'<br><br>You can finish setup later either way. But if you have the two minutes now, it is the difference between training at your level today and grinding up from an empty bar.</div></div>'
+     +'<div class="block"><h3 style="margin:0 0 8px">Skip setup?</h3>'
+     +'<div class="cue" style="padding:0;line-height:1.7">'
+     +'<b>Do setup (2 minutes):</b> you start at weights that fit you, on a plan built for your goal and your days.'
+     +'<br><br><b>Skip it:</b> everyone starts light on the same basic 3-day plan. The card will work your weights up over a few weeks.'
+     +'<br><br>You can do setup later either way.</div></div>'
      +'<div class="daybtn onb-go" data-onbskip="cancel">Set me up properly &middot; 2 min <span style="opacity:.72;font-weight:600">(recommended)</span></div>'
      +'<div class="onb-restore" data-onbskip="go">No thanks &mdash; <b>start me light</b></div>';
    } else {
-    h+='<div class="onb-mark">'+brandMark(250)+'</div><div class="block"><div class="cue" style="padding:0">A few short questions, then a guided warm-up on four lifts to find your starting weights. '
-     +'It follows the standard testing method - fives while it is light, then threes, then singles, resting 2-3 minutes before the heavy ones - and stops as soon as a set feels hard. '
-     +'About six sets and fourteen reps per lift, so you are still fresh when the weight actually matters. You are never asked to max out.'
-     +'<br><br>What comes out is an <b>estimate with a range</b>, not a measurement. Judging how close you are to failure is a skill that sharpens with practice, so the card starts your weights below the estimate and corrects them from your real sets over the first two weeks.</div></div>'
+    h+='<div class="onb-mark">'+brandMark(250)+'</div><div class="block"><div class="cue" style="padding:0;line-height:1.7">Setup takes about two minutes.'
+     +'<br><br><b>1.</b> A few quick questions about you.'
+     +'<br><b>2.</b> A short warm-up on four lifts. It finds your starting weights.'
+     +'<br><br>You will never be asked to lift your max. The card starts you a little light and adjusts from your real sets.</div></div>'
      +'<div class="daybtn onb-go" data-onbnext="1">Start</div>'
      +'<div class="onb-restore" data-onbskip="peek">In a hurry? <b>Skip setup and start light</b></div>'
      +'<div class="onb-restore" id="onbRestore">Not new? <b>I already have a backup</b></div>'
@@ -17524,7 +17989,7 @@ function ONB_HTML(){
        +'<span class="onb-why">You have not trained much, or you are coming back after a long time off. The card picks the movements, shows you each one, and keeps sessions around 25 minutes.</span></div>'
      +'<div class="onb-opt'+(o.mode==='full'?' on':'')+'" data-onblevel="full">I already train'
        +'<span class="onb-why">You know your way around a gym. Full setup: tested starting weights, goal-driven rep ranges, the whole engine.</span></div>'
-     +'<div class="cue" style="padding:8px 0 0">You can move up whenever you want \u2014 nothing is locked, and your training history comes with you.</div></div>'
+     +'<div class="cue" style="padding:8px 0 0">You can move up any time. Nothing is locked, and your history comes with you.</div></div>'
      +'<div class="daybtn onb-go'+(o.mode?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='place'){
@@ -17541,7 +18006,7 @@ function ONB_HTML(){
     h+='<div class="block"><div style="display:flex;gap:8px;flex-wrap:wrap">'
      +[2,3,4].map(function(n){ return '<div class="onb-opt'+((o.days||3)===n?' on':'')+'" data-onbdays2="'+n+'" style="flex:1 1 28%;min-width:76px;text-align:center">'+n+' days'
        +'<span class="onb-why" style="text-align:center">'+(n===2?'Enough to make progress':n===3?'The sweet spot':'If you know you will')+'</span></div>'; }).join('')
-     +'</div><div class="cue" style="padding:8px 0 0">Pick what you will actually do. Two days you keep beats four days you quit \u2014 and you can train more whenever you feel like it; the card just moves to your next session.</div></div>'
+     +'</div><div class="cue" style="padding:8px 0 0">Pick what you will really do. Two days you keep beat four days you quit. You can always train more \u2014 the card just moves to your next session.</div></div>'
      +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
   if(st==='goal'){ h+='<div class="block">'+ONB_GOALS.map(function(g){
@@ -17565,7 +18030,7 @@ function ONB_HTML(){
   if(st==='experience'){ h+='<div class="block">'+ONB_EXP.map(function(e){
       return '<div class="onb-opt'+(o.exp===e.id?' on':'')+'" data-onbexp="'+e.id+'">'+e.t
         +'<span class="onb-why">'+e.why+'</span></div>'; }).join('')
-    +'<div class="cue" style="padding:8px 0 0">This only sets where the warm-up ramp starts. Guess low if you are unsure - the ramp corrects itself either way.</div></div>'
+    +'<div class="cue" style="padding:8px 0 0">This sets where the warm-up test starts. Not sure? Pick the lower one. The test adjusts either way.</div></div>'
     +'<div class="daybtn onb-go'+(o.exp?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='schedule'){
@@ -17578,14 +18043,28 @@ function ONB_HTML(){
         +'<div class="rot-strip">'+rot.map(function(r,i){ return '<span class="rot-chip">'+esc(r)+'</span>'; }).join('<span class="rot-ar">\u2192</span>')
         +'<span class="rot-ar">\u21ba</span></div>'
         +'</div>'; }).join('')
-    +'<div class="cue" style="padding:8px 0 0">This is the order your sessions run in, not a weekly timetable. Train as often as you like \u2014 the card moves to the next session whenever you finish one, and loops back to the start. Weeks advance on the calendar either way.</div></div>'
+    +'<div class="cue" style="padding:8px 0 0">This is the order of your sessions. It is not tied to days of the week. Finish one and the card moves to the next.</div></div>'
     +'<div class="daybtn onb-go'+(o.days?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='length'){ h+='<div class="block"><div style="display:flex;gap:8px;flex-wrap:wrap">'
     +PG_TIME.map(function(t){ return '<div class="onb-opt'+(o.mins===t.m?' on':'')+'" data-onbmins="'+t.m+'" style="flex:1 1 40%;min-width:74px;text-align:center">'+t.m+' min'
       +'<span class="onb-why" style="text-align:center">about '+t.ex+' exercises</span></div>'; }).join('')
-    +'</div><div class="cue" style="padding:8px 0 0">How long you realistically have once you are actually in the gym. This sets how much fits in a session \u2014 the main lifts always stay, accessories are trimmed to fit. You can change it later.</div></div>'
+    +'</div><div class="cue" style="padding:8px 0 0">How long you really have in the gym. The main lifts always stay. Smaller exercises are trimmed to fit. You can change this later.</div></div>'
     +'<div class="daybtn onb-go'+(o.mins?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
+
+  if(st==='rhythm'){
+    // Explained in terms of what it COSTS to miss a day, because that is the only thing that
+    // actually differs between them, and it is what people get wrong when they choose blind.
+    h+='<div class="block">'
+     +'<div class="onb-opt'+((o.rhythm||'guided')==='guided'?' on':'')+'" data-onbrhythm="guided">The card runs it'
+       +'<span class="onb-why">You do the sessions in order. The card always shows your next one. '
+       +'Miss a day and nothing is lost \u2014 it just moves along. Good if your gym days change.</span></div>'
+     +'<div class="onb-opt'+(o.rhythm==='open'?' on':'')+'" data-onbrhythm="open">I run it'
+       +'<span class="onb-why">You pick which session to do, in any order. You can also set them to weekdays \u2014 '
+       +'push Monday, pull Tuesday, legs Wednesday. Miss a day and the rest of your week stays put. '
+       +'Good if your week is already set.</span></div>'
+     +'<div class="cue" style="padding:8px 0 0">Either way: one session a day. You can change this any time in Settings.</div></div>'
+     +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
   if(st==='weekdays'){
     var sel=o.wd||PG_defaultDays(o.days||4);
@@ -17593,7 +18072,7 @@ function ONB_HTML(){
      +PG_DOW.map(function(d){ return '<div class="onb-day'+(sel.indexOf(d)>-1?' on':'')+'" data-onbwd="'+d+'">'+d+'</div>'; }).join('')
      +'</div>'
      +'<div class="cue" style="padding:10px 0 0">Pick '+(o.days||4)+'. '
-     +(sel.length===(o.days||4)? 'The card will arrange your sessions across these days so two heavy leg sessions never land back to back.'
+     +(sel.length===(o.days||4)? 'The card will spread your sessions over these days.'
         : '<b>'+sel.length+' of '+(o.days||4)+' selected.</b>')
      +'</div></div>'
      +'<div class="daybtn onb-go'+(sel.length===(o.days||4)?'':' onb-off')+'" data-onbnext="1">Next</div>';
@@ -17607,7 +18086,7 @@ function ONB_HTML(){
       ['glutes','Glutes and hamstrings','Extra hip work']]
       .map(function(e){ return '<div class="onb-opt'+((o.emph||'balanced')===e[0]?' on':'')+'" data-onbemph="'+e[0]+'">'+e[1]
         +'<span class="onb-why">'+e[2]+'</span></div>'; }).join('')
-    +'<div class="cue" style="padding:8px 0 0">This adds a couple of sets where you want them. It does not change the main lifts or how often each movement pattern is trained \u2014 that part stays balanced whatever you pick.</div></div>'
+    +'<div class="cue" style="padding:8px 0 0">This adds a few extra sets for the area you pick. Your main lifts stay the same.</div></div>'
     +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
 
@@ -17617,27 +18096,25 @@ function ONB_HTML(){
     var autoLabel, autoWhy;
     if(pd.meaningful){
       autoLabel='Prioritize my '+LN[pd.weak].toLowerCase();
-      autoWhy='Your calibration puts it about '+Math.abs(pd.gap)+'% behind where your other lifts say it should be. The block gives it first billing: extra work at the same loads, and a second lighter exposure to own the pattern.';
+      autoWhy='Your warm-up test shows this lift is about '+Math.abs(pd.gap)+'% behind your others. The card gives it a little extra work each week.';
     } else {
       autoLabel='Keep it balanced';
-      autoWhy='Your lifts are in healthy proportion - nothing is lagging enough to need first billing. Even work across the board.';
+      autoWhy='Your lifts are in good balance. Nothing is falling behind.';
     }
     h+='<div class="block">'
      +'<div class="onb-opt'+((o.weak||'auto')==='auto'?' on':'')+'" data-onbweak="auto">'+autoLabel
        +'<span class="onb-why">'+autoWhy+'</span></div>'
      +[['squat','Squat'],['bench','Bench'],['dead','Deadlift'],['ohp','Overhead press'],['row','Barbell row']].map(function(e){
         return '<div class="onb-opt'+(o.weak===e[0]?' on':'')+'" data-onbweak="'+e[0]+'">Prioritize my '+e[1].toLowerCase()+' anyway'
-          +'<span class="onb-why">Your call - the block leans where you point it.</span></div>'; }).join('')
+          +'<span class="onb-why">Your choice. This lift gets extra work.</span></div>'; }).join('')
      +'<div class="onb-opt'+(o.weak==='none'?' on':'')+'" data-onbweak="none">No priority - balanced block'
-       +'<span class="onb-why">Even attention everywhere.</span></div>'
-     +'<div class="cue" style="padding:8px 0 0">This is how this card was born: one lifter, one lagging lift, one block built to fix it.</div></div>'
+       +'<span class="onb-why">Even work on every lift.</span></div></div>'
      +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
   if(st==='prefs'){
     o.prefs=o.prefs||{};
-    h+='<div class="cue" style="padding:0 0 10px">Pick the version of each pattern you actually want '
-      +'to do. The card still decides your sets, reps and weights \u2014 this just decides which movement '
-      +'carries the load. Leave anything on the standard choice if you have no preference.</div>';
+    h+='<div class="cue" style="padding:0 0 10px">For each lift, pick the version you want to do. '
+      +'Not sure? Leave it on the standard choice.</div>';
     Object.keys(PG_PREFS).forEach(function(mk){
       var g=PG_PREFS[mk];
       var chosen=o.prefs[mk]||g.opts[0];
@@ -17648,9 +18125,7 @@ function ONB_HTML(){
               +'</div>'; }).join('')
         +'</div>';
     });
-    h+='<div class="cue" style="padding:0 0 8px">Anything other than the standard barbell lift is '
-      +'prescribed as sets and reps rather than a percentage \u2014 your tested max describes the barbell '
-      +'version, not a machine or a dumbbell.</div>'
+    h+='<div class="cue" style="padding:0 0 8px">The card still sets your weights, sets and reps. This only changes which version you do.</div>'
       +'<div class="daybtn onb-go" data-onbnext="1">Continue</div>'; }
 
   if(st==='calibrate'){
@@ -17696,7 +18171,7 @@ function ONB_HTML(){
       h+='</div>';
     } else {
       h+='<div class="block"><div class="cue" style="padding:0 0 8px">Warm up first: five easy minutes, then some empty-bar reps. '
-        +'Each lift works up in a few sets, dropping reps as the weight climbs, and stops as soon as a set feels hard. '
+        +'Each lift goes up in a few short sets. It stops as soon as one feels hard. '
         +'Rest 2-3 minutes before the heavy ones. Answer honestly - your answer is the measurement.</div></div>';
       ONB_ORDER.forEach(function(l){
         var r=o.res[l];
@@ -17733,7 +18208,7 @@ function ONB_WIRE(){
     if(STEPS[o.step]==='review'){ ONB_build(); return; }
     save(); render(); });
   q('[data-onbback]',function(el){
-    var st=ONB_STEPS[o.step];
+    var st=ONB_STEPS_FOR()[o.step];
     if(st==='calibrate' && o.ramp){ o.ramp=null; save(); render(); return; }  // step out of the active lift test first
     o.step=Math.max(0, o.step-1);
     o.ramp=null;                                                                // never resume a half-finished ramp after stepping back
@@ -17741,7 +18216,7 @@ function ONB_WIRE(){
   q('[data-onbskip]',function(el){
     var m=el.dataset.onbskip;
     if(m==='peek'){ o.skipPeek=true; save(); render(); return; }               // show the trade-off, one tap from starting light
-    if(m==='cancel'){ o.skipPeek=false; o.step=Math.min(ONB_STEPS.length-1,o.step+1); save(); render(); return; } // talked them into setup
+    if(m==='cancel'){ o.skipPeek=false; o.step=Math.min(ONB_STEPS_FOR().length-1,o.step+1); save(); render(); return; } // talked them into setup
     if(m==='go'){ ONB_buildRaw(); return; } });                                 // start light, straight into training
   // Returning clients (new phone, reinstall) land here with a backup file in hand -
   // this is their door straight back into their card. restoreBackup replaces state
@@ -17754,6 +18229,10 @@ function ONB_WIRE(){
   q('[data-onbexp]',function(el){ o.exp=el.dataset.onbexp; save(); render(); });
   q('[data-onbemph]',function(el){ o.emph=el.dataset.onbemph; save(); render(); });
   q('[data-onbweak]',function(el){ o.weak=el.dataset.onbweak; save(); render(); });
+  q('[data-onbrhythm]',function(el){ o.rhythm=el.dataset.onbrhythm;
+    if(o.rhythm!=='open') o.wd=null;
+    else if(!o.wd) o.wd=PG_defaultDays(o.days||4).slice();
+    save(); render(); });
   q('[data-onbwd]',function(el){
     var d=el.dataset.onbwd; if(!o.wd) o.wd=PG_defaultDays(o.days||4).slice();
     var i=o.wd.indexOf(d);
@@ -17788,6 +18267,7 @@ function ONB_WIRE(){
   q('[data-onbretestapply]',function(){
     // apply ONLY what was retested - untested lifts keep their standing numbers, and the
     // plan, logs and history stay exactly where they are: this is a retest, not a restart
+    ONB_applyRhythm(o);
     ONB_ORDER.forEach(function(l){ if(o.res[l]&&o.res[l].pm) S.maxes[l]=o.res[l].pm; });
     o.res=Object.assign({}, o.resBak||{}, o.res); delete o.resBak;
     o.retest=false; o.done=true; o.ramp=null; save(); render(); });
@@ -17838,6 +18318,7 @@ function ONB_build(){
     save(); render(); return;
   }
   S.mode='full';
+  ONB_applyRhythm(o);
   // A new plan is a new block. Graduating from Start (or rebuilding for any other reason)
   // must open a fresh cycle: the week engine anchors on the first log IN THIS BLOCK, so
   // leaving months of beginner sessions attached made the new plan read as week 11 of 6 and
@@ -17854,7 +18335,8 @@ function ONB_build(){
   S.genPlan=plan; PLAN=plan;
   S.maxes=Object.assign({}, plan.maxes);
   S.day=plan.days[0].code; S.week=1; S.data={};
-  o.step=ONB_STEPS.indexOf('review');
+  ONB_applyRhythm(o);
+  o.step=ONB_STEPS_FOR().indexOf('review');
   save(); render();
 }
 
