@@ -4279,6 +4279,7 @@ function autoCalibrate(){
     if(!S.e1rmH) return null;
     var changed=[];
     Object.keys(S.maxes||{}).forEach(function(k){
+      if(pvOn(k)) return;   // a tested max under probation is not second-guessed by the estimator
       var H=(S.e1rmH[k]||[]).filter(function(x){
         // measured session-date to session-date, like every other evidence window - wall-clock
         // maths made morning sets invisible to auto-calibration until after noon
@@ -6980,13 +6981,106 @@ function adWeakLink(lift){
 }
 
 // ---- the weekly pass ----
+// ---- provisional (tested) maxes ---------------------------------------------------------
+// His spec, 2026-09-03: test a true 1RM periodically; when it beats the engine's estimate,
+// enter it and TRAIN ON IT - but it has to hold up. If it does not, the working weight stops
+// climbing and the max walks back down in increments to a number already proven.
+//
+// The failure signal is the card's own per-session `clean` flag, already stored as `c` on each
+// e1rmH entry: c=0 means a set on that lift missed target reps OR was ground out at RIR<=0.
+// Those are the two signals with evidence behind them - missed reps is close to definitional,
+// and RIR-proximity-to-failure is the Helms/Zourdos basis the load table already rests on.
+// Reusing `c` means probation and the stall rule read the same evidence, so they can never
+// disagree about what happened in a session.
+var PV_HAIRCUT=0.95;   // a tested 1RM becomes a programming max at 95% - his call, and the same
+                       // haircut suggestMax() already applies to an estimate
+var PV_BAD=2;          // CHOSEN: two failed sessions, not one. One bad day is sleep or stress,
+                       // not load. That a window is needed is sourced; that it is 2 is a choice.
+var PV_OK=3;           // CHOSEN: three clean sessions graduates it - the same evidence bar
+                       // AD_STALL_MIN_SESSIONS already uses to call a stall, in both directions
+var PV_STEP=0.025;     // CHOSEN: 2.5% off per failed test. Percentage not flat, because 5 lb off
+                       // a 145 press and 5 lb off a 405 pull are not the same correction
+function pvOn(k){ return !!((S.mxProv||{})[k]); }
+function pvUnit(){ return isKg()? toLb(2.5) : 5; }
+function pvRound(v){ return isKg()? toLb(Math.round(v*0.45359237/2.5)*2.5) : Math.round(v/5)*5; }
+// sessions of PROGRAMMED work since probation opened - the tested single itself is excluded,
+// because a maximal attempt is not evidence about training at the loads it produced
+function pvSessions(k){
+  var p=(S.mxProv||{})[k]; if(!p) return [];
+  return ((S.e1rmH&&S.e1rmH[k])||[]).filter(function(x){ return !x.t && x.d>p.since; });
+}
+// enter a tested 1RM: it takes effect now, and it is on probation from now
+function pvStart(k, tested){
+  try{
+    var from=(S.maxes||{})[k]||0;
+    var pm=pvRound(tested*PV_HAIRCUT);
+    if(!S.mxProv) S.mxProv={};
+    // FLOOR: the max it replaced. That is a load already trained at successfully - walking below
+    // it would throw away the athlete's own demonstrated data in favour of a bad fortnight.
+    S.mxProv[k]={tested:tested, from:from, floor:from, since:shiftDate(), start:pm};
+    S.maxes[k]=pm;
+    // the tested single is real measured evidence and belongs in the history, flagged t:1 so
+    // nothing reads a maximal attempt as programmed work
+    if(!S.e1rmH) S.e1rmH={}; if(!S.e1rmH[k]) S.e1rmH[k]=[];
+    var hd=shiftDate(), arr=S.e1rmH[k], ix=arr.findIndex(function(x){ return x.d===hd; });
+    if(ix>-1){ if(tested>arr[ix].v){ arr[ix].v=tested; arr[ix].r=0; } arr[ix].c=1; arr[ix].t=1; }
+    else arr.push({d:hd, v:tested, r:0, c:1, t:1});
+    arr.sort(function(a,b){ return a.d<b.d?-1:1; });
+    if(arr.length>60) S.e1rmH[k]=arr.slice(-60);
+    if(!S.e1rm) S.e1rm={};
+    var b=e1Window(k); if(b) S.e1rm[k]={val:b.v, date:b.d};
+    try{ if(S.genPlan) applyMaxesToPlan(); }catch(e){}
+    return pm;
+  }catch(e){ oops('pvStart',e); return null; }
+}
+// judged on every bank, not on the weekly pass: a max that is too heavy should come down before
+// a full week of bad sessions goes by
+function pvJudge(){
+  var acts=[];
+  try{
+    var today=shiftDate();
+    Object.keys(S.mxProv||{}).forEach(function(k){
+      var p=S.mxProv[k], H=pvSessions(k);
+      var bad=H.filter(function(x){ return x.c===0; }).length;
+      var ok =H.filter(function(x){ return x.c===1; }).length;
+      if(bad>=PV_BAD){
+        var cur=(S.maxes||{})[k]||0; if(!cur) return;
+        var to=pvRound(cur*(1-PV_STEP));
+        if(to>=cur) to=cur-pvUnit();                 // always move, even on a small number
+        if(to<p.floor) to=p.floor;                   // never below what was already proven
+        S.maxes[k]=to;
+        acts.push({kind:'prov', lift:k, from:cur, to:to, d:today,
+          why:'the tested max has not held \u2014 '+bad+' sessions with missed reps or a grind, so the working weight comes back '+WV(cur-to)+' '+uLbl()});
+        if(to<=p.floor) delete S.mxProv[k];          // back at a proven number: normal rules resume
+        else p.since=today;                          // fresh test at the new load
+      } else if(ok>=PV_OK){
+        acts.push({kind:'provok', lift:k, from:(S.maxes||{})[k], to:(S.maxes||{})[k], d:today,
+          why:'the tested max held for '+ok+' clean sessions \u2014 it is your standing number now'});
+        delete S.mxProv[k];
+      }
+    });
+    // Logs its OWN actions rather than handing them back for a caller to file. The first cut
+    // returned them AND seeded adaptRun's acts list, so every trial step landed in S.adLog twice
+    // and "Put it back" would have had to be tapped twice to undo one step.
+    if(acts.length){
+      try{ if(S.genPlan) applyMaxesToPlan(); }catch(e){}
+      S.adLog=(S.adLog||[]).concat(acts).slice(-30);
+      S.adNew=(S.adNew||0)+acts.length;
+      save();
+    }
+  }catch(e){ oops('pvJudge',e); }
+  return acts;
+}
 function adaptRun(force){
   try{
     // Stall resets and fatigue deloads work off maxes and check-ins, which every card has, so
     // they apply to a fixed template too. Only VOLUME drift needs a generated plan, because it
     // reshapes the program rather than moving a number - that stays gated inside adVolumeDrift.
     var today=shiftDate();
-    if(!force && S.adLast && adDays(S.adLast, today)<7) return null;   // once a week, at most
+    // Probation is judged EVERY bank, ahead of the weekly gate - a tested max that is proving too
+    // heavy should not sit on the bar for another six days waiting for the pass to come round.
+    var pv=pvJudge();   // files its own actions
+    if(!force && S.adLast && adDays(S.adLast, today)<7) return pv.length? pv : null;   // once a week, at most
     var acts=[];
     // Coming back from a break is judged before anything else: every other signal is read against
     // loads that are no longer true.
@@ -7004,6 +7098,7 @@ function adaptRun(force){
     // Stalls next: a reset changes the loads everything else is judged against. But before cutting
     // the bar weight, ask WHY - if a driver of that lift is under-dosed, the volume is the problem.
     adStalled().forEach(function(s){
+      if(pvOn(s.lift)) return;      // on probation: pvJudge owns this lift, one penalty not two
       var cur=(S.maxes||{})[s.lift]; if(!cur) return;
       var weak=adWeakLink(s.lift);
       if(weak && !S.adWeakTried){
@@ -7024,6 +7119,7 @@ function adaptRun(force){
     if(!lay){
       Object.keys(S.maxes||{}).forEach(function(k){
         if(acts.some(function(a){ return a.lift===k; })) return;   // already handled this lift
+        if(pvOn(k)) return;   // THE RAMP HOLD: you cannot test a number that is still moving
         var mv=adRateMove(k); if(!mv) return;
         S.maxes[k]=mv.to;
         acts.push({kind:'rate', lift:k, from:mv.from, to:mv.to, rate:mv.rate, d:today,
@@ -7061,7 +7157,8 @@ function adaptUndo(){
     var d=log[log.length-1].d;
     var batch=log.filter(function(x){ return x.d===d; });
     batch.slice().reverse().forEach(function(a){
-      if((a.kind==='stall'||a.kind==='rate'||a.kind==='layoff') && S.maxes && a.from) S.maxes[a.lift]=a.from;
+      if((a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov') && S.maxes && a.from) S.maxes[a.lift]=a.from;
+      if(a.kind==='prov' && S.mxProv && S.mxProv[a.lift]) S.mxProv[a.lift].since=shiftDate();   // put it back on probation, not straight back to proven
       if(a.kind==='weak') S.adWeakTried=false;
       if(a.kind==='deload') S.adDeloadDue=false;
     });
@@ -7183,6 +7280,15 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.03b', date:'2026-09-03', title:'Tested a real 1RM? Program from it', items:[
+    'Unlock Programming maxes and there is a new field: enter a 1RM you actually tested and the card programs from it at 95%, straight away.',
+    'A tested max goes on trial. While it is on trial that lift stops climbing, so the number gets a fair test instead of a moving target.',
+    'Three clean sessions and it becomes your standing number. Miss your reps or grind it out twice and the card steps the max back down a little at a time, and stops at the last max you had already trained \u2014 it never drops you below a weight you have proved.'
+  ], bulk:'New one worth knowing. If you go and test a real single, you can now enter it under Programming maxes and I will program from it at 95% right away \u2014 no waiting for me to catch up. But I am going to watch it. While a tested max is on trial that lift will not climb, because you cannot test a number that is still moving. Give me three clean sessions and it is yours for good. Miss your reps or grind it out twice and I step it back down a bit at a time, and I stop at the last max you had already trained. I will never drop you below a weight you have proved. Go test something.'},
+  {build:'2026.09.03', date:'2026-09-03', title:'Your programming max stays the one you set', items:[
+    'Setting a max with \u2212 and + saves it the moment you tap. There is no second button to press to make it stick.',
+    'The suggestion from your logged sets used to sit next to it as an amber \u201cApply\u201d, and it only appeared when you had just set a LOWER max \u2014 so it looked like it would confirm your change and instead wrote its own number over it. It now says which weight it would use, it is no longer the loudest button on the row, and it stays out of the way of a max you set by hand.'
+  ], bulk:'If you ever set a max and watched it change back, that was on the card, not on you. The \u2212 and + buttons save straight away \u2014 nothing else to press. That amber Apply next to them was me suggesting a number from your logged sets, and it only ever turned up when you had just set a lower one, which is the worst possible moment for it. It now tells you the weight it wants to use, and it leaves alone any max you set yourself. Your numbers are your numbers. Go train.'},
   {build:'2026.09.02b', date:'2026-09-02', title:'The card fills your session time itself', items:[
     'The \u201ctap to choose what fills the time\u201d chips are gone. Set a session-length target in Settings and the card fills the gap on its own: an extra set on the lightest accessories, then a recommended exercise for the muscle your week is shortest on, then a Zone 2 finisher.',
     'Logged work is never removed. Turn the target down and the card only takes back what it added and you never trained.'
@@ -11970,7 +12076,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c182';
+const BUILD = 'c184';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -11998,6 +12104,8 @@ let splitPending=null;   // training-split control: pending day count awaiting c
 // Prescription-driving sections are LOCKED by default: an accidental brush on a max stepper
 // or the goal select silently reprograms every barbell load. Edit is a deliberate act.
 let mxEdit=false, bgEdit=false;
+// maxes hand-set during this unlock - the card stops suggesting over them until Edit/Done
+let mxTouched={};
 let howtoOpen={};   // Minimal mode: which how-to blocks the athlete has expanded this visit
 let restWOpen=false;  // rest-screen weight adjust: open stepper survives the per-second repaint
 // Arms the second tap when someone logs a set while the previous rest is still running.
@@ -14170,8 +14278,30 @@ function renderInner(){
              +'</div>';
          })()
         +(function(){ const sg=suggestMax(mi.k); if(!sg) return '';
+           // FIELD 2026-09-03: "I set max then select apply, it reverts or changes the max I set."
+           // The steppers above SAVE ON TAP - there is no apply-my-edit button and never was.
+           // This one applies the card's SUGGESTION, and it only appears when the suggestion is
+           // at least 5 above the current max - which is exactly when the athlete has just set a
+           // lower one on purpose. Amber made it the loudest thing on the row, and "Apply" read
+           // as "commit what I typed". Three changes: it names the number it will write, it no
+           // longer outranks the athlete's own edit, and it stays out of the way of a max that
+           // was hand-set in this unlock (mxTouched, cleared by Edit/Done).
+           if(mxTouched[mi.k]) return '';
            return '<div class="ed-row" style="margin-top:8px"><div class="cue" style="flex:1;padding:0">Your sets estimate a 1RM of '+WV(sg.e)+' \u2014 suggested max '+WV(sg.sugg)+'</div>'
-             +'<div class="daybtn" data-mxapply="'+mi.k+'" data-v="'+sg.sugg+'" style="background:var(--amber);color:var(--amber-ink);border-color:var(--amber)">Apply</div></div>'; })()
+             +'<div class="daybtn" data-mxapply="'+mi.k+'" data-v="'+sg.sugg+'">Use '+WV(sg.sugg)+' instead</div></div>'; })()
+        +(function(){ var p=(S.mxProv||{})[mi.k]; if(!p) return '';
+           var H=pvSessions(mi.k),
+               ok=H.filter(function(x){ return x.c===1; }).length,
+               bad=H.filter(function(x){ return x.c===0; }).length;
+           return '<div class="cue" style="padding:6px 0 0;color:var(--amber)">On trial from your tested '
+             +WV(p.tested)+' '+uLbl()+' \u2014 '+ok+' of '+PV_OK+' clean sessions'
+             +(bad? ', '+bad+' of '+PV_BAD+' missed or ground out' : '')
+             +'. This lift will not climb while it is on trial. If it does not hold it steps back '
+             +'to '+WV(p.floor)+' '+uLbl()+', which you have already trained.</div>'; })()
+        +(mxEdit? '<div class="ed-row" style="margin-top:8px">'
+             +'<div class="cue" style="flex-basis:100%;padding:0 0 4px">Tested a real 1RM? Enter it and the card programs from it at '+Math.round(PV_HAIRCUT*100)+'%.</div>'
+             +'<input class="ed-in" id="tm'+mi.k+'" type="number" inputmode="decimal" placeholder="tested 1RM" style="width:110px">'
+             +'<div class="daybtn" data-tmax="'+mi.k+'">Use it</div></div>' : '')
         +(jump? '<div class="cue" style="padding:6px 0 0">Big move from '+WV(base)+' \u2014 The card will want receipts before trusting this.</div>':'')
         +'</div></div>';
     });
@@ -14849,7 +14979,23 @@ function wire(){
   const pg=document.getElementById('pGoal'); if(pg) pg.onchange=()=>{S.profile.goal=pg.value;save();render();};
   document.querySelectorAll('[data-mxapply]').forEach(b=>b.onclick=()=>{
     if(!mxEdit){ alertToast('Maxes are locked \u2014 tap Edit above to change them'); return; }
-    S.maxes[b.dataset.mxapply]=+b.dataset.v; save(); render();
+    // Say what was overwritten, so a wrong tap is obvious and cheap to walk back.
+    const k=b.dataset.mxapply, was=S.maxes[k], now=+b.dataset.v;
+    S.maxes[k]=now; mxTouched[k]=1; save(); render();
+    if(was!=null && was!==now) alertToast('Max set to '+WV(now)+' '+uLbl()+' \u2014 was '+WV(was)+'. Use \u2212 and + to change it.');
+  });
+  document.querySelectorAll('[data-tmax]').forEach(b=>b.onclick=()=>{
+    if(!mxEdit){ alertToast('Maxes are locked \u2014 tap Edit above to change them'); return; }
+    const k=b.dataset.tmax, el=document.getElementById('tm'+k);
+    const raw=el? parseFloat(el.value) : NaN;
+    if(!raw || !isFinite(raw) || raw<=0){ alertToast('Enter the weight you actually lifted'); return; }
+    const tested=inLb(raw), cur=(S.maxes||{})[k]||0, pm=pvRound(tested*PV_HAIRCUT);
+    // He asked for this to be the path when a TEST BEATS the engine. Below the current max it is
+    // almost always a typo or the wrong unit, and silently cutting every barbell load is the one
+    // outcome worth refusing outright - the steppers are right there if he means it.
+    if(pm<=cur){ alertToast('That programs to '+WV(pm)+' '+uLbl()+', at or under your current '+WV(cur)+'. Use \u2212 and + if you meant to lower it.'); return; }
+    pvStart(k, tested); mxTouched[k]=1; save(); render();
+    alertToast('Tested '+WV(tested)+' '+uLbl()+' \u2014 programming max '+WV(pm)+'. On trial for '+PV_OK+' clean sessions.');
   });
   document.querySelectorAll('[data-blkapply]').forEach(b=>b.onclick=()=>{ S.maxes[b.dataset.blkapply]=+b.dataset.v; save(); render(); });
   document.querySelectorAll('[data-blkgo]').forEach(b=>b.onclick=()=>{ startNextBlock(b.dataset.blkgo==='all'); });
@@ -14970,11 +15116,12 @@ function wire(){
       .reduce((a,k)=>a+((S.data[k].sets||[]).filter(x=>x.st&&x.st!=='pend').length),0);
     const m=document.getElementById('resetBtn'); if(m) m.click();
     alertToast(n? 'Day reset \u2014 '+n+' logged set'+(n===1?'':'s')+' cleared' : 'Nothing was logged today \u2014 already clean'); });
-  document.querySelectorAll('[data-mxlock]').forEach(b=>b.onclick=()=>{ mxEdit=b.dataset.mxlock==='1'; render(); });
+  document.querySelectorAll('[data-mxlock]').forEach(b=>b.onclick=()=>{ mxEdit=b.dataset.mxlock==='1'; mxTouched={}; render(); });
   document.querySelectorAll('[data-bglock]').forEach(b=>b.onclick=()=>{ bgEdit=b.dataset.bglock==='1'; render(); });
   document.querySelectorAll('[data-mx]').forEach(b=>b.onclick=()=>{
     if(!mxEdit) return;
-    const k=b.dataset.mx; S.maxes[k]=Math.max(45, S.maxes[k]+(+b.dataset.d)); save(); render();
+    const k=b.dataset.mx; mxTouched[k]=1;   // hand-set: stop offering to overwrite it
+    S.maxes[k]=Math.max(45, S.maxes[k]+(+b.dataset.d)); save(); render();
   });
   document.querySelectorAll('[data-week]').forEach(el=>el.onclick=()=>{S.week=+el.dataset.week;save();render();});
   document.querySelectorAll('[data-swap]').forEach(el=>el.onchange=()=>{
