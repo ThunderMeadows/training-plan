@@ -792,6 +792,7 @@ body.start-mode{background:var(--bg);}
 .howto-min{margin:14px 18px 0;font-size:12px;color:var(--faint);cursor:pointer;
   text-decoration:underline;text-underline-offset:3px;padding:6px 0;}
 body.ui-min .cue:not(.keep){display:none;}
+body.ui-min #app[data-onb] .cue{display:block;}   /* setup is instructions, not coaching: never hidden by Minimal (field 2026-09-03: a blank welcome box) */
 body.ui-min .exnote{display:none;}
 body.ui-min .prof-hint{display:none;}
 body.ui-min .coach{display:none;}
@@ -11969,7 +11970,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c181';
+const BUILD = 'c182';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -13968,9 +13969,14 @@ function renderInner(){
   }catch(e){ oops('coachIdle',e); }
   if(typeof ONB_ACTIVE==='function' && ONB_ACTIVE()){
     var app0=document.getElementById('app'); if(!app0) return;
+    app0.setAttribute('data-onb','1');   // lets the stylesheet keep setup copy visible under Minimal coaching text
     app0.innerHTML=ONB_HTML(); try{ ONB_WIRE(); }catch(e){}
+    // the footer lives outside #app and kept the previous day's deck ("NEXT Overhead Press")
+    // under the setup screen - seen in the field 2026-09-03
+    try{ var fi=document.getElementById('footInner'); if(fi) fi.innerHTML=''; }catch(e){}
     return;
   }
+  try{ var appN=document.getElementById('app'); if(appN) appN.removeAttribute('data-onb'); }catch(e){}
   // ===== START MODE OWNS THE WHOLE SCREEN =====
   // Simplifying the CONTENT was not enough: a beginner still met tabs, week chips, footer
   // navigation, readiness, cardio and notes - the engine's whole instrument panel. They do
@@ -14676,6 +14682,8 @@ function dayUtilHTML(){
   window.addEventListener('orientationchange', function(){ setTimeout(ask,300); });
 })();
 function paintFoot(){ var el=document.getElementById('footInner'); if(!el) return;
+  // setup owns the screen: no deck under it (field 2026-09-03, "NEXT Overhead Press" under the welcome)
+  if(typeof ONB_ACTIVE==='function' && ONB_ACTIVE()){ el.innerHTML=''; return; }
   var training=false;
   try{ training=(S.setup!==false)&&['CAL','YOU','MAX','TEST','PLAN','RATE','LIB'].indexOf(S.day)<0&&focusMax()>0; }catch(e){}
   if(training&&S.view!=='deck'){ el.innerHTML=focusNavHTML(); }
@@ -16097,7 +16105,33 @@ async function restoreBackup(file){
     RESCUE={t:Date.now()}; }catch(e){} }
   try{ const txt=await file.text(); const obj=JSON.parse(txt);
     if(!obj || !obj.S){ alertToast('Not a Training Card backup file'); return; }
+    // FIELD 2026-09-03: a Session Card backup restored here sent him straight to setup with
+    // his data hidden behind it, and would have lost every banked session on the way.
+    // Three things a cross-card restore needs that a same-card restore does not:
+    var fromSession=false, brought={logs:0, hist:0, maxes:0, prs:0, cal:0};
+    try{
+      // (a) the Session Card writes logs under nova-sc-log:<date>-... ; here that prefix belongs
+      //     to ROSTER athletes (nova-sc-log:<id>:...) and the personal drawer filters it out.
+      //     Remap anything with no athlete id onto the personal prefix so it is seen.
+      var PERS=(typeof TLOGP!=='undefined')? TLOGP : LOGP;   // this card's own personal prefix
+      if(obj.logs){ var moved={}; for(var k in obj.logs){
+        var m=/^nova-sc-log:(\d{4}-\d{2}-\d{2}.*)$/.exec(k);
+        if(m){ moved[PERS+m[1]]=obj.logs[k]; fromSession=true; } else moved[k]=obj.logs[k]; }
+        obj.logs=moved; brought.logs=Object.keys(moved).length; }
+    }catch(e){}
     S=mergeIntoShape(obj.S); save(); committed=true;
+    try{
+      brought.hist=Object.keys(S.exHist||{}).length; brought.prs=(S.prs||[]).length; brought.cal=(S.calNotes||[]).length;
+      brought.maxes=Object.keys(S.maxes||{}).filter(function(k){ return S.maxes[k]>0; }).length;
+      // (b) the backup carries no setup flag, so the card thought he was new and put setup in
+      //     front of everything he had just restored. Data is the proof of an athlete: if it is
+      //     there, he lands on his card. Setup stays one tap away under Settings - Assessments.
+      var o=ONB(); if(!o.done && (brought.hist||brought.maxes||brought.logs)){ o.done=true; o.mode=o.mode||'full'; S.mode=S.mode||'full'; }
+      // (c) what came across is said, once, where it stays: a Bulk letter plus the toast
+      var line='Backup restored: '+brought.logs+' sessions, history on '+brought.hist+' lifts, '+brought.maxes+' maxes, '+brought.prs+' records'+(brought.cal? ', '+brought.cal+' calendar entries':'')+'.';
+      if(typeof mailPush==='function') mailPush('restore-'+Date.now(), line+(fromSession? ' That was a Session Card backup, so your old block did not come with it \u2014 you are on the standard block until you build one. Settings \u2192 Assessments when you want that.':''), 'focused');
+      S.restoreNote=line; save();
+    }catch(e){ oops('restoreLand',e); }
     // log refresh is best-effort: a quirky storage layer must never make a SUCCESSFUL
     // restore report failure over a stuck screen
     try{ if(storageOK && obj.logs){ for(const k in obj.logs){ try{ await stSet(k, obj.logs[k]); }catch(e){} } }
@@ -16107,7 +16141,7 @@ async function restoreBackup(file){
       try{ S=JSON.parse(__before); save(); render(); alertToast('Put back what was here before'); }
       catch(e4){ alertToast('Could not undo the restore'); }
     }, 15000);
-    else alertToast('Backup restored \u2713');
+    else alertToast(S.restoreNote? (S.restoreNote+' \u2713') : 'Backup restored \u2713');
   }catch(e){ if(committed){ try{ render(); }catch(e3){} alertToast('Backup restored \u2713'); }
     else alertToast('Restore failed \u2014 bad file'); }
 }
@@ -17965,14 +17999,14 @@ function ONB_HTML(){
    if(o.skipPeek){
     h+='<div class="onb-mark">'+brandMark(250)+'</div>'
      +'<div class="block"><h3 style="margin:0 0 8px">Skip setup?</h3>'
-     +'<div class="cue" style="padding:0;line-height:1.7">'
+     +'<div class="cue keep" style="padding:0;line-height:1.7">'
      +'<b>Do setup (2 minutes):</b> you start at weights that fit you, on a plan built for your goal and your days.'
      +'<br><br><b>Skip it:</b> everyone starts light on the same basic 3-day plan. The card will work your weights up over a few weeks.'
      +'<br><br>You can do setup later either way.</div></div>'
      +'<div class="daybtn onb-go" data-onbskip="cancel">Set me up properly &middot; 2 min <span style="opacity:.72;font-weight:600">(recommended)</span></div>'
      +'<div class="onb-restore" data-onbskip="go">No thanks &mdash; <b>start me light</b></div>';
    } else {
-    h+='<div class="onb-mark">'+brandMark(250)+'</div><div class="block"><div class="cue" style="padding:0;line-height:1.7">Setup takes about two minutes.'
+    h+='<div class="onb-mark">'+brandMark(250)+'</div><div class="block"><div class="cue keep" style="padding:0;line-height:1.7">Setup takes about two minutes.'
      +'<br><br><b>1.</b> A few quick questions about you.'
      +'<br><b>2.</b> A short warm-up on four lifts. It finds your starting weights.'
      +'<br><br>You will never be asked to lift your max. The card starts you a little light and adjusts from your real sets.</div></div>'
@@ -17989,7 +18023,7 @@ function ONB_HTML(){
        +'<span class="onb-why">You have not trained much, or you are coming back after a long time off. The card picks the movements, shows you each one, and keeps sessions around 25 minutes.</span></div>'
      +'<div class="onb-opt'+(o.mode==='full'?' on':'')+'" data-onblevel="full">I already train'
        +'<span class="onb-why">You know your way around a gym. Full setup: tested starting weights, goal-driven rep ranges, the whole engine.</span></div>'
-     +'<div class="cue" style="padding:8px 0 0">You can move up any time. Nothing is locked, and your history comes with you.</div></div>'
+     +'<div class="cue keep" style="padding:8px 0 0">You can move up any time. Nothing is locked, and your history comes with you.</div></div>'
      +'<div class="daybtn onb-go'+(o.mode?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='place'){
@@ -18006,7 +18040,7 @@ function ONB_HTML(){
     h+='<div class="block"><div style="display:flex;gap:8px;flex-wrap:wrap">'
      +[2,3,4].map(function(n){ return '<div class="onb-opt'+((o.days||3)===n?' on':'')+'" data-onbdays2="'+n+'" style="flex:1 1 28%;min-width:76px;text-align:center">'+n+' days'
        +'<span class="onb-why" style="text-align:center">'+(n===2?'Enough to make progress':n===3?'The sweet spot':'If you know you will')+'</span></div>'; }).join('')
-     +'</div><div class="cue" style="padding:8px 0 0">Pick what you will really do. Two days you keep beat four days you quit. You can always train more \u2014 the card just moves to your next session.</div></div>'
+     +'</div><div class="cue keep" style="padding:8px 0 0">Pick what you will really do. Two days you keep beat four days you quit. You can always train more \u2014 the card just moves to your next session.</div></div>'
      +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
   if(st==='goal'){ h+='<div class="block">'+ONB_GOALS.map(function(g){
@@ -18024,13 +18058,13 @@ function ONB_HTML(){
     +'<div class="onb-step"><span data-onbn="wt" data-d="-1">\u2212</span>'
     +'<b><input type="number" inputmode="decimal" id="onbWt" min="60" max="500" step="0.1" value="'+o.wt+'"> lb</b>'
     +'<span data-onbn="wt" data-d="1">+</span></div></div>'
-    +'<div class="cue" style="padding:8px 0 0">Used only to pick safe starting weights for the warm-up ramps.</div></div>'
+    +'<div class="cue keep" style="padding:8px 0 0">Used only to pick safe starting weights for the warm-up ramps.</div></div>'
     +'<div class="daybtn onb-go'+(o.sex?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='experience'){ h+='<div class="block">'+ONB_EXP.map(function(e){
       return '<div class="onb-opt'+(o.exp===e.id?' on':'')+'" data-onbexp="'+e.id+'">'+e.t
         +'<span class="onb-why">'+e.why+'</span></div>'; }).join('')
-    +'<div class="cue" style="padding:8px 0 0">This sets where the warm-up test starts. Not sure? Pick the lower one. The test adjusts either way.</div></div>'
+    +'<div class="cue keep" style="padding:8px 0 0">This sets where the warm-up test starts. Not sure? Pick the lower one. The test adjusts either way.</div></div>'
     +'<div class="daybtn onb-go'+(o.exp?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='schedule'){
@@ -18043,13 +18077,13 @@ function ONB_HTML(){
         +'<div class="rot-strip">'+rot.map(function(r,i){ return '<span class="rot-chip">'+esc(r)+'</span>'; }).join('<span class="rot-ar">\u2192</span>')
         +'<span class="rot-ar">\u21ba</span></div>'
         +'</div>'; }).join('')
-    +'<div class="cue" style="padding:8px 0 0">This is the order of your sessions. It is not tied to days of the week. Finish one and the card moves to the next.</div></div>'
+    +'<div class="cue keep" style="padding:8px 0 0">This is the order of your sessions. It is not tied to days of the week. Finish one and the card moves to the next.</div></div>'
     +'<div class="daybtn onb-go'+(o.days?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='length'){ h+='<div class="block"><div style="display:flex;gap:8px;flex-wrap:wrap">'
     +PG_TIME.map(function(t){ return '<div class="onb-opt'+(o.mins===t.m?' on':'')+'" data-onbmins="'+t.m+'" style="flex:1 1 40%;min-width:74px;text-align:center">'+t.m+' min'
       +'<span class="onb-why" style="text-align:center">about '+t.ex+' exercises</span></div>'; }).join('')
-    +'</div><div class="cue" style="padding:8px 0 0">How long you really have in the gym. The main lifts always stay. Smaller exercises are trimmed to fit. You can change this later.</div></div>'
+    +'</div><div class="cue keep" style="padding:8px 0 0">How long you really have in the gym. The main lifts always stay. Smaller exercises are trimmed to fit. You can change this later.</div></div>'
     +'<div class="daybtn onb-go'+(o.mins?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='rhythm'){
@@ -18063,7 +18097,7 @@ function ONB_HTML(){
        +'<span class="onb-why">You pick which session to do, in any order. You can also set them to weekdays \u2014 '
        +'push Monday, pull Tuesday, legs Wednesday. Miss a day and the rest of your week stays put. '
        +'Good if your week is already set.</span></div>'
-     +'<div class="cue" style="padding:8px 0 0">Either way: one session a day. You can change this any time in Settings.</div></div>'
+     +'<div class="cue keep" style="padding:8px 0 0">Either way: one session a day. You can change this any time in Settings.</div></div>'
      +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
   if(st==='weekdays'){
@@ -18071,7 +18105,7 @@ function ONB_HTML(){
     h+='<div class="block"><div style="display:flex;gap:6px;flex-wrap:wrap">'
      +PG_DOW.map(function(d){ return '<div class="onb-day'+(sel.indexOf(d)>-1?' on':'')+'" data-onbwd="'+d+'">'+d+'</div>'; }).join('')
      +'</div>'
-     +'<div class="cue" style="padding:10px 0 0">Pick '+(o.days||4)+'. '
+     +'<div class="cue keep" style="padding:10px 0 0">Pick '+(o.days||4)+'. '
      +(sel.length===(o.days||4)? 'The card will spread your sessions over these days.'
         : '<b>'+sel.length+' of '+(o.days||4)+' selected.</b>')
      +'</div></div>'
@@ -18086,7 +18120,7 @@ function ONB_HTML(){
       ['glutes','Glutes and hamstrings','Extra hip work']]
       .map(function(e){ return '<div class="onb-opt'+((o.emph||'balanced')===e[0]?' on':'')+'" data-onbemph="'+e[0]+'">'+e[1]
         +'<span class="onb-why">'+e[2]+'</span></div>'; }).join('')
-    +'<div class="cue" style="padding:8px 0 0">This adds a few extra sets for the area you pick. Your main lifts stay the same.</div></div>'
+    +'<div class="cue keep" style="padding:8px 0 0">This adds a few extra sets for the area you pick. Your main lifts stay the same.</div></div>'
     +'<div class="daybtn onb-go" data-onbnext="1">Next</div>'; }
 
 
@@ -18113,7 +18147,7 @@ function ONB_HTML(){
 
   if(st==='prefs'){
     o.prefs=o.prefs||{};
-    h+='<div class="cue" style="padding:0 0 10px">For each lift, pick the version you want to do. '
+    h+='<div class="cue keep" style="padding:0 0 10px">For each lift, pick the version you want to do. '
       +'Not sure? Leave it on the standard choice.</div>';
     Object.keys(PG_PREFS).forEach(function(mk){
       var g=PG_PREFS[mk];
@@ -18125,7 +18159,7 @@ function ONB_HTML(){
               +'</div>'; }).join('')
         +'</div>';
     });
-    h+='<div class="cue" style="padding:0 0 8px">The card still sets your weights, sets and reps. This only changes which version you do.</div>'
+    h+='<div class="cue keep" style="padding:0 0 8px">The card still sets your weights, sets and reps. This only changes which version you do.</div>'
       +'<div class="daybtn onb-go" data-onbnext="1">Continue</div>'; }
 
   if(st==='calibrate'){
@@ -18152,9 +18186,9 @@ function ONB_HTML(){
               +'</div></div>';
           }catch(e){ return ''; }
         })()
-       +'<div class="cue" style="padding:2px 0 10px">'+L.cue+' Do '+({1:'one rep',2:'two reps',3:'three reps',5:'five reps'}[rp]||rp+' reps')+', rack it, then answer honestly.</div>'
+       +'<div class="cue keep" style="padding:2px 0 10px">'+L.cue+' Do '+({1:'one rep',2:'two reps',3:'three reps',5:'five reps'}[rp]||rp+' reps')+', rack it, then answer honestly.</div>'
        +'<div style="font-weight:800;font-size:15px;margin-bottom:6px">How many MORE reps could you have done?</div>'
-       +(heavy? '<div class="cue" style="padding:0 0 10px;color:var(--amber)"><b>Rest 2-3 minutes before this one.</b> Rushing the heavy sets is what makes the number wrong.</div>':'')
+       +(heavy? '<div class="cue keep" style="padding:0 0 10px;color:var(--amber)"><b>Rest 2-3 minutes before this one.</b> Rushing the heavy sets is what makes the number wrong.</div>':'')
        +'<div class="onb-fb">'
        +'<div class="onb-opt" data-onbfb="r5">5 or more<span class="onb-why">still comfortable</span></div>'
        +'<div class="onb-opt" data-onbfb="r34">3 or 4<span class="onb-why">working now</span></div>'
@@ -18166,17 +18200,17 @@ function ONB_HTML(){
           ? '<div class="onb-restore" data-onbfb="nobar" style="margin-top:8px">'
             +'I could not lift this &mdash; <b>it is too heavy for me right now</b></div>'
           : '');
-      if(o.ramp.sets.length) h+='<div class="cue" style="padding:10px 0 0">'+o.ramp.sets.map(function(s){
+      if(o.ramp.sets.length) h+='<div class="cue keep" style="padding:10px 0 0">'+o.ramp.sets.map(function(s){
         return WV(s.w)+' \u00d7'+s.r+' - '+({r5:'5+ left',r34:'3-4 left',r2:'2 left',r1:'all of it',stop:'stopped'})[s.fb]; }).join('<br>')+'</div>';
       h+='</div>';
     } else {
-      h+='<div class="block"><div class="cue" style="padding:0 0 8px">Warm up first: five easy minutes, then some empty-bar reps. '
+      h+='<div class="block"><div class="cue keep" style="padding:0 0 8px">Warm up first: five easy minutes, then some empty-bar reps. '
         +'Each lift goes up in a few short sets. It stops as soon as one feels hard. '
         +'Rest 2-3 minutes before the heavy ones. Answer honestly - your answer is the measurement.</div></div>';
       ONB_ORDER.forEach(function(l){
         var r=o.res[l];
         h+='<div class="block"><div style="font-weight:800">'+ONB_LIFTS[l].n+'</div>'
-         +(r? '<div class="cue" style="padding:6px 0 0">Top set '+r.top+' \u00d7'+r.reps+' \u00b7 estimated max '+r.lo+'-'+r.hi+' lb'
+         +(r? '<div class="cue keep" style="padding:6px 0 0">Top set '+r.top+' \u00d7'+r.reps+' \u00b7 estimated max '+r.lo+'-'+r.hi+' lb'
               +'<br>Starting training weights from '+r.pm+'. This is an estimate, not a measurement \u2014 the card corrects it from your real sets over the first two weeks.'
               +(r.approx? '<br><b>The test did not settle</b>, so this starts deliberately low.':'')+'</div>'
             : '<div class="daybtn" data-onbramp="'+l+'" style="margin-top:8px">Test it</div>')
@@ -18185,15 +18219,15 @@ function ONB_HTML(){
       if(o.retest){
         if(done) h+='<div class="daybtn onb-go" data-onbretestapply="1">Apply my new numbers</div>';
         h+='<div class="onb-restore" data-onbretestcancel="1" style="margin-top:10px;display:block;text-align:center">Keep my old numbers</div>';
-        if(done<ONB_ORDER.length) h+='<div class="cue" style="margin-top:8px">'+done+' of '+ONB_ORDER.length+' retested. Apply whenever \u2014 lifts you skip keep their current numbers.</div>';
+        if(done<ONB_ORDER.length) h+='<div class="cue keep" style="margin-top:8px">'+done+' of '+ONB_ORDER.length+' retested. Apply whenever \u2014 lifts you skip keep their current numbers.</div>';
       }
       else if(done===ONB_ORDER.length) h+='<div class="daybtn onb-go" data-onbnext="1">Build my program</div>';
-      else h+='<div class="cue">'+done+' of '+ONB_ORDER.length+' done. Spread these over two or three sessions if you need to.</div>';
+      else h+='<div class="cue keep">'+done+' of '+ONB_ORDER.length+' done. Spread these over two or three sessions if you need to.</div>';
     }
   }
 
   if(st==='review'){
-    h+='<div class="block"><div class="cue" style="padding:0">Your program is built from your own numbers. '
+    h+='<div class="block"><div class="cue keep" style="padding:0">Your program is built from your own numbers. '
       +'Every load is a percentage of what you just lifted, and it climbs for five weeks before a deload.</div></div>'
       +'<div class="daybtn onb-go" data-onbfinish="1">Open my first session</div>';
   }
