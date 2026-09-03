@@ -5525,7 +5525,14 @@ function lockGuard(ev){
       // overlays floating above the session (walkthrough, what's-new, report, enlarged photo)
       // stay live. The day-agnostic .lockfree utilities - cardio and bodyweight - edit TODAY's
       // data and stay live on a logged-day review, but a preview is browsing, not training.
-      if(t.closest('.prevbar') || t.closest('.tabrow') || t.closest('.chiprow')
+      // FIELD-CAUGHT 2026-09-03: he switched the rhythm to "I pick", landed on a future day,
+      // and could not get back INTO settings to switch it back. The header identity bar is not
+      // part of any session - it is settings, mail, the tour replay and his own photo. All four
+      // carry .lockfree, but this preview branch deliberately does not honour .lockfree (cardio
+      // and bodyweight edit TODAY's data and must stay shut while browsing), so the header went
+      // down with them. It is exempt by its own selector, which is true in every lock state.
+      if(t.closest('.hdr-id')
+         || t.closest('.prevbar') || t.closest('.tabrow') || t.closest('.chiprow')
          || t.closest('.weekhead') || t.closest('#coachHost') || t.closest('.wn-wrap')
          || t.closest('.rpt-wrap') || t.closest('.hw-wrap') || t.closest('.avabig-wrap')) return;
       ev.stopPropagation();
@@ -7280,6 +7287,11 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.03c', date:'2026-09-03', title:'Settings always opens, even on a day you are only looking at', items:[
+    'Looking at a session that has not opened yet locked the whole screen \u2014 including the settings gear, mail and the tour replay in the header.',
+    'That meant switching who picks the session could strand you: the change lands, you get moved to a day that is still coming up, and the way back into settings was locked behind it.',
+    'The header is never part of a session, so it never locks now. The session itself still stays read-only while you are browsing a day that is not yours yet.'
+  ], bulk:'Fixed something that could strand you. If you were looking at a session that had not come round yet, the whole screen locked \u2014 and that included the settings gear and my mailbox up top. Change who picks the session, get moved onto a day that is still coming up, and you could not get back into settings to change it back. The header is not part of any session, so it does not lock any more. The session itself still stays look-but-do-not-touch until it is your day, because that guard is doing a real job.'},
   {build:'2026.09.03b', date:'2026-09-03', title:'Tested a real 1RM? Program from it', items:[
     'Unlock Programming maxes and there is a new field: enter a 1RM you actually tested and the card programs from it at 95%, straight away.',
     'A tested max goes on trial. While it is on trial that lift stops climbing, so the number gets a fair test instead of a moving target.',
@@ -12076,7 +12088,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c184';
+const BUILD = 'c185';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
