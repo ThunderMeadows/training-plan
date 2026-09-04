@@ -326,7 +326,7 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
      justify-content:center CLIPS overflow at both ends - that was the cut-off clock. */
   justify-content:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch;
   text-align:center;padding:18px 24px calc(22px + env(safe-area-inset-bottom));cursor:pointer;min-width:0;}
-.restchip.go{background:var(--green);color:#fff;}
+.restchip.go,.restchip.done{background:var(--green);color:#fff;}
 /* final ten seconds: the clock brightens and breathes in time with the countdown beeps */
 /* transition gauge: ambient edge bars, read at a glance with no numbers.
    Colour alone is a bad signal (red/green is the most common colour-blindness), so phase is
@@ -394,12 +394,15 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 @media (prefers-reduced-motion:reduce){.hifive .hf-palm,.hifive.on .hf-palm,.hifive.on .hf-ring{animation:none;}}
 
 /* floating calculator: right edge, thumb height, above the rest chip so it works during rest */
-.calcfab{position:fixed;right:12px;top:58%;width:46px;height:46px;border-radius:50%;z-index:78;
+.calcfab{position:fixed;right:12px;top:58%;width:46px;height:46px;border-radius:50%;z-index:78;touch-action:none;
   background:var(--panel);border:2px solid var(--line);color:var(--dim);
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   box-shadow:0 6px 18px -8px rgba(0,0,0,.45);transition:transform .15s,background .2s,color .2s;}
 .calcfab:active{transform:scale(.92);}
 .calcfab.on{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);}
+.calcfab.dragging{transition:none;box-shadow:0 14px 34px -10px rgba(0,0,0,.6);cursor:grabbing;}
+.calcfab[data-edge="left"] ~ .calcpanel{margin-left:0;margin-right:auto;}
+.calcfab[data-edge="top"] ~ .calcpanel{bottom:auto;top:calc(12px + env(safe-area-inset-top,0px));}
 .calcpanel{position:fixed;right:12px;left:12px;bottom:12px;max-width:330px;margin-left:auto;z-index:79;
   background:var(--panel);border:2px solid var(--line);border-radius:16px;padding:12px;
   box-shadow:0 18px 44px -12px rgba(0,0,0,.55);}
@@ -683,6 +686,12 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 #bootSplash{position:fixed;inset:0;z-index:420;background:#171A1F;display:flex;align-items:center;justify-content:center;
   transition:opacity .55s ease;}
 #bootSplash.bs-out{opacity:0;pointer-events:none;}
+/* seasonal art floats BEHIND the mark and the word: absolutely placed, slow drift, never a target */
+#bootSplash .bs-art{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;}
+#bootSplash .bs-art img{position:absolute;transform:translate(-50%,-50%);opacity:.85;animation:bsdrift 7s ease-in-out infinite alternate;}
+#bootSplash .bs-wrap,#bootSplash .bs-word,#bootSplash .bs-line{position:relative;z-index:1;}
+@keyframes bsdrift{from{transform:translate(-50%,-50%) translateY(-6px) rotate(-2deg);}to{transform:translate(-50%,-50%) translateY(6px) rotate(2deg);}}
+@media (prefers-reduced-motion:reduce){#bootSplash .bs-art img{animation:none;}}
 /* The gate sits under the SPLASH (410 < 420 after the bump) so it is what the fade reveals,
    but ABOVE the install sheet (400): shipped at 215, it let the install sheet cover the
    disclaimer on a fresh phone, so the first thing an athlete met was "add to home screen"
@@ -4671,6 +4680,68 @@ function calcKey(k){
     if(k==='r25'){ var v2=parseFloat(CALC.cur)||0; CALC.cur=calcFmt(Math.round(v2/2.5)*2.5); CALC.fresh=true; return; }
   }catch(e){}
 }
+// ===== the calculator button goes where the athlete puts it (2026-09-03, his ask) =====
+// Drag it and it snaps to the nearest screen edge and stays there - across renders, reloads and
+// backups, because the position lives in S. The same tap-vs-drag rule Bulk uses: under 8px of
+// movement is a tap and opens the calculator; more is a move. Position is an EDGE and a fraction
+// along it, not a pixel pair, so it means the same thing on a phone held either way and after
+// the keyboard or the rest screen changes the viewport.
+var CALC_POS_DEFAULT={edge:'right', at:0.58};
+function calcPos(){
+  try{ var p=S.calcPos; if(p && /^(left|right|top|bottom)$/.test(p.edge) && isFinite(+p.at)) return {edge:p.edge, at:Math.min(0.94, Math.max(0.06, +p.at))}; }catch(e){}
+  return CALC_POS_DEFAULT;
+}
+function calcPlace(fab){
+  try{
+    fab=fab||document.getElementById('calcFab'); if(!fab) return;
+    var p=calcPos(), inset='calc(12px + env(safe-area-inset-'+p.edge+', 0px))';
+    fab.style.left=fab.style.right=fab.style.top=fab.style.bottom='';
+    fab.style.transform='';
+    if(p.edge==='left'||p.edge==='right'){ fab.style[p.edge]=inset; fab.style.top=(p.at*100).toFixed(1)+'%'; fab.style.transform='translateY(-50%)'; }
+    else { fab.style[p.edge]=inset; fab.style.left=(p.at*100).toFixed(1)+'%'; fab.style.transform='translateX(-50%)'; }
+    fab.dataset.edge=p.edge;
+  }catch(e){}
+}
+// where a drop lands: the nearest edge, and how far along it
+function calcSnap(x, y){
+  var W=Math.max(1, window.innerWidth||1), H=Math.max(1, window.innerHeight||1);
+  var d={left:x, right:W-x, top:y, bottom:H-y}, edge='right', best=Infinity;
+  ['left','right','top','bottom'].forEach(function(k){ if(d[k]<best){ best=d[k]; edge=k; } });
+  var at=(edge==='left'||edge==='right')? y/H : x/W;
+  return {edge:edge, at:Math.min(0.94, Math.max(0.06, at))};
+}
+function calcDragWire(fab){
+  try{
+    var down=window.PointerEvent?'pointerdown':'mousedown';
+    var move=window.PointerEvent?'pointermove':'mousemove';
+    var up=window.PointerEvent?'pointerup':'mouseup';
+    var drag=null, sx=0, sy=0;
+    fab.addEventListener(down, function(ev){
+      drag={x:ev.clientX, y:ev.clientY}; sx=ev.clientX; sy=ev.clientY; fab.__dragged=false;
+      try{ if(ev.pointerId!=null && fab.setPointerCapture) fab.setPointerCapture(ev.pointerId); }catch(e){}
+    });
+    var onMove=function(ev){
+      if(!drag) return;
+      if(!fab.__dragged && Math.hypot(ev.clientX-sx, ev.clientY-sy)<8) return;   // still a tap
+      fab.__dragged=true; ev.preventDefault();
+      // follow the finger freely while held; snapping happens on release
+      fab.style.left=ev.clientX+'px'; fab.style.top=ev.clientY+'px';
+      fab.style.right=fab.style.bottom=''; fab.style.transform='translate(-50%,-50%)';
+      fab.classList.add('dragging');
+    };
+    var onUp=function(ev){
+      if(!drag) return; var was=drag; drag=null;
+      fab.classList.remove('dragging');
+      if(!fab.__dragged) return;                    // the click handler will open it
+      var x=(ev&&ev.clientX!=null)? ev.clientX : was.x, y=(ev&&ev.clientY!=null)? ev.clientY : was.y;
+      S.calcPos=calcSnap(x, y); save(); calcPlace(fab);
+    };
+    fab.addEventListener(move, onMove);
+    fab.addEventListener(up, onUp);
+    fab.addEventListener('pointercancel', onUp);
+    fab.addEventListener('lostpointercapture', function(){ if(drag) onUp(null); });
+  }catch(e){}
+}
 function calcPaint(){
   try{
     var fab=document.getElementById('calcFab');
@@ -4685,9 +4756,13 @@ function calcPaint(){
         +'<circle cx="8.6" cy="16.4" r="1.15" fill="currentColor"/><circle cx="12" cy="16.4" r="1.15" fill="currentColor"/>'
         +'<circle cx="15.4" cy="16.4" r="1.15" fill="currentColor"/></svg>';
       document.body.appendChild(fab);
-      fab.addEventListener('click', function(ev){ ev.stopPropagation(); CALC.open=!CALC.open;
+      fab.addEventListener('click', function(ev){ ev.stopPropagation();
+        if(fab.__dragged){ fab.__dragged=false; return; }   // a drag is not a tap
+        CALC.open=!CALC.open;
         if(CALC.open){ CALC.cur='0'; CALC.acc=null; CALC.op=null; CALC.fresh=true; } calcPaint(); });
+      calcDragWire(fab);
     }
+    calcPlace(fab);
     var pan=document.getElementById('calcPanel');
     if(!CALC.open){ if(pan) pan.remove(); fab.classList.remove('on'); return; }
     fab.classList.add('on');
@@ -5791,6 +5866,15 @@ function restNextTarget(b){
   }catch(e){}
   return {kind:'done'};
 }
+// FIELD 2026-09-03: "This is the last set done sheet. It's still counting down even if there
+// isn't a set to follow." The rest clock paces the gap between sets OF THE SAME EXERCISE - that is
+// what "1:30 prescribed" means. After the last set there is no next set of that exercise, so the
+// clock is pacing nothing, and it would still beep a ten-second warning and shout GO for a set that
+// does not exist. The screen even printed "last set done. Next exercise when ready" above the
+// countdown. A superset partner with a set still pending is NOT last - that rest is real.
+function restIsLast(b){
+  try{ return restNextTarget(b).kind!=='set'; }catch(e){ return false; }
+}
 function restLogNext(b){
   ensureAudio();
   const tgt=restNextTarget(b);
@@ -6217,16 +6301,19 @@ function restBody(b,e,go){
   var r=restSetRef(b);
   var reps=r? ((r.s.reps!=null)? r.s.reps : r.tgt) : null;
   var rir=r? r.s.rir : null;
+  var last=restIsLast(b);
   var rem=b.target*1000-e;                     // time LEFT — the number a lifter actually wants
   var over=go? fmtDur(e-b.target*1000) : null; // once past GO, how long they've been sitting
   var h='<div class="rest-in">'
-   +'<div class="rest-clock mono">'+(go?'GO':fmtDur(rem))+'</div>'
-   +'<div class="rest-cap">'+(go? '+'+over+' past the bell \u00b7 rested '+fmtDur(e)+' total':'REST \u00b7 '+fmtDur(b.target*1000)+' prescribed'+restWhy(b))+'</div>'
+   +'<div class="rest-clock mono">'+(last?'Done':(go?'GO':fmtDur(rem)))+'</div>'
+   +'<div class="rest-cap">'+(last
+        ? esc(b.label).toUpperCase()+' \u00b7 ALL SETS LOGGED'
+        : (go? '+'+over+' past the bell \u00b7 rested '+fmtDur(e)+' total':'REST \u00b7 '+fmtDur(b.target*1000)+' prescribed'+restWhy(b)))+'</div>'
    +'<div class="rest-next">'+restNextInfo(b,true)+'</div>'
    +restNextLoaded(b)
-   +(go? '' : restExtRow(b))
-   +(go? '' : '<div class="rest-row"><button class="rest-ext" data-grungo="1">Bulk wants to run</button></div>')
-   +((S.breathe&&!go)? breathRing() : '');
+   +((go||last)? '' : restExtRow(b))
+   +((go||last)? '' : '<div class="rest-row"><button class="rest-ext" data-grungo="1">Bulk wants to run</button></div>')
+   +((S.breathe&&!go&&!last)? breathRing() : '');
   if(r && isHoldEx(r.ex)){
     // a hold's number is SECONDS - the rest screen speaks its language: no reps, no RIR,
     // just the clocked time (fixable if the stop was late) and the grind flag
@@ -6290,17 +6377,18 @@ function paintRest(force){
   if(el.dataset && el.dataset.tourDemo==='1' && TOUR && TOUR.live) return;   // the demo owns the screen mid-tour
   var b=lastCompletion();
   if(!b||Date.now()-b.t>6*3600000||S.restDismiss===b.t){ stopScheduled(); el.style.display='none'; el.className='restchip'; return; }
-  var e=Date.now()-b.t, go=e>=b.target*1000;
+  var e=Date.now()-b.t, last=restIsLast(b), go=last || e>=b.target*1000;
   // Audio is scheduled ahead on the audio clock, so this call is idempotent — it books the
   // remaining beeps once per rest and returns immediately on every tick after that.
-  if(S.sound&&!go) scheduleRestBeeps(b);
+  // Nothing is booked after a LAST set: there is no set to count down to.
+  if(last) stopScheduled(); else if(S.sound&&!go) scheduleRestBeeps(b);
   el.style.display='';
   var mini=(S.restMin===b.t);
   var rem=b.target*1000-e;
-  var soon=!go && rem<=10000;   // the visual half of the 10-second countdown the audio is already running
-  el.className='restchip'+(go?' go':'')+(soon?' soon':'')+(mini?' mini':'');
+  var soon=!last && !go && rem<=10000;   // the visual half of the 10-second countdown the audio is already running
+  el.className='restchip'+(go?' go':'')+(last?' done':'')+(soon?' soon':'')+(mini?' mini':'');
   el.innerHTML= mini
-    ? '<div class="mini-in"><span class="mono mini-clock">'+(go?'GO':fmtDur(rem))+'</span>'
+    ? '<div class="mini-in"><span class="mono mini-clock">'+(last?'Done':(go?'GO':fmtDur(rem)))+'</span>'
       +'<span class="mini-next">'+restNextInfo(b)+'</span>'
       +'<span class="mini-open">Open</span></div>'
     : restBody(b,e,go);
@@ -6313,11 +6401,14 @@ function restBodyStart(b,e,go){
   var nm=''; try{ var d=dayObj(); var tgt=restNextTarget(b);
     if(tgt && tgt.kind==='set'){ var st=exState(tgt.i,d.exercises[tgt.i]);
       nm=(st&&st.sub)||d.exercises[tgt.i].name; } }catch(x){}
+  var last=restIsLast(b);
   return '<div class="rest-inner">'
-    +'<div class="st-restbig mono">'+(go? 'GO' : fmtDur(left*1000))+'</div>'
-    +'<div class="st-restcap">'+(go
+    +'<div class="st-restbig mono">'+(last? 'Done' : (go? 'GO' : fmtDur(left*1000)))+'</div>'
+    +'<div class="st-restcap">'+(last
+        ? esc(b.label)+' done. Move on when you are ready.'
+        : (go
         ? 'Rested. Take the next set when you are ready.'
-        : 'Rest. This is part of the session \u2014 you are supposed to.')+'</div>'
+        : 'Rest. This is part of the session \u2014 you are supposed to.'))+'</div>'
     +(nm? '<div class="st-restnext">Next: '+esc(nm)+'</div>' : '')
     +'<button class="st-go" data-restkill="1" style="max-width:320px;margin:18px auto 0">'
       +(go? 'Back to the session' : 'Skip the rest')+'</button>'
@@ -7342,6 +7433,27 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.04b', date:'2026-09-04', title:'A touch of colour for the season', items:[
+    'During October, November, December and January the card wears a little of the season \u2014 Halloween, Thanksgiving, Christmas, New Year. It is a change of tone only: your theme stays exactly as it is underneath, and the green and red the card uses for go and stop never change.',
+    'Off is in Settings under Appearance if you would rather not.'
+  ], bulk:'Starting next month the card will wear a bit of the season \u2014 a touch of colour for Halloween, then Thanksgiving, Christmas and New Year. Nothing about the training changes and nothing moves; it is a shade, not a redesign, and your theme is still your theme underneath it. The green and red I use for go and stop stay put, because those mean something. If you would rather not, Off is in Settings under Appearance.'},
+  {build:'2026.09.04a', date:'2026-09-04', title:'The report buttons work again', items:[
+    'Report a problem opened its panel underneath the settings sheet, so Share, Email, Text and Copy could be seen but not tapped.',
+    'Opening a report now closes settings first. Everything on the panel responds.'
+  ], bulk:'One of you found this and I am grateful, because it is the one button that lets you tell me when something else is broken. Report a problem was opening its panel behind the settings sheet \u2014 you could see Share and Copy through the glass, but every tap hit the sheet instead. Settings gets out of the way now. If anything else is dead, that panel is how you tell me, and it works.'},
+  {build:'2026.09.03k', date:'2026-09-03', title:'Put the calculator button where you want it', items:[
+    'Press and drag the floating calculator button and it snaps to whichever screen edge you drop it nearest \u2014 left, right, top or bottom \u2014 and stays there. A quick tap still opens it.',
+    'The calculator itself opens on the same side as the button.'
+  ], bulk:'Small one that a few of you asked for. The little calculator button used to live on the right and that was that. Now you can drag it \u2014 any edge, wherever your thumb lands \u2014 and it stays put. A tap still opens it, a drag just moves it. If it ends up somewhere you did not mean, drag it back.'},
+  {build:'2026.09.03j', date:'2026-09-03', title:'No rest countdown after the last set of an exercise', items:[
+    'The rest clock paces the gap between sets of the same exercise. After the last set there is no next set, so it was counting down to nothing \u2014 and it would still beep the ten-second warning and shout GO.',
+    'That screen now says Done. The set you just logged is still there to fix, and Next exercise is still one hold away. A superset partner with a set left still gets its proper rest.',
+    'Starting the next exercise straight away no longer gets the \u201cstill resting \u2014 tap again\u201d warning. That guard was watching a rest that was never real.'
+  ], bulk:'One you spotted. After the last set of an exercise I was still running the rest clock \u2014 counting down to a set that did not exist, and getting ready to beep at you for it. The whole point of that clock is the gap between sets of the SAME lift. Now that screen just says Done. Fix the reps if you need to, hold for the next exercise when you are ready, and go. And I will not tell you off for starting the next lift \u201cearly\u201d any more, because there was nothing to be early for.'},
+  {build:'2026.09.03i', date:'2026-09-03', title:'The training-rhythm setup question has its heading back', items:[
+    'During setup, the screen where you choose who picks your session \u2014 the card or you \u2014 was headed \u201cundefined\u201d. It had been since that question was added. It now asks what it means to: \u201cWho picks your session?\u201d',
+    'Nothing about the choice itself changed, and it is still switchable any time in Settings.'
+  ], bulk:'Embarrassing one. If you set up recently, the question about who picks your session \u2014 me or you \u2014 had the word \u201cundefined\u201d where the heading should have been. That was a placeholder I never filled in, and it had been sitting there for a while. It reads \u201cWho picks your session?\u201d now. Nothing about your choice changed. I have also taught myself to notice when a screen says something that only a computer would say, so it will not happen again quietly.'},
   {build:'2026.09.03h', date:'2026-09-03', title:'Put back any change, not just the last one', items:[
     'Four things adjust your maxes on their own \u2014 a layoff, a stall, your measured climb rate, and a tested max on trial. Until now \u201cput it back\u201d only reversed the most recent pass, so a change you disagreed with went out of reach as soon as another one landed on top.',
     'Every change in the log now has its own put-back. Older ones are shown too, not just today\u2019s.',
@@ -7712,7 +7824,14 @@ function reportWire(){
     el.onclick=function(ev){ if(ev.target!==el) return;
       S.rptMsg=(document.getElementById('rptMsg')||{}).value||''; S.rptOpen=false; save(); render(); }; });
   var open=document.getElementById('reportBtn');
-  if(open) open.onclick=function(){ S.rptOpen=true; S.rptKind=S.rptKind||'bug'; render(); };
+  // FIELD 2026-09-04: "the report a problem button works but all the buttons under Send a report
+  // do not - they're dead." The panel opened INSIDE #app while the settings sheet stayed open on
+  // top of it in its own body-level host, so every tap landed on the sheet. Same rule as every
+  // other launcher in settings: land above the sheet, or close it first. This one closes it -
+  // the athlete tapped Report, they are leaving settings. setlaunch's check for this launcher
+  // compared z-index NUMBERS and passed; it now checks the sheet actually closed and presses
+  // a button on the panel.
+  if(open) open.onclick=function(){ S.rptOpen=true; S.rptKind=S.rptKind||'bug'; SET_OPEN=false; settingsSync(); render(); };
   var msg=function(){ return (document.getElementById('rptMsg')||{}).value||''; };
   var text=function(){ return reportBundle(S.rptKind||'bug', msg()); };
   var share=document.getElementById('rptShare');
@@ -7927,6 +8046,15 @@ function settingsBodyHTML(){
     +'<div class="target-label">Theme</div><div class="chiprow" style="flex-wrap:wrap;margin-top:6px;gap:6px">'
     +THEMES.map(t=>'<div class="chip'+((S.theme||'iron')===t.id?' on':'')+'" data-thm="'+t.id+'" style="flex:1 1 30%;min-width:90px;font-size:12px;padding:9px 0">'+t.name+'</div>').join('')
     +'</div>'
+    +(function(){ var h=holidayFor();
+        return '<div class="target-label" style="margin-top:12px">Seasonal colours</div>'
+          +'<div class="chiprow" style="margin-top:6px;gap:6px">'
+          +'<div class="chip'+(seasonalOn()?' on':'')+'" data-seasonal="1" style="flex:1;font-size:12px;padding:9px 0">On</div>'
+          +'<div class="chip'+(!seasonalOn()?' on':'')+'" data-seasonal="0" style="flex:1;font-size:12px;padding:9px 0">Off</div>'
+          +'</div><div class="cue" style="padding:6px 0 0">'
+          +(h? 'It is '+esc(h.name)+' on the card this month. Off keeps your theme exactly as it is.'
+              : 'A touch of colour during Halloween, Thanksgiving, Christmas and New Year. Your theme stays underneath.')
+          +'</div>'; })()
     +'<div class="target-label" style="margin-top:12px">Light</div><div class="chiprow" style="margin-top:6px;gap:6px">'
     +[['day','Day'],['night','Night'],['auto','Auto']].map(z=>'<div class="chip'+(lightMode()===z[0]?' on':'')+'" data-lightmode="'+z[0]+'" style="flex:1;font-size:13px;padding:9px 0">'+z[1]+'</div>').join('')
     +'</div>'
@@ -8175,6 +8303,8 @@ function settingsWire(){
     // control added to settingsBodyHTML later is picked up automatically instead of silently
     // failing to highlight. Excluded: the close targets, the data buttons (they open pickers
     // and manage their own redraw), and data-gbflav, wired above.
+    // #reportBtn stays on this list: it is a launcher that closes the sheet and renders the
+    // report itself. Wrapped, its render() is suppressed by SET_BUSY and the panel never draws.
     var SET_SKIP='[data-setclose],[data-setstop],#backupBtn,#restoreBtn,#restorePasteBtn,#reportBtn,#restoreFile,[data-gbflav],.hw-grip';
     document.querySelectorAll('#setHost .set-body *').forEach(function(b){
       if(!b.onclick) return;                       // only controls wire() actually bound
@@ -8930,7 +9060,8 @@ function bootIdent(){
     }catch(e){ li=Math.floor(Math.random()*LINES.length); }
     // DEADSTOP: the paused rep with no bounce - the honest version of the lift. The brand
     // is the house; Session Card and Training Card are what's built in it.
-    v.innerHTML='<div class="bs-wrap">'+brandMark(Math.min(340, Math.round((window.innerWidth||360)*0.72)), 'dark', true)+'</div>'
+    v.innerHTML=bootArtHTML()
+      +'<div class="bs-wrap">'+brandMark(Math.min(340, Math.round((window.innerWidth||360)*0.72)), 'dark', true)+'</div>'
       +'<div class="bs-word">DEAD<i>STOP</i></div>'
       +'<div class="bs-line">'+LINES[li]+'</div>';
     document.body.appendChild(v);
@@ -12337,7 +12468,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c190';
+const BUILD = 'c195';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -12509,6 +12640,61 @@ function themeVars(t){
   var side = (lightNow()==='day') ? 'd' : 'n';
   return t[side] || t[side==='d'?'n':'d'] || {};
 }
+// ===== SEASONAL TONE (2026-09-04, his ask) =====
+// A holiday is a TONE LAYER over whatever theme and light the athlete chose - Iron in December is
+// still Iron, wearing the season. It only touches the accent, the ink on it, and a faint tint on
+// the second panel colour. The greens and reds are left alone on purpose: they mean "go" and
+// "stop" everywhere on the card, and a holiday must never borrow a meaning. Each holiday carries
+// a day and a night value so the same contrast floors the themes clear still hold.
+// Windows are whole months unless two holidays share one, in which case each keeps its own.
+// Only the four he asked for to begin with; the table is the whole calendar.
+var HOLIDAYS=[
+  {id:'halloween',    name:'Halloween',    from:[10,1],  to:[10,31],
+     d:{'--amber':'#B84A08','--amber-ink':'#FFFFFF','--panel2':'#F2E2D3'},
+     n:{'--amber':'#FF9A3C','--amber-ink':'#1F0E00','--panel2':'#2B2119'}},
+  {id:'thanksgiving', name:'Thanksgiving', from:[11,1],  to:[11,30],
+     d:{'--amber':'#8F4712','--amber-ink':'#FFF6EA','--panel2':'#EFE3D3'},
+     n:{'--amber':'#E2A458','--amber-ink':'#1F1607','--panel2':'#2A2318'}},
+  {id:'christmas',    name:'Christmas',    from:[12,1],  to:[12,31],
+     d:{'--amber':'#7E5F0A','--amber-ink':'#FFFBEA','--panel2':'#E1ECE4'},
+     n:{'--amber':'#E8C55C','--amber-ink':'#1E1803','--panel2':'#1A2A21'}},
+  {id:'newyear',      name:'New Year',     from:[1,1],   to:[1,31],
+     d:{'--amber':'#2B4FBF','--amber-ink':'#FFFFFF','--panel2':'#E4E9F4'},
+     n:{'--amber':'#93B3FF','--amber-ink':'#0B1633','--panel2':'#1E2434'}}
+];
+// Floating art behind the logo and title on the splash, one list per holiday. He is drawing
+// these; each entry is {u:<data URI>, x:<0-100 %>, y:<0-100 %>, w:<px>}. Empty until they land,
+// and empty renders nothing - the splash is unchanged.
+var HOLIDAY_ART={halloween:[], thanksgiving:[], christmas:[], newyear:[]};
+function holidayFor(dateStr){
+  try{
+    var d=dateStr||shiftDate(); var m=+d.slice(5,7), day=+d.slice(8,10);
+    for(var i=0;i<HOLIDAYS.length;i++){ var h=HOLIDAYS[i];
+      var a=h.from[0]*100+h.from[1], b=h.to[0]*100+h.to[1], x=m*100+day;
+      if(x>=a && x<=b) return h; }
+  }catch(e){}
+  return null;
+}
+function seasonalOn(){ return S.seasonal!==false; }   // on unless the athlete turned it off
+function holidayNow(){ return seasonalOn()? holidayFor() : null; }
+function applyHoliday(){
+  try{
+    var r=document.documentElement.style, h=holidayNow();
+    if(!h){ document.documentElement.removeAttribute('data-holiday'); return; }
+    var side=(lightNow()==='day')? 'd' : 'n', v=h[side]||{};
+    Object.keys(v).forEach(function(k){ r.setProperty(k, v[k]); });
+    document.documentElement.setAttribute('data-holiday', h.id);
+  }catch(e){ oops('applyHoliday',e); }
+}
+function bootArtHTML(){
+  try{
+    var h=holidayNow(); if(!h) return '';
+    var art=HOLIDAY_ART[h.id]||[]; if(!art.length) return '';
+    return '<div class="bs-art" aria-hidden="true">'+art.map(function(a,i){
+      return '<img src="'+a.u+'" style="left:'+(+a.x||50)+'%;top:'+(+a.y||50)+'%;width:'+(+a.w||120)+'px;animation-delay:'+((i*0.9)%4).toFixed(1)+'s" alt="">';
+    }).join('')+'</div>';
+  }catch(e){ return ''; }
+}
 function applyTheme(){
   const t=themeDef();
   const v=themeVars(t);
@@ -12517,6 +12703,7 @@ function applyTheme(){
   Object.keys(v).forEach(k=>r.setProperty(k,v[k]));
   // one attribute anything downstream can read without recomputing the rule
   try{ document.documentElement.setAttribute('data-light', lightNow()); }catch(e){}
+  try{ applyHoliday(); }catch(e){}   // the season sits on top, after the theme has been laid down
   const f=FONTS.find(x=>x.id===(S.font||'system'))||FONTS[0];
   document.body.style.fontFamily=f.f;
   // text size: zoom reflows layout correctly in WebKit/Blink and modern Firefox,
@@ -15285,6 +15472,9 @@ function wire(){
   document.querySelectorAll('[data-blkearly]').forEach(b=>b.onclick=()=>{ S.earlyAsk=true; save(); render(); });
   document.querySelectorAll('[data-blkearlyno]').forEach(b=>b.onclick=()=>{ S.earlyAsk=null; save(); render(); });
   document.querySelectorAll('[data-blkhand]').forEach(b=>b.onclick=()=>{ copyHandoff(); });
+  document.querySelectorAll('[data-seasonal]').forEach(b=>b.onclick=()=>{
+    S.seasonal=(b.dataset.seasonal==='1'); save(); applyTheme(); render();
+  });
   document.querySelectorAll('[data-thm]').forEach(b=>b.onclick=()=>{ S.theme=b.dataset.thm; save(); applyTheme(); render(); });
   document.querySelectorAll('[data-repass]').forEach(b=>b.onclick=()=>{ rePassGo(); });
   document.querySelectorAll('[data-splitmode]').forEach(b=>b.onclick=()=>{
@@ -15510,7 +15700,7 @@ function wire(){
       // the rest has run out this is the normal flow and there is no prompt at all: the guard
       // exists only for the window where the action contradicts what the card already knows.
       var __b=null; try{ __b=lastCompletion(); }catch(e){}
-      var __resting = !!(__b && S.restDismiss!==__b.t && (Date.now()-__b.t) < __b.target*1000);
+      var __resting = !!(__b && S.restDismiss!==__b.t && (Date.now()-__b.t) < __b.target*1000 && !restIsLast(__b));
       var __akey = i+'|'+j;
       if(__resting && !(REST_ARM.k===__akey && (Date.now()-REST_ARM.t)<5000)){
         REST_ARM={k:__akey, t:Date.now()};
@@ -18236,6 +18426,27 @@ var ONB_ORDER=['squat','bench','dead','ohp','row'];
 // adapting the plan is a medical-adjacent pattern (his call, pending a legal look).
 // The neutral 'prefs' step and the per-exercise Swap carry that job with no intake.
 var ONB_STEPS_FULL=['welcome','level','goal','body','experience','schedule','rhythm','weekdays','length','emphasis','prefs','calibrate','priority','review'];
+// One heading per step, declared BESIDE the step list so the two cannot drift apart unseen.
+// FIELD 2026-09-03: the rhythm step (added c169) never got a heading, so every new athlete since
+// has read "undefined" above "The card runs it / I run it". The old map also carried headings
+// for place/days/pain/limits - steps that no longer exist, one of them a question this card has
+// promised never to ask. onbhead.js holds these two lists to each other.
+var ONB_HEAD={
+  welcome:'Let\u2019s build your program.',
+  level:'Where are you starting from?',
+  goal:'What are you training for?',
+  body:'A few basics.',
+  experience:'How much have you lifted?',
+  schedule:'How do you want your sessions arranged?',
+  rhythm:'Who picks your session?',
+  weekdays:'Which days can you train?',
+  length:'How long is a session for you?',
+  emphasis:'Anything you want to prioritise?',
+  prefs:'Pick your movements.',
+  calibrate:'Find your starting weights',
+  priority:'Want to focus on one lift?',
+  review:'Ready to go.'
+};
 var ONB_STEPS_START=['welcome','level','place','days','review'];   // same index for 'level'
 function ONB_STEPS_FOR(){
   try{ if(ONB().retest) return ['calibrate']; }catch(e){}  // redo the assessment alone - nothing else moves
@@ -18420,9 +18631,7 @@ function ONB_finish(){
 function ONB_HTML(){
   var o=ONB(), STEPS=ONB_STEPS_FOR(), st=STEPS[o.step], h='';
   var done=ONB_ORDER.filter(function(l){ return !!o.res[l]; }).length;
-  h+='<header>'+((o.step>0 && st!=='review')?'<div class="onb-back" data-onbback="1" role="button" tabindex="0" aria-label="Back to the previous question">\u2190 Back</div>':'')+'<div class="eyebrow">Setup</div><h1>'+({welcome:'Let\u2019s build your program.',goal:'What are you training for?',
-      body:'A few basics.',experience:'How much have you lifted?',emphasis:'Anything you want to prioritise?',prefs:'Pick your movements.',priority:'Want to focus on one lift?',weekdays:'Which days can you train?',schedule:'How do you want your sessions arranged?',length:'How long is a session for you?',level:'Where are you starting from?',place:'Where will you train?',days:'How many days can you show up?',pain:'Anything that hurts?',limits:'Anything to work around?',
-      calibrate:'Find your starting weights',review:'Ready to go.'}[st])+'</h1></header>';
+  h+='<header>'+((o.step>0 && st!=='review')?'<div class="onb-back" data-onbback="1" role="button" tabindex="0" aria-label="Back to the previous question">\u2190 Back</div>':'')+'<div class="eyebrow">Setup</div><h1>'+(ONB_HEAD[st]||'')+'</h1></header>';
 
   if(st==='welcome'){
    if(o.skipPeek){
