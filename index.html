@@ -397,15 +397,12 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 @media (prefers-reduced-motion:reduce){.hifive .hf-palm,.hifive.on .hf-palm,.hifive.on .hf-ring{animation:none;}}
 
 /* floating calculator: right edge, thumb height, above the rest chip so it works during rest */
-.calcfab{position:fixed;right:12px;top:58%;width:46px;height:46px;border-radius:50%;z-index:78;touch-action:none;
+.calcfab{position:fixed;right:10px;top:auto;bottom:calc(96px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;z-index:78;
   background:var(--panel);border:2px solid var(--line);color:var(--dim);
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   box-shadow:0 6px 18px -8px rgba(0,0,0,.45);transition:transform .15s,background .2s,color .2s;}
 .calcfab:active{transform:scale(.92);}
 .calcfab.on{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);}
-.calcfab.dragging{transition:none;box-shadow:0 14px 34px -10px rgba(0,0,0,.6);cursor:grabbing;}
-.calcfab[data-edge="left"] ~ .calcpanel{margin-left:0;margin-right:auto;}
-.calcfab[data-edge="top"] ~ .calcpanel{bottom:auto;top:calc(12px + env(safe-area-inset-top,0px));}
 .calcpanel{position:fixed;right:12px;left:12px;bottom:12px;max-width:330px;margin-left:auto;z-index:79;
   background:var(--panel);border:2px solid var(--line);border-radius:16px;padding:12px;
   box-shadow:0 18px 44px -12px rgba(0,0,0,.55);}
@@ -4696,89 +4693,15 @@ function calcKey(k){
 // movement is a tap and opens the calculator; more is a move. Position is an EDGE and a fraction
 // along it, not a pixel pair, so it means the same thing on a phone held either way and after
 // the keyboard or the rest screen changes the viewport.
-var CALC_POS_DEFAULT={edge:'right', at:0.58};
-function calcPos(){
-  try{ var p=S.calcPos; if(p && /^(left|right|top|bottom)$/.test(p.edge) && isFinite(+p.at)) return {edge:p.edge, at:Math.min(0.94, Math.max(0.06, +p.at))}; }catch(e){}
-  return CALC_POS_DEFAULT;
-}
-function calcPlace(fab){
-  try{
-    fab=fab||document.getElementById('calcFab'); if(!fab) return;
-    var p=calcPos(), inset='calc(12px + env(safe-area-inset-'+p.edge+', 0px))';
-    fab.style.left=fab.style.right=fab.style.top=fab.style.bottom='';
-    fab.style.transform='';
-    if(p.edge==='left'||p.edge==='right'){ fab.style[p.edge]=inset; fab.style.top=(p.at*100).toFixed(1)+'%'; fab.style.transform='translateY(-50%)'; }
-    else { fab.style[p.edge]=inset; fab.style.left=(p.at*100).toFixed(1)+'%'; fab.style.transform='translateX(-50%)'; }
-    fab.dataset.edge=p.edge;
-  }catch(e){}
-}
-// where a drop lands: the nearest edge, and how far along it
-function calcSnap(x, y){
-  var W=Math.max(1, window.innerWidth||1), H=Math.max(1, window.innerHeight||1);
-  var d={left:x, right:W-x, top:y, bottom:H-y}, edge='right', best=Infinity;
-  ['left','right','top','bottom'].forEach(function(k){ if(d[k]<best){ best=d[k]; edge=k; } });
-  var at=(edge==='left'||edge==='right')? y/H : x/W;
-  return {edge:edge, at:Math.min(0.94, Math.max(0.06, at))};
-}
-// FIELD 2026-09-04: "I'm trying to move the calculator but it's magnetically impossible to pull
-// away from the top left corner." Two of my own faults from c193, compounding:
-//   1. calcPaint() ran calcPlace() unconditionally, and calcPaint() runs on every render(). The
-//      card re-renders constantly - a rest tick, a save, a screen touch - so mid-drag the button
-//      was yanked back to its SAVED position several times a second. That is the magnet.
-//   2. pointermove/pointerup were bound to the BUTTON. It is 46px across, so as soon as the
-//      finger left it the events stopped, unless pointer capture happened to hold. The drag then
-//      never completed, nothing was saved, and the next render put it back where it started.
-// Now: the listeners live on the document, so the drag follows the finger anywhere on the screen,
-// and nothing repositions the button while a drag is live.
-var CALC_DRAGGING=false;
-function calcDragWire(fab){
-  try{
-    var hasP=!!window.PointerEvent;
-    var down=hasP?'pointerdown':'mousedown';
-    var move=hasP?'pointermove':'mousemove';
-    var up=hasP?'pointerup':'mouseup';
-    var drag=null, sx=0, sy=0;
-    var onMove=function(ev){
-      if(!drag) return;
-      var cx=ev.clientX, cy=ev.clientY;
-      if(cx==null && ev.touches && ev.touches[0]){ cx=ev.touches[0].clientX; cy=ev.touches[0].clientY; }
-      if(cx==null) return;
-      drag={x:cx, y:cy};
-      if(!fab.__dragged && Math.hypot(cx-sx, cy-sy)<8) return;   // still a tap
-      fab.__dragged=true; CALC_DRAGGING=true;
-      if(ev.cancelable) ev.preventDefault();
-      // follow the finger freely while held; snapping happens on release
-      fab.style.left=cx+'px'; fab.style.top=cy+'px';
-      fab.style.right=fab.style.bottom=''; fab.style.transform='translate(-50%,-50%)';
-      fab.classList.add('dragging');
-    };
-    var onUp=function(ev){
-      if(!drag) return; var was=drag; drag=null;
-      fab.classList.remove('dragging');
-      if(!fab.__dragged){ CALC_DRAGGING=false; return; }   // the click handler will open it
-      var x=(ev&&ev.clientX!=null)? ev.clientX : was.x, y=(ev&&ev.clientY!=null)? ev.clientY : was.y;
-      S.calcPos=calcSnap(x, y); save();
-      CALC_DRAGGING=false; calcPlace(fab);
-    };
-    fab.addEventListener(down, function(ev){
-      var cx=ev.clientX, cy=ev.clientY;
-      if(cx==null && ev.touches && ev.touches[0]){ cx=ev.touches[0].clientX; cy=ev.touches[0].clientY; }
-      drag={x:cx, y:cy}; sx=cx; sy=cy; fab.__dragged=false;
-      try{ if(ev.pointerId!=null && fab.setPointerCapture) fab.setPointerCapture(ev.pointerId); }catch(e){}
-    });
-    // ON THE DOCUMENT, not the button: a 46px target cannot follow a finger that has left it
-    document.addEventListener(move, onMove, {passive:false});
-    document.addEventListener(up, onUp);
-    document.addEventListener('pointercancel', onUp);
-    if(!hasP){
-      fab.addEventListener('touchstart', function(ev){ var t=ev.touches&&ev.touches[0]; if(!t) return;
-        drag={x:t.clientX,y:t.clientY}; sx=t.clientX; sy=t.clientY; fab.__dragged=false; }, {passive:false});
-      document.addEventListener('touchmove', onMove, {passive:false});
-      document.addEventListener('touchend', function(ev){ var t=ev.changedTouches&&ev.changedTouches[0];
-        onUp(t? {clientX:t.clientX, clientY:t.clientY} : null); });
-    }
-  }catch(e){}
-}
+// The calculator button is FIXED, low on the right edge. It used to be draggable (c193) and that
+// was a mistake I made twice over: c193 let every re-render yank it back mid-drag, and the c198
+// "fix" put the move listeners on the DOCUMENT so it could follow a finger past a 46px target -
+// which meant that when iOS decided a gesture was a scroll and never delivered a pointerup, the
+// drag stayed latched and every touch anywhere on the screen moved the button. He reported both,
+// on a real phone, after both "fixes" passed a full suite: jsdom is not an iPhone and no harness
+// here can be. Rather than guess at gesture physics a third time in an environment that cannot
+// reproduce them, the feature is gone. Locked position, out of the way, works every time.
+// Anyone left stranded by the old drag has their stored position cleared on load - see calcPaint.
 function calcPaint(){
   try{
     var fab=document.getElementById('calcFab');
@@ -4794,13 +4717,14 @@ function calcPaint(){
         +'<circle cx="15.4" cy="16.4" r="1.15" fill="currentColor"/></svg>';
       document.body.appendChild(fab);
       fab.addEventListener('click', function(ev){ ev.stopPropagation();
-        if(fab.__dragged){ fab.__dragged=false; return; }   // a drag is not a tap
         CALC.open=!CALC.open;
         if(CALC.open){ CALC.cur='0'; CALC.acc=null; CALC.op=null; CALC.fresh=true; } calcPaint(); });
-      calcDragWire(fab);
     }
-    // never reposition mid-drag - that was the magnet pulling it back to the corner
-    if(!CALC_DRAGGING) calcPlace(fab);
+    // A stored position from the draggable era would pin the button wherever the broken drag last
+    // dumped it - usually a corner. Cleared on every paint, not just on creation: the button
+    // already exists on a re-render, so a create-only migration never ran for anyone already
+    // holding one.
+    try{ if(S.calcPos){ delete S.calcPos; save(); } }catch(e){}
     var pan=document.getElementById('calcPanel');
     if(!CALC.open){ if(pan) pan.remove(); fab.classList.remove('on'); return; }
     fab.classList.add('on');
@@ -7473,6 +7397,11 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.04g', date:'2026-09-04', title:'The calculator button stays put', items:[
+    'Dragging it is gone. It now sits in one place, low on the right edge, clear of the bottom bar.',
+    'It could get pinned against a corner, and while you were trying to move it the whole screen would follow your finger. Both of those were caused by the dragging, so the dragging is what went.',
+    'If yours ended up somewhere odd, it moves back on its own the next time you open the card. A tap still opens the calculator.'
+  ], bulk:'The draggable calculator button is gone and I am not sorry to see it. It kept getting stuck against a corner, and while you were trying to pull it away the whole screen would start following your finger. I tried to fix that twice and shipped it broken twice, because I cannot test a real phone gesture from where I sit. So: it sits in one spot now, low on the right, out of the way of the bottom bar. If yours ended up somewhere odd it will put itself back next time you open the card. Tap it for the calculator, same as always.'},
   {build:'2026.09.04f', date:'2026-09-04', title:'The card now counts how often it is opened', items:[
     'So we can tell whether anyone is actually using Deadstop, the card counts opens. It is anonymous: no cookie, no fingerprint, no following you across other sites, and no way to tell one person from another.',
     'It carries the page you opened and nothing else \u2014 not a lift, not a weight, not a name. Your training still never leaves your phone.',
@@ -12567,7 +12496,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c199';
+const BUILD = 'c200';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
