@@ -249,9 +249,12 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
   color:var(--dim);font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;}
 
 /* ---------- toast ---------- */
+/* z-index 300: above the report panel (240) and every other sheet the card opens from, below the
+   disclaimer gate (410). Without it the toast rendered UNDER whatever the athlete was reading and
+   a successful copy looked like a dead button. */
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:110px;background:var(--chalk);
   color:var(--bg);border-radius:var(--r-sm);padding:13px 18px;font-size:14px;font-weight:700;opacity:0;
-  transition:opacity .2s;pointer-events:none;z-index:70;box-shadow:var(--shadow);}
+  transition:opacity .2s;pointer-events:none;z-index:300;box-shadow:var(--shadow);}
 .toast.show{opacity:1;}
 /* An actionable toast. The plain one is pointer-events:none by design - it is a notice, not a
    control - so an Undo has to opt back in. */
@@ -689,7 +692,14 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 /* seasonal art floats BEHIND the mark and the word: absolutely placed, slow drift, never a target */
 #bootSplash .bs-art{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;}
 #bootSplash .bs-art img{position:absolute;transform:translate(-50%,-50%);opacity:.85;animation:bsdrift 7s ease-in-out infinite alternate;}
-#bootSplash .bs-wrap,#bootSplash .bs-word,#bootSplash .bs-line{position:relative;z-index:1;}
+/* REGRESSION 2026-09-04, mine, shipped in c195: this line originally read
+   `.bs-wrap,.bs-word,.bs-line{position:relative;z-index:1}` to lift them over the seasonal art.
+   But .bs-word and .bs-line are position:ABSOLUTE by design - forcing them to relative put them
+   back into #bootSplash's flex row, so the logo, the word and the line sat side by side and the
+   mark was pushed half off the left edge. Only .bs-wrap is an in-flow flex item; the other two
+   need the stacking order and nothing else. */
+#bootSplash .bs-wrap{position:relative;z-index:1;}
+#bootSplash .bs-word,#bootSplash .bs-line{z-index:1;}
 @keyframes bsdrift{from{transform:translate(-50%,-50%) translateY(-6px) rotate(-2deg);}to{transform:translate(-50%,-50%) translateY(6px) rotate(2deg);}}
 @media (prefers-reduced-motion:reduce){#bootSplash .bs-art img{animation:none;}}
 /* The gate sits under the SPLASH (410 < 420 after the bump) so it is what the fade reveals,
@@ -6547,7 +6557,9 @@ function __showErrBar(){
 }
 function __errFallback(t){
   var ta=document.createElement('textarea'); ta.value=t;
-  ta.style.cssText='position:fixed;left:5%;top:10%;width:90%;height:60%;z-index:99;font-size:12px';
+  // was z-index 99, which put the last-ditch "here is the text, copy it yourself" box UNDER the
+  // very sheet it is rescuing. 300 matches the toast.
+  ta.style.cssText='position:fixed;left:5%;top:10%;width:90%;height:60%;z-index:300;font-size:12px';
   document.body.appendChild(ta); ta.focus(); ta.select();
 }
 
@@ -7433,6 +7445,14 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.04d', date:'2026-09-04', title:'Send a report actually sends now', items:[
+    'Share, Email it, Text it and Copy did nothing when the card is running from your home screen. Email and Text used a kind of link an installed app ignores, and Share and Copy were quietly working but showing their confirmation underneath the panel you were looking at.',
+    'All four now hand off properly, every one of them puts the report on your clipboard as well, and each button tells you what it did.'
+  ], bulk:'This one is important because it is the button you use to tell me everything else is broken, and it was broken. Share, Email, Text and Copy all did nothing when the card runs from your home screen. Two of them were using a kind of link an installed app quietly ignores. The other two were working and telling you so underneath the panel, where you could not see it. All four hand off properly now, they all copy the report to your clipboard as a backstop, and each button says what it did right on the button. Sorry. Keep sending them.'},
+  {build:'2026.09.04c', date:'2026-09-04', title:'Calendar shows your trained days again, and the splash is fixed', items:[
+    'The calendar was drawing a blank month. It was reading your log entries with the wrong prefix and throwing every one of them away \u2014 the sessions were always safely stored, the calendar just could not see them. Nothing was lost, and they are all there now.',
+    'The opening screen was showing the logo half off the left edge. That was a mistake in yesterday\u2019s colour update and it is corrected.'
+  ], bulk:'Two fixes and an apology. Your calendar was showing an empty month \u2014 I was reading your saved sessions with the wrong label and binning every one. Your training was never lost, not for a second; I just could not see it to draw it. It is all back. And the opening screen with the logo half off the edge was my mistake from yesterday. Both fixed, both now watched by tests so they cannot come back quietly.'},
   {build:'2026.09.04b', date:'2026-09-04', title:'A touch of colour for the season', items:[
     'During October, November, December and January the card wears a little of the season \u2014 Halloween, Thanksgiving, Christmas, New Year. It is a change of tone only: your theme stays exactly as it is underneath, and the green and red the card uses for go and stop never change.',
     'Off is in Settings under Appearance if you would rather not.'
@@ -7834,38 +7854,75 @@ function reportWire(){
   if(open) open.onclick=function(){ S.rptOpen=true; S.rptKind=S.rptKind||'bug'; SET_OPEN=false; settingsSync(); render(); };
   var msg=function(){ return (document.getElementById('rptMsg')||{}).value||''; };
   var text=function(){ return reportBundle(S.rptKind||'bug', msg()); };
+  // FIELD-CAUGHT 2026-09-04, with a photo: the kind chips worked, the four SEND buttons did
+  // nothing at all. Four separate silent failures, all of them invisible from the outside:
+  //   - Email it / Text it set location.href to a mailto:/sms: URL. An iOS app launched from the
+  //     home screen runs in standalone display mode, where that assignment is IGNORED - no
+  //     navigation, no error, nothing to catch, so even the copy fallback never ran.
+  //   - Share fell back to a toast, and .toast carries NO z-index while the report panel sits at
+  //     240 - so the confirmation rendered underneath the sheet the athlete was looking at.
+  //   - Copy to clipboard did the same, and its last-ditch textarea is z-index 99: also buried.
+  // Every one of them either did nothing or succeeded where he could not see it.
+  // A link CLICK works in standalone where a location assignment does not, so all outbound
+  // handoffs go through one. And every button now answers ON ITSELF - inside the panel, above
+  // everything, whatever the stacking turns out to be.
+  var say=function(btn, words){
+    if(!btn) return;
+    if(btn.__was==null) btn.__was=btn.textContent;
+    btn.textContent=words;
+    clearTimeout(btn.__t); btn.__t=setTimeout(function(){ try{ btn.textContent=btn.__was; }catch(e){} }, 3200);
+  };
+  var handoff=function(href){
+    // a real anchor, clicked - the one form iOS honours from a home-screen app
+    var a=document.createElement('a');
+    a.href=href; a.rel='noopener'; a.style.cssText='position:fixed;left:-9999px;top:0';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ try{ a.remove(); }catch(e){} }, 0);
+  };
   var share=document.getElementById('rptShare');
   if(share) share.onclick=function(){
     var t=text();
     try{
-      if(navigator.share){ navigator.share({title:'Training card report', text:t})
-        .catch(function(e){ oops('reportShare',e); rptCopy(t); }); return; }
+      if(navigator.share){
+        navigator.share({title:'Training card report', text:t})
+          .then(function(){ say(share,'Shared \u2713'); })
+          .catch(function(){ rptCopy(t, share); });   // cancelled or refused: leave it on the clipboard
+        return;
+      }
     }catch(e){ oops('reportShare',e); }
-    rptCopy(t);
+    rptCopy(t, share);
   };
   var mail=document.getElementById('rptMail');
   if(mail) mail.onclick=function(){
-    try{ location.href=reportMailHref(text(), S.rptKind); }
-    catch(e){ oops('reportMail',e); rptCopy(text()); }
+    var t=text();
+    try{ handoff(reportMailHref(t, S.rptKind)); say(mail,'Opening Mail\u2026 (also copied)'); }
+    catch(e){ oops('reportMail',e); }
+    rptCopy(t);   // copied either way, so a blocked handoff still leaves him something to paste
   };
   var sms=document.getElementById('rptSms');
   if(sms) sms.onclick=function(){
-    try{ location.href=reportSmsHref(text()); }
-    catch(e){ oops('reportSms',e); rptCopy(text()); }
+    var t=text();
+    try{ handoff(reportSmsHref(t)); say(sms,'Opening Messages\u2026 (also copied)'); }
+    catch(e){ oops('reportSms',e); }
+    rptCopy(t);
   };
   var cp=document.getElementById('rptCopy');
   if(cp) cp.onclick=function(){ rptCopy(text(), cp); };
 }
 function rptCopy(t, btn){
-  var done=function(){ if(btn) btn.textContent='Copied \u2014 now paste it to your coach';
-                       else alertToast('Report copied'); };
+  // tryCopy() already carries the execCommand fallback for browsers that refuse the async
+  // clipboard; rptCopy used to skip it and go straight to a buried textarea.
+  var done=function(ok){
+    if(btn){
+      if(btn.__was==null) btn.__was=btn.textContent;
+      btn.textContent = ok? 'Copied \u2014 now paste it to your coach' : 'Could not copy \u2014 select the text above';
+      clearTimeout(btn.__t); btn.__t=setTimeout(function(){ try{ btn.textContent=btn.__was; }catch(e){} }, 3600);
+    } else alertToast(ok? 'Report copied' : 'Could not copy the report');
+    if(!ok) __errFallback(t);
+  };
   try{
-    if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(t).then(done, function(e){ oops('reportCopy',e); __errFallback(t); });
-      return;
-    }
-  }catch(e){ oops('reportCopy',e); }
-  __errFallback(t);
+    Promise.resolve(tryCopy(t)).then(done, function(e){ oops('reportCopy',e); done(false); });
+  }catch(e){ oops('reportCopy',e); done(false); }
 }
 
 // ===== HOW-TO CLIPS =====
@@ -12468,7 +12525,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c195';
+const BUILD = 'c197';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -16465,7 +16522,20 @@ function blockHandoff(){
 }
 async function copyHandoff(){ const t=blockHandoff(); const ok=await tryCopy(t); showOverlay('Block '+cyc()+' summary', t, ok); }
 // ===== CALENDAR =====
-function calKeyDate(k){ const L=(typeof logLabel==='function')? logLabel(k) : k.slice(LOGP.length);
+// FIELD-CAUGHT 2026-09-04: "The calendar isn't showing what days have been trained."
+// This sliced LOGP.length - 12 characters for 'nova-sc-log:'. But the Training Card's own
+// personal logs have lived under TLOGP ('tc-log:', 7 characters) since the two cards were split
+// apart on this shared origin. Chopping 12 off a 7-character prefix ate five characters of the
+// DATE, so the split produced 4 parts instead of 5, every key returned null, calIndex came back
+// empty and the calendar drew a blank month. It has been silently wrong for every Training Card
+// athlete since the split.
+// Cut at the last colon instead of counting characters: a date has no colons, so this is right
+// for tc-log:DATE-..., for a coached athlete's nova-sc-log:<id>:DATE-..., and for anything else
+// the namespace grows into later. sessionLogged() and cycleHasLogs() make the same slice but
+// survive it by luck - their regexes are anchored to the END of the key - so they are left alone
+// and pinned by the test instead.
+function logLabelOf(k){ var i=String(k||'').lastIndexOf(':'); return i<0? String(k||'') : String(k).slice(i+1); }
+function calKeyDate(k){ const L=(typeof logLabel==='function')? logLabel(k) : logLabelOf(k);
   const p=L.split('-'); if(p.length<5) return null;
   return {d:p[0]+'-'+p[1]+'-'+p[2], day:p[3], tag:p[4]}; }
 function calIndex(){
