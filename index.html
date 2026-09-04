@@ -7158,21 +7158,53 @@ function adaptRun(force){
   }catch(e){ oops('adaptRun',e); return null; }
 }
 // undo the most recent pass, for anyone who disagrees with it
+// Which entries can actually be put back. A volume drift reshapes the program rather than moving
+// a number, so it has no clean inverse and is not offered one - saying so is better than a button
+// that half works.
+function adUndoable(a){
+  return !!a && !a.undone &&
+    (a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov'
+     ||a.kind==='weak'||a.kind==='deload');
+}
+// FIELD/REVIEW 2026-09-03: undo used to reverse only the most recent PASS, so any change with
+// another adaptation on top of it was unreachable - and with four automatic writers to a max
+// (layoff, stall, rate, probation) that happens quickly. Each entry is now reversible on its own.
+//
+// Out-of-order undo has to be honest about what it can promise. If nothing has moved the lift
+// since, the old value goes straight back. If something HAS, removing this change means removing
+// its effect while keeping the later ones, so the difference it made is applied to wherever the
+// max is now. Either way the entry is marked rather than deleted: the record of what the card did
+// is worth keeping, and a marked entry cannot be undone twice.
+function adaptUndoOne(i){
+  try{
+    var log=S.adLog||[], a=log[i];
+    if(!adUndoable(a)) return false;
+    if((a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov')
+       && S.maxes && a.from!=null && a.to!=null && S.maxes[a.lift]!=null){
+      var cur=S.maxes[a.lift];
+      S.maxes[a.lift] = (cur===a.to) ? a.from : (cur + (a.from - a.to));
+      if(S.maxes[a.lift]<45) S.maxes[a.lift]=45;
+    }
+    // a trial step put back means the max is on trial again, not proven
+    if(a.kind==='prov' && S.mxProv && S.mxProv[a.lift]) S.mxProv[a.lift].since=shiftDate();
+    if(a.kind==='weak') S.adWeakTried=false;
+    if(a.kind==='deload') S.adDeloadDue=false;
+    a.undone=shiftDate();
+    if(S.adNew) S.adNew=Math.max(0, S.adNew-1);
+    try{ if(S.genPlan) applyMaxesToPlan(); }catch(e){}
+    save();
+    return true;
+  }catch(e){ oops('adaptUndoOne',e); return false; }
+}
+// the whole of the most recent pass, for anyone who disagrees with all of it
 function adaptUndo(){
   try{
     var log=S.adLog||[]; if(!log.length) return;
-    var d=log[log.length-1].d;
-    var batch=log.filter(function(x){ return x.d===d; });
-    batch.slice().reverse().forEach(function(a){
-      if((a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov') && S.maxes && a.from) S.maxes[a.lift]=a.from;
-      if(a.kind==='prov' && S.mxProv && S.mxProv[a.lift]) S.mxProv[a.lift].since=shiftDate();   // put it back on probation, not straight back to proven
-      if(a.kind==='weak') S.adWeakTried=false;
-      if(a.kind==='deload') S.adDeloadDue=false;
-    });
-    S.adLog=log.filter(function(x){ return x.d!==d; });
-    S.adNew=0;
-    try{ if(S.genPlan) applyMaxesToPlan(); }catch(e){}
-    save();
+    var d=null;
+    for(var q=log.length-1;q>=0;q--){ if(!log[q].undone){ d=log[q].d; break; } }
+    if(d==null) return;
+    for(var i=log.length-1;i>=0;i--) if(log[i].d===d) adaptUndoOne(i);
+    S.adNew=0; save();
   }catch(e){ oops('adaptUndo',e); }
 }
 // ===== ONE-TIME REPAIR: cuts the old stall rule should never have made =====
@@ -7239,21 +7271,32 @@ function adaptHTML(){
   try{
     var log=S.adLog||[];
     if(!log.length && !S.adDeloadDue) return '';
-    var d=log.length? log[log.length-1].d : null;
-    var batch=log.filter(function(x){ return x.d===d; });
+    // Was: only the batch sharing the newest date. Everything older sat in S.adLog and was never
+    // drawn, so a change you disagreed with vanished from view the moment another pass ran - and
+    // prov/provok had no row at all, which made every probation step from c184 invisible here.
     var LN={squat:'Back Squat', bench:'Bench Press', dead:'Deadlift', ohp:'Overhead Press'};
-    var rows=batch.map(function(a){
-      if(a.kind==='stall') return '<li><b>'+esc(LN[a.lift]||a.lift)+'</b> '+WV(a.from)+' \u2192 '
-        +WV(a.to)+' '+uLbl()+' \u2014 '+esc(a.why)+'</li>';
-      if(a.kind==='deload') return '<li><b>Deload earned early</b> \u2014 '+esc(a.why)+'</li>';
-      if(a.kind==='volume') return '<li><b>'+esc(a.muscle)+'</b> '
-        +(a.dir>0?'room for another set':'one set lighter')+' \u2014 '+esc(a.why)+'</li>';
-      if(a.kind==='rate') return '<li><b>'+esc(LN[a.lift]||a.lift)+'</b> '+WV(a.from)+' \u2192 '
-        +WV(a.to)+' '+uLbl()+' \u2014 '+esc(a.why)+'</li>';
-      if(a.kind==='layoff') return '<li><b>'+esc(LN[a.lift]||a.lift)+'</b> '+WV(a.from)+' \u2192 '
-        +WV(a.to)+' '+uLbl()+' \u2014 '+esc(a.why)+'</li>';
-      if(a.kind==='weak') return '<li><b>Likely cause</b> \u2014 '+esc(a.why)+'</li>';
-      return '';
+    var AD_SHOW=12;
+    var order=[]; for(var q=log.length-1;q>=0 && order.length<AD_SHOW;q--) order.push(q);
+    var lastD=null;
+    var rows=order.map(function(i){
+      var a=log[i], nm=esc(LN[a.lift]||a.lift||''), body='';
+      if(a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov')
+        body='<b>'+nm+'</b> '+WV(a.from)+' \u2192 '+WV(a.to)+' '+uLbl()+' \u2014 '+esc(a.why);
+      else if(a.kind==='provok') body='<b>'+nm+'</b> \u2014 '+esc(a.why);
+      else if(a.kind==='deload')  body='<b>Deload earned early</b> \u2014 '+esc(a.why);
+      else if(a.kind==='volume')  body='<b>'+esc(a.muscle)+'</b> '
+        +(a.dir>0?'room for another set':'one set lighter')+' \u2014 '+esc(a.why);
+      else if(a.kind==='weak')    body='<b>Likely cause</b> \u2014 '+esc(a.why);
+      if(!body) return '';
+      var head=(a.d!==lastD)? '<div class="cue" style="padding:8px 0 2px">'+esc(a.d)+'</div>' : '';
+      lastD=a.d;
+      var ctl = a.undone
+        ? '<span class="vol-note">put back '+esc(a.undone)+'</span>'
+        : (adUndoable(a)
+            ? '<span class="chip lockfree" data-adundo="'+i+'" role="button" tabindex="0"'
+              +' style="flex:0 0 auto;font-size:11px;padding:4px 9px;margin-left:8px">put back</span>'
+            : '<span class="vol-note">reshapes the program \u2014 change it on the Plan tab</span>');
+      return head+'<li'+(a.undone? ' style="opacity:.55"':'')+'>'+body+' '+ctl+'</li>';
     }).join('');
     return '<div class="block adapt"><h3>What the card changed</h3>'
       +'<div class="cue" style="padding:0 0 6px">Adjusted from your own logged sets and check-ins. '
@@ -7266,7 +7309,19 @@ function adaptHTML(){
 }
 function adaptWire(){
   var b=document.getElementById('adaptUndoBtn');
-  if(b) b.onclick=function(){ adaptUndo(); alertToast('Reverted'); render(); };
+  if(b) b.onclick=function(){ adaptUndo(); alertToast('Put back'); render(); };
+  document.querySelectorAll('[data-adundo]').forEach(function(el){
+    el.onclick=function(){
+      var i=+el.dataset.adundo, a=(S.adLog||[])[i];
+      var was=(a && S.maxes)? S.maxes[a.lift] : null;
+      if(!adaptUndoOne(i)) return;
+      var now=(a && S.maxes)? S.maxes[a.lift] : null;
+      alertToast((a && a.lift && was!=null && now!=null && was!==now)
+        ? 'Put back \u2014 '+esc(a.lift)+' is '+WV(now)+' '+uLbl()+' again'
+        : 'Put back');
+      render();
+    };
+  });
   var fx=document.getElementById('adFixedAck');
   if(fx) fx.onclick=function(){ S.adFixed=null; save(); render(); };
 }
@@ -7287,6 +7342,30 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.03h', date:'2026-09-03', title:'Put back any change, not just the last one', items:[
+    'Four things adjust your maxes on their own \u2014 a layoff, a stall, your measured climb rate, and a tested max on trial. Until now \u201cput it back\u201d only reversed the most recent pass, so a change you disagreed with went out of reach as soon as another one landed on top.',
+    'Every change in the log now has its own put-back. Older ones are shown too, not just today\u2019s.',
+    'Putting one back out of order keeps the later changes: it removes what that one change did, rather than winding your max back in time.',
+    'Trial steps from a tested max now appear in the log as well \u2014 they were being made but not shown.'
+  ], bulk:'Worth knowing about. I change your maxes in four different ways now, and until today the put-back button only reversed my most recent pass \u2014 so if I did something you disagreed with and then did something else, the first one was stuck. Every change in the log has its own put-back now, and I show you the older ones instead of just today\u2019s. Put one back out of order and I keep the later changes rather than winding you back in time. One more thing: the steps I take when a tested max is not holding were being made but never shown in that list. They are there now. You should be able to see everything I do to your numbers.'},
+  {build:'2026.09.03g', date:'2026-09-03', title:'Dead Hang added, and some tidying you will not see', items:[
+    'Dead Hang is now a real movement in the library. It was already credited for grip and forearm work but was not actually in there, so the credit could never apply to anything.',
+    'It is also the first forearm movement the card has that trains under a stretch rather than mid-range.'
+  ], bulk:'Small one. Dead Hang \u2014 just hanging off the bar and holding \u2014 is now a real movement you can pick. It was already in my notes as forearm and grip work, but it was never actually in the library, so those notes applied to nothing. It is also the only forearm movement I have that loads you under a stretch instead of mid-range, which is the kind of gap I have started being able to see. Kind on the shoulders too.'},
+  {build:'2026.09.03f', date:'2026-09-03', title:'Four movements added to fill real gaps', items:[
+    'Tagging the library turned up muscles the card could point at but not help with: every rear-delt movement it knew trained in a shortened position, every front-delt one was mid-range, glutes had nothing lengthened, and traps had nothing but shrugs.',
+    'Added: Cross-Body Cable Rear Delt Fly, Incline Front Raise, Single-Leg Romanian Deadlift, and Prone Y Raise. All four are in the library to pick from, and the card can now reach for them when it fills a session.'
+  ], bulk:'Following on from knowing what kind of work a movement is: it turned out I could tell you your rear delts were only ever trained short, but I had nothing lengthened to offer you. Same for front delts, glutes and traps. So there are four new movements in the library now \u2014 a cross-body cable rear delt fly, an incline front raise, a single-leg Romanian deadlift and a prone Y raise. Pick them yourself from the library, or leave it to me and I will reach for one when a session needs filling and your week is short of that kind of work.'},
+  {build:'2026.09.03e', date:'2026-09-03', title:'The card now knows what KIND of work a movement is', items:[
+    'Every movement carries where its tension peaks \u2014 stretched, mid-range or shortened \u2014 and for trunk work, what you are actually resisting: anti-extension, anti-rotation, anti-lateral-flexion, or dynamic flexion.',
+    'So an incline curl beside a straight-bar curl reads as two different stimuli, while a rear-delt machine beside a rear-delt fly reads as the same thing twice. When the card adds a movement it reaches for the stimulus your week is missing, and says which one.',
+    'On the Plan tab, a muscle whose whole week sits in a single stimulus is labelled. It is a note, not a correction \u2014 your programming is yours.'
+  ], bulk:'I have learned something worth telling you about. Every movement I know now carries what KIND of work it is, not just which muscle it hits \u2014 whether the tension peaks with the muscle stretched, mid-range, or short, and for trunk work whether you are resisting extension, rotation, side-bend, or actually flexing. That means an incline curl next to a straight-bar curl reads to me as two different jobs, while a rear-delt machine next to a rear-delt fly reads as the same job twice. When I add something to fill a session I will now reach for the stimulus your week is short of, and tell you which. And on the Plan tab I will mark any muscle whose whole week sits in one stimulus. That last one is a note, not a correction. Your programming is yours.'},
+  {build:'2026.09.03d', date:'2026-09-03', title:'Added exercises cover what the day is missing', items:[
+    'When a session came in short, the card would add a movement for whichever of that day\u2019s muscles was furthest under its weekly target \u2014 even if that muscle already had a movement on the day.',
+    'That could put two near-identical exercises side by side: a rear-delt machine next to a rear-delt dumbbell fly, or two lateral raise variations.',
+    'An added exercise now has to train something the day is not already training directly. What your program itself prescribes is untouched \u2014 two chest movements on a push day are still two chest movements.'
+  ], bulk:'Caught a daft one. When a session ran short I would add a movement to fill it, and I picked whichever muscle was furthest under target for the week \u2014 without checking whether that muscle already had something on the day. So you could end up with a rear-delt machine sitting next to a rear-delt fly. Same muscle, same movement, twice, and you would rightly bin one. Anything I add now has to cover something the day is actually missing. What your program prescribes is your business and I do not touch it \u2014 two chest movements on a push day are meant to be there.'},
   {build:'2026.09.03c', date:'2026-09-03', title:'Settings always opens, even on a day you are only looking at', items:[
     'Looking at a session that has not opened yet locked the whole screen \u2014 including the settings gear, mail and the tour replay in the header.',
     'That meant switching who picks the session could strand you: the change lands, you get moved to a day that is still coming up, and the way back into settings was locked behind it.',
@@ -9545,11 +9624,16 @@ function provenanceHTML(){
     ['Sourced','A lighter final week','Reducing volume before a new block is standard periodisation.'],
     ['Sourced','Training loads by goal','Sets, reps and percentage ranges per goal follow the NSCA\u2019s standard training-load table (Essentials of Strength Training and Conditioning), checked cell by cell against the published parameters.'],
     ['Sourced','Two-minute compound rests','Longer rest builds more muscle than short rest at the same volume (Schoenfeld 2016). The older 30\u201390 second advice is the metabolic-stress model \u2014 we left it deliberately.'],
+    ['Sourced','Where a movement\u2019s tension peaks','Whether a lift loads a muscle stretched, mid-range or short is biomechanics, not a study result. An incline curl loads the elbow flexors at a longer length than a preacher curl because the shoulder is extended; a seated leg curl holds the hamstring longer than a lying one. Every movement in the library is tagged this way.'],
+    ['Sourced','Training at long muscle lengths','Lengthened-biased work appears to build more muscle than shortened-biased work at matched volume (Maeo on seated vs standing leg curl and overhead vs pushdown triceps; Pedrosa on lengthened partials). Real, but a young literature with small samples \u2014 enough for the card to prefer it, not enough to enforce it.'],
     ['Reasoned','Half credit for assisting muscles','A defensible way to count a row toward your biceps. The exact fraction is a judgement, not a measurement \u2014 nobody has the true number.'],
     ['Reasoned','Rest by movement class','Longer rest for heavy compounds is well supported. The specific tiers here are our reading of it.'],
+    ['Reasoned','Variety of stimulus over repetition of it','That two movements with different resistance profiles beat two with the same profile, at matched volume, is our read of length-dependent and regional adaptation. Nobody has demonstrated it directly. It is why the card prefers a stimulus your week is missing, and why it only ever reports a one-sided week rather than rewriting your program.'],
     ['Chosen','Per-muscle weekly targets \u2014 and the padding to hit them','Chest 12, back 14, neck 4: sensible starting points, not measured on you. The plan additions serving them (rear delts to 8 sets, calves to 10, Side Plank, Lateral Band Walk) are ours too.'],
     ['Chosen','Readiness load adjustments','A bad night dropping the bar 7.5\u201315% is our number. The direction is supported; the exact percentage is a decision we made.'],
     ['Chosen','Bodyweight percentages','Training at 50\u201380% of your tested max reps. Reasonable, and ours.'],
+    ['Chosen','A tested max on trial','Two sessions with missed reps or a grind before the card steps a tested max down, three clean ones before it is yours for good, and 2.5% off per step. That a window is needed rather than a single bad day is supported; the numbers 2, 3 and 2.5% are ours. The floor \u2014 never below the max you already trained \u2014 is your own data, not a decision.'],
+    ['Chosen','When a one-sided week is worth mentioning','Six sets in a single stimulus before the card says so. Fewer than that is not a pattern, and the number is ours.'],
     ['Chosen','Power at 70\u201380%','The source range for repeat-effort power is 75\u201385%. We run five points lighter on purpose: on a barbell, speed is the point, and speed lives lower.'],
     ['Chosen','Endurance rests of 45 and 30 seconds','The source says up to 30. The main lift gets fifteen extra seconds so fifteen honest reps stay possible; the 50\u201360% on-ramp is ours as well.'],
     ['Chosen','Strength opens at 80%','The source floor is 85. The first two weeks climb through 80 and 82.5 on the way there \u2014 an on-ramp, not a disagreement.'],
@@ -10179,18 +10263,18 @@ var VOL_LABEL={chest:'Chest',back:'Lats',traps:'Traps',lowback:'Lower back',neck
 var VOL_PICK={
   chest:['Incline DB Press','Machine Chest Press','Push-Ups'],
   back:['Lat Pulldown','Cable Rows','Inverted Row'],
-  traps:['Shrugs','Farmer Carry','Upright Row'],
+  traps:['Shrugs','Prone Y Raise','Farmer Carry','Upright Row'],
   lowback:['Back Extension','Good Morning','Romanian Deadlift'],
   neck:['Neck Harness Extension'],
-  fdelt:['Overhead Press','Seated DB Shoulder Press','Machine Shoulder Press'],
+  fdelt:['Overhead Press','Incline Front Raise','Seated DB Shoulder Press','Machine Shoulder Press'],
   sdelt:['Lateral Raises','Cable Lateral Raise','Plate Lateral Raise'],
-  rdelt:['Face Pulls','Reverse Pec Deck','Rear Delt Fly'],
+  rdelt:['Face Pulls','Cross-Body Cable Rear Delt Fly','Reverse Pec Deck','Rear Delt Fly'],
   biceps:['DB Curl','Straight Bar Curl','Hammer Curls'],
   triceps:['Rope Pushdowns','Overhead Rope Extension','Dips'],
-  forearm:['DB Reverse Curl','Farmer Carry','Suitcase Carry'],
+  forearm:['DB Reverse Curl','Dead Hang','Farmer Carry','Suitcase Carry'],
   quads:['Leg Press','Leg Extension','Goblet Squat'],
   hams:['Seated Leg Curl','Romanian Deadlift','Lying Leg Curl'],
-  glutes:['Hip Thrust','Glute Bridge','Bulgarian Split Squat'],
+  glutes:['Hip Thrust','Single-Leg Romanian Deadlift','Glute Bridge','Bulgarian Split Squat'],
   adductors:['Hip Adduction Machine','Copenhagen Plank','Goblet Squat'],
   abductors:['Hip Abduction Machine','Lateral Band Walk','Cable Hip Abduction'],
   calves:['Standing Calf Raise','Seated Calf Raise','Leg-Press Calf Press'],
@@ -10198,6 +10282,154 @@ var VOL_PICK={
   abs:['Hanging Leg Raises','Cable Crunch','Plank'],
   obliques:['Cable Woodchop','Side Plank','Suitcase Carry']
 };
+// ===== STIMULUS PROFILE (2026-09-03, his direction) =====
+// His ask: the engine should know that a mid-range curl beside a stretched-position curl is good
+// programming, while a rear-delt machine beside a rear-delt fly is the same thing twice. Muscle
+// names alone cannot tell those apart. Two axes:
+//
+//   pos  - where peak tension sits across the range: 'long' (lengthened), 'mid', 'short'.
+//          This is BIOMECHANICS, not a study result: an incline curl loads the elbow flexors at
+//          a longer muscle length than a preacher curl because the shoulder is extended. The
+//          separate claim that lengthened-biased work grows more muscle is real but young
+//          (Maeo on seated vs standing leg curl and overhead vs pushdown triceps; Pedrosa on
+//          lengthened partials) - good enough to PREFER, not settled enough to enforce.
+//   mode - what the trunk is actually resisting, where that is the whole point: 'antiext',
+//          'antirot', 'antilat', 'flex', 'rot', 'latflex'. Everything else is 'dyn'.
+//
+// CHOSEN, and it should be labelled as such: that two different-profile movements beat two
+// same-profile ones at matched volume is a reasonable read of length-dependent adaptation, not a
+// demonstrated result. The engine prefers variety; it never overrules the athlete over it.
+//
+// A movement that is NOT in this table makes NO CLAIM in either direction - never redundant,
+// never complementary. Partial coverage has to degrade quietly rather than guess, because a
+// mis-tag puts wrong reasoning straight into programming.
+var STIM={
+  // --- chest ---
+  'Bench Press':['mid'],'Incline Bench Press':['mid'],'Incline Barbell Press':['mid'],
+  'Decline Bench Press':['mid'],'Close-Grip Bench Press':['mid'],'Pause Bench Press':['mid'],
+  'Floor Press':['short'],'Spoto Press':['mid'],'Board Press':['short'],
+  'DB Bench Press':['mid'],'Flat DB Press':['mid'],'Incline Dumbbell Press':['mid'],
+  'Incline DB Press':['mid'],'Machine Chest Press':['mid'],'Machine Incline Press':['mid'],
+  'Smith Bench Press':['mid'],'Push-Ups':['mid'],'Incline Push-Ups':['mid'],
+  'Feet-Elevated Push-Ups':['mid'],'Hand-Release Push-Ups':['mid'],'Archer Push-Ups':['mid'],
+  'One-Arm Push-Up Progression':['mid'],'Deficit Push-Ups':['long'],
+  'Dips':['long'],'Weighted Dips':['long'],'Bench Dips':['mid'],
+  'Cable Fly':['long'],'Dumbbell Fly':['long'],'Pec Deck Fly':['mid'],
+  // --- delts ---
+  'Overhead Press':['mid'],'Push Press':['mid'],'Seated Barbell Press':['mid'],
+  'Seated DB Shoulder Press':['mid'],'DB Shoulder Press':['mid'],'Arnold Press':['mid'],
+  'Machine Shoulder Press':['mid'],'Landmine Press':['mid'],'Front Raises':['mid'],
+  'Lateral Raises':['short'],'Machine Lateral Raise':['mid'],'Cable Lateral Raise':['long'],
+  'Upright Row':['mid'],
+  // Rear delts: with standard equipment they are all trained near the shortened end. That is a
+  // real gap in the library, not a tagging shortcut - the coverage flag below will say so.
+  'Reverse Pec Deck':['short'],'Rear Delt Fly':['short'],'Face Pulls':['short'],
+  'Band Pull-Aparts':['short'],'Cross-Body Cable Rear Delt Fly':['long'],
+  'Incline Front Raise':['long'],'Prone Y Raise':['mid'],
+  'Single-Leg Romanian Deadlift':['long'],'Dead Hang':['long'],
+  // --- triceps ---
+  'Overhead Rope Extension':['long'],'DB Overhead Triceps Extension':['long'],
+  'Skullcrushers':['long'],'Rope Pushdowns':['short'],'Straight-Bar Pushdown':['short'],
+  'Diamond Push-Ups':['mid'],
+  // --- back ---
+  'Barbell Row':['mid'],'Pendlay Row':['mid'],'T-Bar Row':['mid'],'Chest-Supported Row':['mid'],
+  'Seated Cable Row':['mid'],'Cable Rows':['mid'],'Machine Row':['mid'],'DB Row':['mid'],
+  'Single-Arm DB Row':['mid'],'Inverted Row':['mid'],'Feet-Elevated Inverted Row':['mid'],
+  'Single-Arm Inverted Row':['mid'],'Lat Pulldown':['mid'],'Neutral-Grip Pulldown':['mid'],
+  'Single-Arm Pulldown':['mid'],'Pull-Ups':['mid'],'Chin-Ups':['mid'],'Weighted Pull-Ups':['mid'],
+  'Weighted Chin-Ups':['mid'],'Assisted Pull-Ups':['mid'],'Assisted Pull-Up':['mid'],
+  'Assisted Chin-Ups':['mid'],'Negative Pull-Ups':['mid'],'Negative Chin-Ups':['mid'],
+  'Straight-Arm Pulldown':['long'],'Rope Straight-Arm Pulldown':['long'],
+  'DB Pullover':['long'],'Cable Pullover':['long'],
+  'Shrugs':['short'],'Barbell Shrugs':['short'],
+  // --- biceps / forearms ---
+  'Incline Dumbbell Curl':['long'],'Incline DB Curl':['long'],
+  'Preacher Curl':['short'],'Concentration Curl':['short'],
+  'Barbell Curl':['mid'],'Straight Bar Curl':['mid'],'EZ-Bar Curl':['mid'],'DB Curl':['mid'],
+  'Dumbbell Curl':['mid'],'Cable Curl':['mid'],'Hammer Curls':['mid'],'Rope Hammer Curl':['mid'],
+  'Cross-Body Hammer Curl':['short'],'Reverse Curl':['mid'],'DB Reverse Curl':['mid'],
+  'Wrist Curl':['mid'],
+  // --- quads / glutes / hams / calves ---
+  'Back Squat':['mid'],'Front Squat':['mid'],'Box Squat':['mid'],'Pause Squat':['mid'],
+  'Safety Bar Squat':['mid'],'Hack Squat':['long'],'Goblet Squat':['mid'],'Leg Press':['mid'],
+  'Split Squat':['long'],'Bulgarian Split Squat':['long'],'Walking Lunges':['mid'],
+  'Reverse Lunges':['mid'],'Step-Ups':['mid'],'Bodyweight Squat':['mid'],
+  'Pistol Squat Progression':['long'],'Sissy Squat':['long'],'Leg Extension':['short'],
+  'Deadlift':['mid'],'Conventional Deadlift':['mid'],'Sumo Deadlift':['mid'],
+  'Trap Bar Deadlift':['mid'],'Rack Pull':['short'],'Deficit Deadlift':['long'],
+  'Romanian Deadlift':['long'],'Stiff-Leg Deadlift':['long'],'Dumbbell RDL':['long'],
+  'DB Romanian Deadlift':['long'],'Good Morning':['long'],'Nordic Curl':['long'],
+  'Seated Leg Curl':['long'],'Lying Leg Curl':['short'],'Leg Curl':['mid'],
+  'Hip Thrust':['short'],'Glute Bridge':['short'],'Single-Leg Glute Bridge':['short'],
+  'Back Extension':['mid'],'Weighted Back Extension':['mid'],'Reverse Hyper':['mid'],
+  'Standing Calf Raise':['long'],'Leg-Press Calf Press':['long'],
+  'Single-Leg DB Calf Raise':['long'],'Seated Calf Raise':['mid'],
+  'Hip Abduction Machine':['short'],'Cable Hip Abduction':['short'],'Lateral Band Walk':['short'],
+  'Hip Adduction Machine':['short'],'Tibialis Raise':['short'],
+  // --- trunk: mode is the point, not where tension peaks ---
+  'Plank':['mid','antiext'],'Weighted Plank':['mid','antiext'],'Ab Wheel':['long','antiext'],
+  'Dead Bug':['mid','antiext'],'Bird Dog':['mid','antiext'],
+  'Side Plank':['mid','antilat'],'Copenhagen Plank':['long','antilat'],
+  'Farmer Carry':['mid','antilat'],'Suitcase Carry':['mid','antilat'],
+  'Pallof Press':['mid','antirot'],
+  'Cable Woodchop':['mid','rot'],'Landmine Rotation':['mid','rot'],'Russian Twist':['short','rot'],
+  'Side Bend':['mid','latflex'],
+  'Hanging Leg Raises':['long','flex'],'Captains Chair Leg Raise':['mid','flex'],
+  'Lying Leg Raises':['mid','flex'],'Cable Crunch':['short','flex']
+};
+var STIM_LABEL={long:'stretched',mid:'mid-range',short:'shortened',
+  antiext:'anti-extension',antirot:'anti-rotation',antilat:'anti-lateral-flexion',
+  flex:'dynamic flexion',rot:'rotation',latflex:'lateral flexion',dyn:''};
+function stimOf(n){ var t=STIM[n]; return t? {pos:t[0], mode:t[1]||'dyn'} : null; }
+function stimKey(n){ var s=stimOf(n); return s? s.pos+'|'+s.mode : null; }
+// True ONLY when both are tagged and identical. An unknown movement never asserts anything.
+function stimSame(a,b){ var x=stimKey(a), y=stimKey(b); return !!(x && y && x===y); }
+function stimWords(n){
+  var s=stimOf(n); if(!s) return '';
+  return (s.mode && s.mode!=='dyn')? STIM_LABEL[s.mode] : (STIM_LABEL[s.pos]||'');
+}
+// Every stimulus this week already gives a muscle, from what is actually programmed.
+function stimSeen(mus){
+  var seen={};
+  try{
+    dayCodes().forEach(function(c){
+      effectiveExercises(c).forEach(function(ex){
+        if(!(+ex.sets)) return;
+        var mm=volMuscles(ex.name); if(!mm || !(mm[mus]>=1)) return;
+        var k=stimKey(ex.name); if(k) seen[k]=(seen[k]||0)+(+ex.sets||0);
+      });
+    });
+  }catch(e){}
+  return seen;
+}
+// A muscle whose whole week sits in ONE stimulus, with enough work to be worth saying so about.
+// Reported, never auto-corrected: reshaping his programming over an inference is not the card's
+// call. Rear delts will usually land here honestly - the library has no lengthened option for
+// them, and saying so is more useful than pretending otherwise.
+var STIM_MIN_SETS=6;
+function stimOneSided(mus){
+  try{
+    var seen=stimSeen(mus), ks=Object.keys(seen);
+    if(ks.length!==1) return null;
+    if(seen[ks[0]]<STIM_MIN_SETS) return null;
+    var s=ks[0].split('|');
+    return {key:ks[0], sets:seen[ks[0]],
+      word:(s[1]&&s[1]!=='dyn')? STIM_LABEL[s[1]] : STIM_LABEL[s[0]]};
+  }catch(e){ return null; }
+}
+// Of these candidates, the one whose stimulus this muscle's week does NOT already have; the
+// staple order otherwise. Its own function because it is the only place the preference lives,
+// and because it is otherwise unreachable to test: with a normal plan the fill picker almost
+// never lands on a muscle that has more than one profile on offer, so a test driven through
+// sessPickExercise proves nothing about whether the preference is still wired up.
+function stimPreferred(mus, cands){
+  try{
+    if(!cands || !cands.length) return null;
+    var seen=stimSeen(mus);
+    var fresh=cands.filter(function(n){ var k=stimKey(n); return k && !seen[k]; });
+    return fresh[0]||cands[0];
+  }catch(e){ return (cands&&cands[0])||null; }
+}
 // first pick that actually exists in this card's library
 function volPick(m){
   var L=VOL_PICK[m]||[];
@@ -10254,6 +10486,12 @@ var VOL_OVERRIDE={
   'Lateral Raises':{sdelt:1},'Cable Lateral Raise':{sdelt:1},'Machine Lateral Raise':{sdelt:1},
   'Front Raises':{fdelt:1},'Upright Row':{sdelt:1},
   'Face Pulls':{rdelt:1},'Reverse Pec Deck':{rdelt:1},'Rear Delt Fly':{rdelt:1},'Band Pull-Aparts':{rdelt:1},
+  // Added 2026-09-03 to close real holes the stimulus audit found: every rear-delt movement in
+  // here trained near the shortened end, every front-delt movement was mid-range, glutes had
+  // nothing lengthened, and traps had nothing but shrugs. The c187 coverage flag could report
+  // those gaps but the card had nothing to offer against them.
+  'Cross-Body Cable Rear Delt Fly':{rdelt:1},'Incline Front Raise':{fdelt:1},
+  'Prone Y Raise':{traps:1},'Single-Leg Romanian Deadlift':{glutes:1, hams:0.75},
   'Straight-Arm Pulldown':{back:1},'DB Pullover':{back:1},'Cable Pullover':{back:1},
   'Chin-Ups':{back:1,biceps:.75},
   'Shrugs':{back:.5},'Barbell Shrugs':{back:.5},
@@ -10332,8 +10570,7 @@ var VOL_SUPPORT={
   // --- grip-heavy odds and ends ---
   'Hammer Curls':{forearm:0.5},
   'DB Reverse Curl':{forearm:1},
-  'Dead Hang':{forearm:1},
-  'Bar Hang':{forearm:1}
+  'Dead Hang':{forearm:1}
 };
 function volMuscles(name){
   // merge the supporting credit into whatever the primary table says
@@ -10741,7 +10978,14 @@ function volumeHTML(){
         var canFix=(band!=='green' && volPicks(m).length);
         return '<div class="vol-row'+(n>0?'':' zero')+'">'
           +'<div class="vol-lab"><b>'+VOL_LABEL[m]+'</b>'
-            +(assisted? '<span class="vol-note">assisted only</span>':'')+'</div>'
+            +(assisted? '<span class="vol-note">assisted only</span>':'')
+            // His direction 2026-09-03: say when a muscle's whole week sits in ONE stimulus.
+            // Reported, never auto-corrected - reshaping his programming over an inference is
+            // not the card's call, and some of these are honest gaps in the library rather than
+            // mistakes (rear delts have no lengthened option in here at all).
+            +(function(){ try{ var os=stimOneSided(m);
+                return os? '<span class="vol-note">all '+esc(os.word)+'</span>' : ''; }catch(e){ return ''; } })()
+            +'</div>'
           +'<div class="vol-track"><div class="vol-fill" style="width:'+pct.toFixed(0)+'%;background:'+col+'"></div>'
             +'<span class="vol-tick" style="left:'+tick.toFixed(0)+'%"></span></div>'
           +'<div class="vol-num" style="color:'+col+'">'+rn+'<span class="vol-of">/'+tgt+'</span></div>'
@@ -10963,6 +11207,7 @@ var EXLIB=[
 ['Romanian Deadlift','legs','barbell','dead',0.54,'bar','high','Hamstrings and glutes through a long stretch. A hip movement, not a squat.'],
 ['Stiff-Leg Deadlift','legs','barbell','dead',0.50,'bar','med','Like an RDL but from the floor. Big hamstring stretch.'],
 ['Dumbbell RDL','legs','dumbbell','dead',0.20,'perHand','med','Romanian deadlift with dumbbells. Easier to learn the hinge.'],
+['Single-Leg Romanian Deadlift','legs','dumbbell','dead',0.12,'perHand','high','One leg at a time through a long hamstring and glute stretch. Balance is part of the work.'],
 ['Good Morning','legs','barbell','dead',0.32,'bar','med','Hinge with the bar on your back. Hamstrings and lower back.'],
 ['Back Extension','legs','bodyweight','dead',0.0,'bw','high','Lower back, glutes and hamstrings holding position under load.'],
 ['Reverse Hyper','legs','machine','dead',0.30,'stack','low','Glutes and lower back with the spine unloaded.'],
@@ -11024,6 +11269,7 @@ var EXLIB=[
 ['Cable Lateral Raise','push','cable','ohp',0.09,'stack','med','Side delts with tension all the way down.'],
 ['Machine Lateral Raise','push','machine','ohp',0.30,'stack','low','Side delts on a fixed path. Easy to overload.'],
 ['Front Raises','push','dumbbell','ohp',0.09,'perHand','med','Front shoulders. Usually already covered by pressing.'],
+['Incline Front Raise','push','dumbbell','ohp',0.05,'perHand','med','Front shoulders with the arm hanging behind you on an incline bench. The stretch is the point.'],
 ['Upright Row','push','barbell','ohp',0.35,'bar','med','Side delts and traps. Stop at chest height.'],
 ['Shrugs','pull','dumbbell','dead',0.25,'perHand','med','Upper traps. Straight up and down, no rolling.'],
 ['Barbell Shrugs','pull','barbell','dead',0.50,'bar','med','Upper traps, heavy. Pause at the top.'],
@@ -11076,6 +11322,9 @@ var EXLIB=[
 ['Reverse Pec Deck','pull','machine','bench',0.22,'stack','low','Rear shoulders on a machine. Easy to do lots of reps.'],
 ['Rear Delt Fly','pull','dumbbell','bench',0.07,'perHand','med','Rear shoulders with dumbbells. Light weight, strict form.'],
 ['Band Pull-Aparts','pull','bodyweight','bench',0.0,'bw','high','Rear shoulders, light and high-rep. Good before pressing.'],
+['Dead Hang','pull','bodyweight','pull',0.0,'bw','low','Hang from the bar and hold. Grip and forearms under a long stretch, and it is kind to the shoulders.'],
+['Cross-Body Cable Rear Delt Fly','pull','cable','bench',0.08,'stack','med','Rear shoulders from a full stretch across the body. The cable holds tension where the muscle is longest.'],
+['Prone Y Raise','pull','dumbbell','bench',0.03,'perHand','med','Lower traps, face down on an incline bench. Tiny weight, arms out at 45 degrees.'],
 ['Barbell Curl','arms','barbell','bench',0.20,'bar','high','Biceps, heaviest version. Elbows stay pinned.'],
 ['Straight Bar Curl','arms','barbell','bench',0.20,'bar','high','Biceps, heaviest version. Elbows stay pinned.'],
 ['EZ-Bar Curl','arms','barbell','bench',0.19,'bar','high','Biceps with a kinder wrist angle.'],
@@ -12088,7 +12337,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c185';
+const BUILD = 'c190';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -12519,17 +12768,40 @@ function sessPickExercise(code, exs){
   try{
     var have={}; (exs||[]).forEach(function(ex){ have[ex.name]=1; });
     var fam=sessFamily(code), vol=plannedVolume()||{};
-    var dayMus={};
-    (exs||[]).forEach(function(ex){ var mm=volMuscles(ex.name); if(mm) for(var m in mm) dayMus[m]=1; });
+    // FIELD-CAUGHT 2026-09-03: "Reverse Pec Deck and Rear Delt Fly got generated for the same
+    // day - they are essentially the same exercise hitting the same muscles."
+    // The old version walked the day's OWN muscles and added a SECOND movement for whichever
+    // was furthest under its weekly target. Rear delts were short, a rear-delt movement was
+    // already on the day, so it added another one - and because the next pass re-read the day
+    // and rear delts were STILL short, it added the third name off the same list. Two fills,
+    // one muscle, same movement twice. A fill exists to cover something the day is missing.
+    // DIRECT means a primary credit (1 in the muscle map). A muscle carried as a SECONDARY by a
+    // compound is still open to a fill - biceps at 0.75 from chin-ups still wants a curl - and
+    // this rule never touches what the program itself prescribes: two chest movements on a push
+    // day are deliberate programming, not a fill.
+    var direct={}, present={};
+    (exs||[]).forEach(function(ex){
+      var mm=volMuscles(ex.name); if(!mm) return;
+      for(var m in mm){ present[m]=1; if(mm[m]>=1) direct[m]=1; } });
     var best=null;
-    Object.keys(dayMus).forEach(function(m){
+    Object.keys(ANA_TGT||{}).forEach(function(m){
+      if(direct[m]) return;                       // already trained directly today
       var tg=ANA_TGT[m]; if(!tg) return;
       var ratio=(vol[m]||0)/tg;
+      if(ratio>=1) return;                        // at or over its weekly target - leave it alone
       var cands=(VOL_PICK[m]||[]).filter(function(n){
         var r=libRow(n); if(!r || have[n]) return false;
-        return !fam || r[1]===fam; });
+        // a fill has to belong to the day. With a readable family, match it; without one, stay
+        // with a muscle the day already touches indirectly rather than picking out of the blue.
+        return fam? (r[1]===fam) : !!present[m]; });
       if(!cands.length) return;
-      if(!best || ratio<best.ratio) best={muscle:m, ratio:ratio, name:cands[0]};
+      // Among the candidates, prefer a STIMULUS this muscle's week does not already have. A
+      // stretched-position option beside mid-range work is worth more than a third helping of
+      // the same thing. Falls back to the staple order when nothing new is available, which is
+      // honest: for rear delts the library has no lengthened option to offer.
+      var nm=stimPreferred(m, cands);
+      if(!best || ratio<best.ratio)
+        best={muscle:m, ratio:ratio, name:nm, stim:stimWords(nm), novel:(nm!==cands[0] || !stimSeen(m)[stimKey(nm)])};
     });
     return best;
   }catch(e){ oops('sessPickExercise',e); return null; }
@@ -12562,6 +12834,7 @@ function sessFillDay(code){
       if(est==null){ var an=libAnchor(pick.name); if(an && S.maxes && S.maxes[an.base]!=null){
         var step=(an.unit==='sled')?10:5; est={val:Math.max(step,Math.round(an.f*S.maxes[an.base]/step)*step)}; } }
       cs.push({b:cyc(), w:S.week, cid:Date.now()+n, name:pick.name, fill:true, why:pick.muscle,
+        stim:(pick.novel && pick.stim)? pick.stim : '',
         load:(r[5]==='bw'?'BW':(est&&est.val!=null? est.val : 25)), sets:3, reps:d.reps, perHand:(r[5]==='perHand')});
       gap-=3*(45+90); n++; changed++;
     }
@@ -14332,7 +14605,10 @@ function renderInner(){
     var fillsHere=(function(){ try{ return custList(d.code).filter(function(c){ return c.fill; }).map(function(c){ return c.name; }); }catch(e){ return []; } })();
     h+='<div class="exnote" style="padding:6px 0 0;font-style:normal">Filled to your target: '
       +[].concat(sp2.adds.length? ['+1 set on '+sp2.adds.map(function(a){ return esc(a.name); }).join(', ')] : [],
-                 fillsHere.length? [fillsHere.map(esc).join(' and ')+' added'] : [],
+                 fillsHere.length? [fillsHere.map(function(nm){
+                     var w=''; try{ var c=custList(d.code).filter(function(x){ return x.fill && x.name===nm; })[0];
+                       w=(c&&c.stim)? c.stim : ''; }catch(e){}
+                     return esc(nm)+(w? ' ('+esc(w)+' work your week was missing)' : ''); }).join(' and ')+' added'] : [],
                  sp2.fin? ['a '+sp2.fin+' min Zone 2 finisher'] : []).join(' \u00b7 ')
       +'. Change the target in Settings.</div>';
   }
@@ -14953,16 +15229,10 @@ function wire(){
     }
     S.day=nd;
     save();render();});
-  document.querySelectorAll('[data-wkv]').forEach(el=>el.onclick=()=>{
-    try{
-      var lw=S.week; var nx=nextSession(); lw=nx? nx.week : PLAN.weeks;
-      var w=S.week+(+el.dataset.wkv);
-      if(w<1 || w>PLAN.weeks) return;
-      S.week=w;
-      if(w===lw && nx){ S.day=nx.code; } else if(!PLAN.days.some(d=>d.code===S.day)){ S.day=PLAN.days[0].code; }
-      S.focus=0; save(); render();
-    }catch(e){ oops('wkv',e); }
-  });
+  // [data-wkv] week-step handler removed 2026-09-03: the attribute appeared exactly once in
+  // the whole file - here - so nothing ever rendered a control for it to bind to. Wiring with
+  // no markup is the same rot as markup with no wiring, and it is not caught by orphantest,
+  // which only looks the other way round.
   document.querySelectorAll('[data-backlive]').forEach(el=>el.onclick=()=>{
     try{ syncToNext(); }catch(e){}
     try{
