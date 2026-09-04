@@ -4720,36 +4720,63 @@ function calcSnap(x, y){
   var at=(edge==='left'||edge==='right')? y/H : x/W;
   return {edge:edge, at:Math.min(0.94, Math.max(0.06, at))};
 }
+// FIELD 2026-09-04: "I'm trying to move the calculator but it's magnetically impossible to pull
+// away from the top left corner." Two of my own faults from c193, compounding:
+//   1. calcPaint() ran calcPlace() unconditionally, and calcPaint() runs on every render(). The
+//      card re-renders constantly - a rest tick, a save, a screen touch - so mid-drag the button
+//      was yanked back to its SAVED position several times a second. That is the magnet.
+//   2. pointermove/pointerup were bound to the BUTTON. It is 46px across, so as soon as the
+//      finger left it the events stopped, unless pointer capture happened to hold. The drag then
+//      never completed, nothing was saved, and the next render put it back where it started.
+// Now: the listeners live on the document, so the drag follows the finger anywhere on the screen,
+// and nothing repositions the button while a drag is live.
+var CALC_DRAGGING=false;
 function calcDragWire(fab){
   try{
-    var down=window.PointerEvent?'pointerdown':'mousedown';
-    var move=window.PointerEvent?'pointermove':'mousemove';
-    var up=window.PointerEvent?'pointerup':'mouseup';
+    var hasP=!!window.PointerEvent;
+    var down=hasP?'pointerdown':'mousedown';
+    var move=hasP?'pointermove':'mousemove';
+    var up=hasP?'pointerup':'mouseup';
     var drag=null, sx=0, sy=0;
-    fab.addEventListener(down, function(ev){
-      drag={x:ev.clientX, y:ev.clientY}; sx=ev.clientX; sy=ev.clientY; fab.__dragged=false;
-      try{ if(ev.pointerId!=null && fab.setPointerCapture) fab.setPointerCapture(ev.pointerId); }catch(e){}
-    });
     var onMove=function(ev){
       if(!drag) return;
-      if(!fab.__dragged && Math.hypot(ev.clientX-sx, ev.clientY-sy)<8) return;   // still a tap
-      fab.__dragged=true; ev.preventDefault();
+      var cx=ev.clientX, cy=ev.clientY;
+      if(cx==null && ev.touches && ev.touches[0]){ cx=ev.touches[0].clientX; cy=ev.touches[0].clientY; }
+      if(cx==null) return;
+      drag={x:cx, y:cy};
+      if(!fab.__dragged && Math.hypot(cx-sx, cy-sy)<8) return;   // still a tap
+      fab.__dragged=true; CALC_DRAGGING=true;
+      if(ev.cancelable) ev.preventDefault();
       // follow the finger freely while held; snapping happens on release
-      fab.style.left=ev.clientX+'px'; fab.style.top=ev.clientY+'px';
+      fab.style.left=cx+'px'; fab.style.top=cy+'px';
       fab.style.right=fab.style.bottom=''; fab.style.transform='translate(-50%,-50%)';
       fab.classList.add('dragging');
     };
     var onUp=function(ev){
       if(!drag) return; var was=drag; drag=null;
       fab.classList.remove('dragging');
-      if(!fab.__dragged) return;                    // the click handler will open it
+      if(!fab.__dragged){ CALC_DRAGGING=false; return; }   // the click handler will open it
       var x=(ev&&ev.clientX!=null)? ev.clientX : was.x, y=(ev&&ev.clientY!=null)? ev.clientY : was.y;
-      S.calcPos=calcSnap(x, y); save(); calcPlace(fab);
+      S.calcPos=calcSnap(x, y); save();
+      CALC_DRAGGING=false; calcPlace(fab);
     };
-    fab.addEventListener(move, onMove);
-    fab.addEventListener(up, onUp);
-    fab.addEventListener('pointercancel', onUp);
-    fab.addEventListener('lostpointercapture', function(){ if(drag) onUp(null); });
+    fab.addEventListener(down, function(ev){
+      var cx=ev.clientX, cy=ev.clientY;
+      if(cx==null && ev.touches && ev.touches[0]){ cx=ev.touches[0].clientX; cy=ev.touches[0].clientY; }
+      drag={x:cx, y:cy}; sx=cx; sy=cy; fab.__dragged=false;
+      try{ if(ev.pointerId!=null && fab.setPointerCapture) fab.setPointerCapture(ev.pointerId); }catch(e){}
+    });
+    // ON THE DOCUMENT, not the button: a 46px target cannot follow a finger that has left it
+    document.addEventListener(move, onMove, {passive:false});
+    document.addEventListener(up, onUp);
+    document.addEventListener('pointercancel', onUp);
+    if(!hasP){
+      fab.addEventListener('touchstart', function(ev){ var t=ev.touches&&ev.touches[0]; if(!t) return;
+        drag={x:t.clientX,y:t.clientY}; sx=t.clientX; sy=t.clientY; fab.__dragged=false; }, {passive:false});
+      document.addEventListener('touchmove', onMove, {passive:false});
+      document.addEventListener('touchend', function(ev){ var t=ev.changedTouches&&ev.changedTouches[0];
+        onUp(t? {clientX:t.clientX, clientY:t.clientY} : null); });
+    }
   }catch(e){}
 }
 function calcPaint(){
@@ -4772,7 +4799,8 @@ function calcPaint(){
         if(CALC.open){ CALC.cur='0'; CALC.acc=null; CALC.op=null; CALC.fresh=true; } calcPaint(); });
       calcDragWire(fab);
     }
-    calcPlace(fab);
+    // never reposition mid-drag - that was the magnet pulling it back to the corner
+    if(!CALC_DRAGGING) calcPlace(fab);
     var pan=document.getElementById('calcPanel');
     if(!CALC.open){ if(pan) pan.remove(); fab.classList.remove('on'); return; }
     fab.classList.add('on');
@@ -7445,6 +7473,11 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.04e', date:'2026-09-04', title:'The calculator button drags properly now', items:[
+    'It could get stuck against a corner and pull itself back the moment you let go, or while you were still dragging.',
+    'The card redraws constantly, and each redraw was putting the button back where it was saved \u2014 mid-drag. It also stopped following your finger the instant the finger left the button itself.',
+    'Drag it anywhere now; it follows and stays where you drop it.'
+  ], bulk:'You were right, it was magnetic. Two mistakes of mine from a couple of builds ago. I redraw the screen constantly, and every redraw was snapping the button back to its saved spot \u2014 including while you were still dragging it. And it only followed your finger while your finger was still on it, which is 46 pixels, so it lost you immediately. Drag it wherever you like now.'},
   {build:'2026.09.04d', date:'2026-09-04', title:'Send a report actually sends now', items:[
     'Share, Email it, Text it and Copy did nothing when the card is running from your home screen. Email and Text used a kind of link an installed app ignores, and Share and Copy were quietly working but showing their confirmation underneath the panel you were looking at.',
     'All four now hand off properly, every one of them puts the report on your clipboard as well, and each button tells you what it did.'
@@ -12525,7 +12558,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c197';
+const BUILD = 'c198';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
