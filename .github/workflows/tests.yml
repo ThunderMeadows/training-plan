@@ -67,9 +67,24 @@ jobs:
           path: tests/node_modules
           key: deadstop-modules-${{ runner.os }}-node22-${{ hashFiles('tests/package.json') }}
 
+      # No --nodedir here. That flag was for the sandbox this suite was written in, where the
+      # node header download is blocked and the headers live at /usr/include/node. On a GitHub
+      # runner node comes from setup-node's tool cache, /usr has no node headers, and the download
+      # is allowed - so --nodedir=/usr points node-gyp at nothing and canvas fails to build in
+      # seconds. Plain npm install uses a prebuilt canvas when one exists for this node line and
+      # builds from source (with the apt libraries above) when it does not.
       - name: Install
         working-directory: tests
-        run: npm install --no-audit --no-fund --build-from-source --nodedir=/usr
+        run: npm install --no-audit --no-fund
+
+      # Prove the two native pieces actually loaded before spending four minutes on the suite,
+      # and put the versions in the log so a failure here reads as what it is.
+      - name: Check the toolchain
+        working-directory: tests
+        run: |
+          node -v && npm -v
+          node -e "const {createCanvas}=require('canvas'); const c=createCanvas(8,8); c.getContext('2d').fillRect(0,0,8,8); console.log('canvas', require('canvas/package.json').version, 'native OK,', c.toBuffer().length, 'bytes')"
+          node -e "require('jsdom'); console.log('jsdom', require('jsdom/package.json').version, 'OK')"
 
       # No card path is passed on purpose: run.js discovers index.html one level up, so this keeps
       # working whether the card sits at the repo root or in a folder beside tests/. If it finds
