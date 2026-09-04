@@ -1,0 +1,86 @@
+name: Deadstop card tests
+
+# He deploys from a phone, through GitHub's web upload. That upload IS a commit, so this runs on
+# it automatically and the commit gets a green tick or a red cross he can see from the Actions
+# tab without a laptop. The point is that a build can no longer ship green against a suite that
+# never ran - which has already happened once, when deadsweep was declared in the runner but was
+# not in the repo.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22 and canvas built from source, matching the environment the suite was written and
+      # verified against. Prebuilt canvas binaries do not cover every node line, and a silently
+      # different canvas is worse than a slow install.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Native libraries canvas needs
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
+      # Rebuilding canvas on every push wastes about a minute. The key is the dependency list, so
+      # the cache is thrown away the moment those change.
+      - name: Cache installed modules
+        uses: actions/cache@v4
+        with:
+          path: tests/node_modules
+          key: deadstop-modules-${{ runner.os }}-node22-${{ hashFiles('tests/package.json') }}
+
+      - name: Install
+        working-directory: tests
+        run: npm install --no-audit --no-fund --build-from-source --nodedir=/usr
+
+      # No card path is passed on purpose: run.js discovers index.html one level up, so this keeps
+      # working whether the card sits at the repo root or in a folder beside tests/. If it finds
+      # nothing it exits 2 and says so, rather than passing an empty run.
+      # Runners have several cores, unlike the box this was tuned on, so -j is raised.
+      - name: Full suite
+        id: suite
+        working-directory: tests
+        run: |
+          set -o pipefail
+          node run.js --all -j 6 2>&1 | tee /tmp/suite.log
+
+      # Written whether the suite passed or failed, so the result is readable on a phone without
+      # opening the raw log.
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Deadstop card tests"
+            echo ""
+            if grep -q "ALL CHECKS PASSED" /tmp/suite.log; then
+              echo "**ALL CHECKS PASSED**"
+            else
+              echo "**FAILED — do not deploy**"
+              echo ""
+              echo '```'
+              grep -E "^  FAIL|MANIFEST|FAILING CHECK" /tmp/suite.log | head -40 || true
+              echo '```'
+            fi
+            echo ""
+            echo '```'
+            grep -E "FULL SUITE|ALL CHECKS PASSED|FAILING CHECK" /tmp/suite.log | head -5 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-log
+          path: /tmp/suite.log
+          retention-days: 14
