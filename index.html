@@ -7473,6 +7473,11 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.04f', date:'2026-09-04', title:'The card now counts how often it is opened', items:[
+    'So we can tell whether anyone is actually using Deadstop, the card counts opens. It is anonymous: no cookie, no fingerprint, no following you across other sites, and no way to tell one person from another.',
+    'It carries the page you opened and nothing else \u2014 not a lift, not a weight, not a name. Your training still never leaves your phone.',
+    'Terms sections 4 and 6 have been updated to say this plainly. It does not work offline, and if your browser blocks it the card works exactly the same.'
+  ], bulk:'Something changed that you deserve to hear about directly. The card now counts how many times it gets opened. That is all it counts \u2014 a number, so we know whether anyone out there is training with this thing. It is anonymous: no cookie, nothing that follows you around, no way to tell you apart from anyone else, and not one gram of your training goes with it. Your log has never left your phone and it still has not. The Terms used to say there was no counting of any kind in this card; that sentence was true yesterday and would have been a lie today, so it has been rewritten rather than left to rot. Sections 4 and 6 if you want to read it.'},
   {build:'2026.09.04e', date:'2026-09-04', title:'The calculator button drags properly now', items:[
     'It could get stuck against a corner and pull itself back the moment you let go, or while you were still dragging.',
     'The card redraws constantly, and each redraw was putting the button back where it was saved \u2014 mid-drag. It also stopped following your finger the instant the finger left the button itself.',
@@ -9245,8 +9250,12 @@ function termsHTML(){
 
    +'<h3>4 \u00b7 Your log stays on your phone</h3>'
    +'<p>There is no account and no sign-in. Your sessions, numbers and history are stored by your '
-   +'browser on your own device. We do not transmit them, we cannot see them, and there is no '
-   +'analytics or tracking in this card.</p>'
+   +'browser on your own device. We do not transmit them and we cannot see them.</p>'
+   +'<p>The card does count how many times it is opened, so we know whether anyone is using it. '
+   +'That count is anonymous: no cookie, no fingerprint, no tracking you across other sites, and '
+   +'no way to tell one person from another. It carries the page you opened and nothing else \u2014 '
+   +'not a lift, not a weight, not a name. It is handled by Cloudflare (section 6) and it does not '
+   +'work offline, so it undercounts. If your browser blocks it, the card works exactly the same.</p>'
    +'<p>One caveat worth knowing: because your data lives in browser storage, clearing your '
    +'browsing data or site data will delete your training history \u2014 export it first if you '
    +'want to keep it. Services the card touches are listed in section 6.</p>'
@@ -9255,7 +9264,7 @@ function termsHTML(){
    +'<p>Some state laws \u2014 Washington\u2019s My Health My Data Act among them \u2014 give people rights over health data that apps collect about them. Those laws turn on collection. This card does not collect your health data: it is not sent to us, to any server, or to anyone else, so there is nothing for us to share, sell, or hand over. Your data is on your device, under your control, and you delete it by clearing this site\u2019s data or by uninstalling the card.</p>'
 
    +'<h3>6 \u00b7 Other services involved</h3>'
-   +'<p>The card is served as a static page from GitHub Pages, so GitHub receives your IP address when your browser loads it \u2014 the same as visiting any website. Exercise how-to videos are embedded from YouTube in privacy-enhanced mode; if you play one, YouTube receives your IP address. Each of those companies operates under its own terms and privacy policy. Nothing else is involved, and no third party ever receives your training data.</p>'
+   +'<p>The card is served as a static page from GitHub Pages, so GitHub receives your IP address when your browser loads it \u2014 the same as visiting any website. Exercise how-to videos are embedded from YouTube in privacy-enhanced mode; if you play one, YouTube receives your IP address. The anonymous open-count described in section 4 is handled by Cloudflare Web Analytics, which receives your IP address to count the visit and, by its own account, does not track individual visitors or use cookies. Each of those companies operates under its own terms and privacy policy. Nothing else is involved, and no third party ever receives your training data.</p>'
 
    +'<h3>7 \u00b7 The card itself</h3>'
    +'<p>The Deadstop name, the card and its contents belong to us. [INTELLECTUAL PROPERTY / LICENSE GRANT \u2014 counsel to supply. Decide deliberately: the card is a readable HTML file on a public host and can be copied. Reserve rights, or license it openly on purpose.]</p>'
@@ -12558,7 +12567,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c198';
+const BUILD = 'c199';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -19116,5 +19125,11 @@ function ONB_build(){
 }
 
 </script>
+<!-- Cloudflare Web Analytics. Counts anonymous page opens so we know the card is being used.
+     Cookie-free, no fingerprinting, no cross-site tracking, and it never sees a single lift -
+     the token below is the whole payload and it is public by design. Disclosed in Terms s4 and
+     listed as a service in s6. Offline it simply fails to load, which is why the number is a
+     floor and not the truth. -->
+<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2eeb762c8168428baea7a63f3f0f60b3"}'></script>
 </body>
 </html>
