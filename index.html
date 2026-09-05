@@ -219,6 +219,10 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
   color:var(--chalk);font-weight:800;font-size:14px;cursor:pointer;text-align:center;font-family:inherit;}
 .savelog{margin-top:10px;padding:15px;border-radius:var(--r-sm);border:2px solid var(--line);
   background:var(--panel);color:var(--chalk);font-weight:800;font-size:14px;text-align:center;cursor:pointer;}
+/* nothing has been trained yet: the button stays present and still answers a tap, it just
+   does not look like the thing you are meant to press. Dashed, not dimmed - a low-contrast
+   label would fail the card's own contrast floor. */
+.savelog.nowork{border-style:dashed;color:var(--dim);}
 
 /* ---------- deload / banners ---------- */
 .deload-banner{display:none;margin:12px 0 0;padding:14px 16px;border:2px dashed var(--amber);
@@ -7421,6 +7425,11 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.05b', date:'2026-09-05', title:'An empty day cannot be filed by mistake', items:[
+    'Save session to log could be tapped on a day you had not trained yet. It filed an empty session, closed the day, counted it toward your block and moved your split on past it.',
+    'It will not do that now. Until you have logged a set, done your cardio or finished a finisher, the button says so instead of filing nothing.',
+    'And if you ever delete a log, the day it belonged to opens back up properly - deleting used to leave the day locked with nothing to explain why.'
+  ], bulk:'Someone tapped Save session to log on a day they had not trained yet, and I filed it. Worse, I then treated that empty day as a session you had done: I closed it, counted it toward your block and moved your split along. That is my fault, not theirs. From now on, if there is nothing logged - no set, no cardio, no finisher - the button tells you so and files nothing. And if you delete a log, the day it came from opens up again the way it should. It used to stay locked with no explanation, which I imagine was alarming.'},
   {build:'2026.09.05a', date:'2026-09-05', title:'Kilos you can actually load', items:[
     'In kg the weight on each set button could show a long decimal \u2014 176.3698 \u2014 which was the stored figure leaking through unconverted.',
     'Every kg weight is now a plate number: from 10 kg up it sits on the 2.5 kg grid, so 62.5 and 80, never 45.5 or 61. Below 10 kg it moves in halves for light dumbbells. Your bodyweight keeps its one decimal on purpose.',
@@ -12441,6 +12450,24 @@ function sessionPct(){
   for(var i=0;i<m;i++){ if(!exCounts(i)) continue; t++; if(exDone(i)) n++; }
   return {done:n, total:t};
 }
+// ---- a session with nothing in it is not a session -------------------------
+// FIELD 2026-09-05: "I accidentally selected save session to log and it logged that day that is
+// empty." One tap banked a day nobody trained, and the damage was not the log entry - it was
+// everything downstream that keys off sessionLogged(), which only asks whether a log KEY exists:
+// the split advanced past the slot, blockDoneCheck() would count it toward Block complete, the
+// streak counted it, and the day locked. Deleting the log did not put any of that back.
+// Work is a completed set, cardio that actually ran, or a finisher. Notes alone are not
+// training - they keep sitting in S.notes, so nothing is lost by refusing the save.
+// This fails OPEN on purpose: if the check itself throws, the athlete's save goes through.
+// Refusing to file real work would be far worse than filing an empty day.
+function sessionHasWork(){
+  try{
+    var p=sessionPct(); if(p.done>0) return true;
+    if(S.cardio && (S.cardio.on || (S.cardio.tacc||0)>0)) return true;
+    if(S.fin && S.fin.done) return true;
+    return false;
+  }catch(e){ return true; }
+}
 
 // ---- the deck header: progress dots that pull open ----
 function deckHeadHTML(){
@@ -12538,7 +12565,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c204';
+const BUILD = 'c205';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -14354,6 +14381,15 @@ async function refreshLogs(){
   catch(e){ logKeys=[]; }
 }
 async function saveSessionLog(quiet){
+  // FIELD 2026-09-05. Nothing done, nothing to file. Checked FIRST - ahead of every engine pass
+  // and the write - because the passes below read the session and the write locks the day.
+  // One guard here covers every caller: the button, the debrief, the finisher, the wrap-up
+  // and Copy report, on the athlete's own card and on a coached athlete's card alike, since
+  // they all come through this one function.
+  if(!sessionHasWork()){
+    if(!quiet) alertToast('Nothing logged yet \u2014 this day stays open until you train it', 4000);
+    return false;
+  }
   try{ updateE1RM(); recordPerf(); recordHistory(); }catch(e){ oops("saveSessionLog",e); }
   try{ autoCalibrate(); }catch(e){ oops("saveSessionLog",e); }
   if(!storageOK){ if(!quiet) alertToast('Storage unavailable on this device'); return false; }
@@ -14420,6 +14456,22 @@ logCache[k]=JSON.parse(_v); }catch(e){ continue; } }
 }
 async function deleteLog(k){
   try{ await stDel(k); delete logCache[k]; if(logOpen===k) logOpen=null;
+    // FIELD 2026-09-05: deleting a log left the day LOCKED. The lock and the debrief flag are
+    // written by the save and were never cleared here, so an athlete who deleted a mistaken
+    // entry was left on a locked, empty day with nothing on screen to explain it - and
+    // canRePass() said no, because there was no longer anything to repeat. Removing the log
+    // removes what the log DID. Set states are deliberately kept: if the delete was itself
+    // the mistake, the work is still on the card and can be saved again.
+    try{
+      var m=String(k).match(/(\d{4}-\d{2}-\d{2})-([A-Za-z]+)-W(\d+)B(\d+)$/);
+      if(m){
+        var dk=(+m[4])+'|'+(+m[3])+'|'+m[2];
+        if(S.locked) delete S.locked[dk];
+        if(S.dbf) delete S.dbf[dk];
+        if(S.debriefDone===dk) S.debriefDone=null;
+        save();
+      }
+    }catch(e){ oops('deleteLog',e); }
     await refreshLogs(); render(); alertToast('Log deleted'); }catch(e){ alertToast('Delete failed'); }
 }
 var __toastT=null;
@@ -15126,7 +15178,9 @@ function renderInner(){
   h+='<div class="block"><h3 style="margin:0 0 8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700">Session logs <span class="stchip '+(storageOK===true?'ok':storageOK===false?'bad':'')+'">'
     +(storageOK===true?'Storage \u2713':storageOK===false?'Storage unavailable':'checking\u2026')+'</span></h3>'
     +streakHTML()
-    +'<div class="savelog" id="saveLog">Save session to log</div>'
+    +'<div class="savelog'+(sessionHasWork()? '':' nowork')+'" id="saveLog">Save session to log</div>'
+    +(sessionHasWork()? ''
+      : '<div class="hint" style="font-size:11px;color:var(--faint);margin-top:6px">Nothing logged yet \u2014 log a set, cardio or a finisher and this opens up.</div>')
     +'<div class="savelog lockfree" id="exportLogs">Export all logs</div>'
     +'';
   if(logKeys.length===0) h+='<div class="hint" style="font-size:11px;color:var(--faint);margin-top:6px">No saved sessions yet. Copying a report also saves it automatically.</div>';
