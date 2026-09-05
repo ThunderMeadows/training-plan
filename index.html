@@ -7425,6 +7425,11 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.05c', date:'2026-09-05', title:'The empty-day fix, actually finished', items:[
+    'The last update was supposed to stop an untrained day being filed by mistake, and it did not. What made a day count as trained was too loose: your cardio could vouch for it, and the cardio panel is one timer shared by every day that nothing reset overnight - so last session\u2019s cardio was still switched on and answered for a day you had not started.',
+    'The rule is simpler now. A session is your training day: at least one set of it done. Cardio and a finisher are things you add to a day, not what makes one.',
+    'The cardio panel also clears itself when the day rolls over, instead of showing you yesterday\u2019s minutes. Saved sessions are untouched - they keep the cardio that was logged with them.'
+  ], bulk:'I have to correct myself. Yesterday I told you an empty day could no longer be filed by mistake, and then it filed one anyway. The reason is that I was too generous about what counts as having trained: I let your cardio vouch for the day, and the cardio panel is one timer shared across every day that nothing was resetting overnight - so your last session\u2019s cardio was still sitting there switched on, telling me you had been in. The rule is simpler now, and it is the right one: a session is your training day, and one set of it done is what makes it real. Cardio and a finisher are things you add to a day, not the thing that makes one. The panel also clears itself overnight now, so it stops showing you yesterday. Nothing already saved has changed.'},
   {build:'2026.09.05b', date:'2026-09-05', title:'An empty day cannot be filed by mistake', items:[
     'Save session to log could be tapped on a day you had not trained yet. It filed an empty session, closed the day, counted it toward your block and moved your split on past it.',
     'It will not do that now. Until you have logged a set, done your cardio or finished a finisher, the button says so instead of filing nothing.',
@@ -12460,11 +12465,40 @@ function sessionPct(){
 // training - they keep sitting in S.notes, so nothing is lost by refusing the save.
 // This fails OPEN on purpose: if the check itself throws, the athlete's save goes through.
 // Refusing to file real work would be far worse than filing an empty day.
+// FIELD 2026-09-05, the SECOND report on this same button: c205 refused to bank an empty day
+// and it still banked one. The guard read S.cardio.on / S.cardio.tacc to decide whether cardio
+// counted as work - and the cardio widget is ONE GLOBAL timer with one config, by design (see
+// CARDIO, DAY-TRUE above). Nothing ever cleared it at the day roll, so yesterday's finished
+// cardio was still switched on this morning and answered "yes, there was work" for a day the
+// athlete had not touched.
+// The harness missed it because its "empty day" fixture ZEROED the cardio state - which is
+// exactly the state a real card does not have the morning after a session. The fixture, not the
+// card, decided what empty looked like.
+// So cardio now carries the day it was done on, and a stamp from another day is cleared at boot
+// rather than left on screen claiming to be today's.
+function cardioMark(){ try{ S.cardio=S.cardio||{}; S.cardio.dk=dayKey(); S.cardio.d=shiftDate(); }catch(e){} }
+// HIS CORRECTION 2026-09-05: "the athlete doesn't need to do cardio in order to complete and save
+// a log they just need to complete their training day whatever it consist of."
+// That is the rule, and it deletes this whole bug class rather than patching around it. A session
+// IS the training day. Cardio and the finisher are things added to a day, not what makes one -
+// the card programs no cardio-only session - so neither can vouch for a day on its own. Set
+// states are already stored per day cell (cyc|week|day), so nothing here can be answered by
+// yesterday, which is exactly what went wrong when cardio was allowed to answer.
+// Still fails OPEN: if the check throws, the save proceeds. Refusing to file real work would be
+// a far worse bug than the one being fixed.
 function sessionHasWork(){
   try{
-    var p=sessionPct(); if(p.done>0) return true;
-    if(S.cardio && (S.cardio.on || (S.cardio.tacc||0)>0)) return true;
-    if(S.fin && S.fin.done) return true;
+    // Any set of today's day that has been answered - hit, missed, a logged hold, anything that
+    // is no longer 'pend'. NOT sessionPct(), which counts finished EXERCISES: an athlete four
+    // sets into the first movement has plainly trained, and sessionPct() would still read zero
+    // and refuse their save. This is the same test recordHistory() uses to decide a movement
+    // happened, so the guard and the history agree on what "done" means.
+    var d=dayObj(); if(!d || !d.exercises) return true;
+    for(var i=0;i<d.exercises.length;i++){
+      var st=null; try{ st=S.data[exKey(i)]; }catch(e){}
+      if(!st || !st.sets) continue;
+      for(var j=0;j<st.sets.length;j++){ if(st.sets[j] && st.sets[j].st!=='pend') return true; }
+    }
     return false;
   }catch(e){ return true; }
 }
@@ -12565,7 +12599,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c205';
+const BUILD = 'c206';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -15892,7 +15926,7 @@ function wire(){
     ed.querySelectorAll('[data-grind]').forEach(b=>b.onclick=()=>{ s.g=!s.g; save(); render(); });
     const dn=ed.querySelector('[data-sdone]'); if(dn) dn.onclick=()=>{st.open=-1;save();render();};
   });
-  const ct=document.getElementById('cardioT'); if(ct) ct.onclick=()=>{S.cardio.on=!S.cardio.on;save();render();};
+  const ct=document.getElementById('cardioT'); if(ct) ct.onclick=()=>{S.cardio.on=!S.cardio.on; if(S.cardio.on) cardioMark(); save();render();};
   const cw=document.getElementById('cardioWrap'); if(cw) cw.ontoggle=()=>{ S.cardOpen=cw.open; save(); };
   document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{
     const d=+b.dataset.d;
@@ -15910,9 +15944,10 @@ function wire(){
   });
   const cg=document.getElementById('cardGo'); if(cg) cg.onclick=()=>{
     if(S.cardio.tstart){ S.cardio.tacc += Date.now()-S.cardio.tstart; S.cardio.tstart=null;
+      cardioMark();                       // time on the clock belongs to the day it was run
       recapAgain();                       // finished cardio: show them what they just did
     }
-    else { S.cardio.tstart=Date.now(); S.cardio.on=true; }
+    else { S.cardio.tstart=Date.now(); S.cardio.on=true; cardioMark(); }
     save(); render();
   };
   const cr=document.getElementById('cardReset'); if(cr) cr.onclick=()=>{ S.cardio.tstart=null; S.cardio.tacc=0; save(); render(); };
@@ -17016,7 +17051,7 @@ document.addEventListener('click',function(e){ const t=e.target; if(!t) return;
     save(); render(); return; }
   if(t.closest&&t.closest('[data-finlog]')){
     if(S.cardio.tstart){ S.cardio.tacc=(S.cardio.tacc||0)+(Date.now()-S.cardio.tstart); S.cardio.tstart=null; }
-    S.cardio.on=true; if(S.fin) S.fin.done=true;
+    S.cardio.on=true; cardioMark(); if(S.fin){ S.fin.done=true; S.fin.d=shiftDate(); }
     saveSessionLog(true); save(); render(); alertToast('Finisher logged. Good work.'); return; }
   if(t.closest&&t.closest('[data-finadj]')){
     // strip the page down to the cardio controls: no scrolling past the whole session to reach them
@@ -17071,7 +17106,7 @@ document.addEventListener('click',function(e){ const t=e.target; if(!t) return;
     if(k==='cardio'||k==='z2'){
       // the offer already chose the prescription — stage it, don't hand over a settings form
       var mins=(k==='z2')?10:((S.profile&&S.profile.goal)==='build'?15:20);
-      S.fin={min:mins, zone:'z2', done:false,
+      S.fin={min:mins, zone:'z2', done:false, d:shiftDate(),
         note:(k==='z2')? 'Easy walk. Blood flow only \u2014 this is recovery, not training.'
                        : 'Conversational pace \u2014 you can talk in full sentences, but would rather not.'};
       S.cardio.zone='z2'; S.cardio.min=mins;
@@ -17855,6 +17890,26 @@ load().then(async()=>{
     if(S.genPlan && S.genPlan.days && S.genPlan.days.length){ if(!_o0.done) _o0.done=true; }
     else if(!_o0.done){ _o0.step=0; _o0.ramp=null; _o0.skipPeek=false; }
   } }catch(e){}
+  // ---- cardio is today's tool, so it does not survive the day roll --------------------
+  // Runs BEFORE S.when is rolled forward on the next line, on purpose: until that happens,
+  // S.when.date still holds the session date the card was last used on, which is precisely the
+  // day any unstamped cardio was done on. That is the migration for state written before the
+  // stamp existed - no guessing, and no cardio wrongly attributed to today.
+  try{
+    if(S.cardio && (S.cardio.on || (S.cardio.tacc||0)>0 || S.cardio.tstart)){
+      if(!S.cardio.d) S.cardio.d=(S.when&&S.when.date)||shiftDate();
+      if(!S.cardio.dk) S.cardio.dk=dayKey();
+    }
+    if(S.fin && S.fin.done && !S.fin.d) S.fin.d=(S.when&&S.when.date)||shiftDate();
+    if(S.cardio && S.cardio.d && S.cardio.d!==shiftDate()){
+      // Clearing, not just ignoring. If the guard quietly discounted yesterday's cardio while
+      // the widget still showed "Done today" switched on, the screen and the button would
+      // contradict each other - and the report would carry yesterday's minutes into today.
+      S.cardio.on=false; S.cardio.tstart=null; S.cardio.tacc=0; S.cardio.d=null; S.cardio.dk=null;
+      save();
+    }
+    if(S.fin && S.fin.done && S.fin.d && S.fin.d!==shiftDate()){ S.fin=null; save(); }
+  }catch(e){ oops('cardioDayRoll',e); }
   if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs(); try{ syncToNext(); }catch(e){}
   try{ if(S._avaPick){ profEdit=true; S._avaPick=null; save(); } }catch(e){}
   try{ if(S.avaBig){ delete S.avaBig; save(); } }catch(e){}   // strip the legacy persisted viewer flag
