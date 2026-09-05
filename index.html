@@ -5605,6 +5605,15 @@ function lockGuard(ev){
        || t.closest('.lockfree')
        || t.closest('[data-blkgo]') || t.closest('[data-blkapply]') || t.closest('[data-blkhand]')
        || t.closest('[data-blkdismiss]') || t.closest('[data-blkearly]') || t.closest('[data-blkearlyno]')
+       // FIELD 2026-09-04: "Personal record prompts are also locked and they should not be on that
+       // list. Especially if that day's training is complete. No athlete should have to unlock the
+       // page to share their progress. That prompt isn't a threat."
+       // Exactly right, and the list proved him right twice over: the DISMISS control was exempt
+       // and the SHARE button next to it was not, because each was named one at a time. The whole
+       // prompt is exempt as a unit now - .prbar contains the records, the recap line, Share and
+       // dismiss - so a control added to it later is right without anyone remembering.
+       // This prompt exists BECAUSE the day is finished; it can never be a threat to the session.
+       || t.closest('.prbar')
        || t.closest('[data-prclose]') || t.closest('.pr-fx') || t.closest('.prdis')
        || t.closest('.hifive-wrap') || t.closest('[data-hifive]')
        || t.closest('.avabig-wrap')) return;   // the enlarged photo must always close
@@ -7412,6 +7421,10 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.04i', date:'2026-09-04', title:'Share your session without unlocking it', items:[
+    'On a finished day the record prompt was partly locked \u2014 you could dismiss it, but Share this session was dead.',
+    'That prompt only appears because the day IS finished. It is never a risk to the session, so none of it is locked now, and anything added to it later is covered automatically.'
+  ], bulk:'Someone pointed out that on a finished day you could dismiss the record prompt but not share it \u2014 you had to unlock the session first, to show off work you had already done. That was daft. That prompt only turns up because the day is complete; there is nothing left to protect it from. The whole thing is open now, Share included.'},
   {build:'2026.09.04h', date:'2026-09-04', title:'You can close what you open', items:[
     'On a finished session, or a day that has not come round yet, mail would open and then its close button did nothing \u2014 same for Clear, and for Terms & Privacy.',
     'Those live over the session, not in it, so the day-lock should never have touched them. It does not now, and neither will any panel added later.'
@@ -12515,7 +12528,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c201';
+const BUILD = 'c202';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
