@@ -5549,14 +5549,29 @@ function lockGuard(ev){
     // modal on a gated preview), the floating calculator, the storage and error bars,
     // and the boot ident's tap-to-skip. Locking any of these traps the athlete behind
     // a modal or silences a warning. Third bug in this family - hence one rule, on top.
-    if(t.closest('#grunHost')
-       || t.closest('#gbHost') || t.closest('#gbHelp')
-       || t.closest('#a2hsSheet') || t.closest('.calcfab') || t.closest('.calcpanel')
-       || t.closest('#errBar') || t.closest('.stbar') || t.closest('#bootSplash')
-       // the footer is deck NAVIGATION (prev / next exercise, jump to deck) - it moves the
-       // athlete's eyes, never their data. Reviewing a logged day and browsing a preview
-       // both NEED it; the lock matrix caught it dead in both states.
-       || t.closest('.footer')) return;
+    // FIELD-CAUGHT 2026-09-04, the FOURTH bug in this family: "The mail is locked. I'll open it
+    // then the close button is dead, so is the clear button on the bottom. Terms & conditions is
+    // also dead." The list that used to live here named nine overlays BY HAND - and missed
+    // #mailGate, #termsGate and #discGate, so on a logged or previewed day the athlete could open
+    // mail and then not close it. A hand-maintained list of "things that float over the session"
+    // will always be one entry behind the next overlay somebody adds. Same rot as the settings
+    // launcher list and the fill picker's name check.
+    //
+    // So: the principle instead of the list. Every overlay, sheet and gate the card opens is a
+    // BODY child sitting beside #app - mail, terms, the disclaimer, settings, the install sheet,
+    // the calculator, Bulk, the error and storage bars, the boot splash. The session being locked
+    // is #app and only #app. Anything outside it is not part of the day and is never locked.
+    var host=t.closest('body > *');
+    // A DETACHED target is exempt too. Found by overlaylock 2026-09-04: tapping "I understand" on
+    // the disclaimer fires a capture-phase listener that accepts and REMOVES the gate, so by the
+    // time this guard runs the target has no body ancestor at all and closest() returns null.
+    // Treating that as session content meant the guard swallowed the very tap that dismissed the
+    // overlay. Nothing that has already left the page can be part of the day being locked.
+    if(!host || host.id!=='app') return;
+    // the footer lives INSIDE #app, so it needs naming: it is deck NAVIGATION (prev / next
+    // exercise, jump to deck) - it moves the athlete's eyes, never their data. Reviewing a logged
+    // day and browsing a preview both NEED it; the lock matrix caught it dead in both states.
+    if(t.closest('.footer')) return;
     if(pv && !dayLocked()){
       // FUTURE PREVIEW: total lockdown. Only navigation off the page, the preview bar, and
       // overlays floating above the session (walkthrough, what's-new, report, enlarged photo)
@@ -7397,6 +7412,10 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.04h', date:'2026-09-04', title:'You can close what you open', items:[
+    'On a finished session, or a day that has not come round yet, mail would open and then its close button did nothing \u2014 same for Clear, and for Terms & Privacy.',
+    'Those live over the session, not in it, so the day-lock should never have touched them. It does not now, and neither will any panel added later.'
+  ], bulk:'Fixed something that must have been maddening. On a finished session, or a day that had not come round yet, you could open my mailbox and then not close it. Same with Terms. The lock that keeps a finished session read-only was reaching things that float on top of it, which it has no business doing. It knows the difference now, and it knows it by what a thing IS rather than by a list I kept forgetting to add to \u2014 so the next panel that gets built will be right without anyone remembering.'},
   {build:'2026.09.04g', date:'2026-09-04', title:'The calculator button stays put', items:[
     'Dragging it is gone. It now sits in one place, low on the right edge, clear of the bottom bar.',
     'It could get pinned against a corner, and while you were trying to move it the whole screen would follow your finger. Both of those were caused by the dragging, so the dragging is what went.',
@@ -12496,7 +12515,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c200';
+const BUILD = 'c201';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
