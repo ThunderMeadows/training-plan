@@ -5736,7 +5736,12 @@ async function resaveVisitedLog(){
     if(!key){ alertToast('No log found for this session'); return; }
     var old={}; try{ var _v=await stGet(key); old=_v? JSON.parse(_v):{}; }catch(e){}
     var snap={date:old.date||shiftDate(), time:old.time||'', day:S.day, week:S.week, report:report()};
+    // a document's corrections are written back into its shape. A log from before the shape
+    // existed is corrected the old way and stays shape-less: giving it one now would be built
+    // from today's plan, which is the exact thing this layer exists to stop.
+    try{ if(Array.isArray(old.shape) && old.shape.length) snap.shape=sessionShape(); }catch(e){}
     await stSet(key, JSON.stringify(snap));
+    _docMemo=null;
     delete logCache[key];
     dayLock(true);                                  // corrections made - the day closes again
     await refreshLogs(); render();
@@ -5784,6 +5789,20 @@ function reviewBarHTML(){
       +'<span class="rv-txt">Reviewing a finished session'+(dayLocked()? '' : ' \u2014 unlocked for corrections')+'</span>'
       +'<span class="rv-btn" data-backlive="1" role="button" tabindex="0">Back to today</span>'
       +'</div>';
+    // a session logged before v211 has no shape, so the movements below are rebuilt from
+    // today's program and may not be what was done. Say so, and put the banked report - the
+    // record of what actually happened - right beside it. Nothing is reconstructed.
+    try{
+      var vr=visitedLogRef();
+      if(vr && vr.c && !(Array.isArray(vr.c.shape) && vr.c.shape.length) && vr.c.report){
+        h+='<div class="block lockfree" style="border-color:var(--amber)">'
+          +'<div class="cue" style="padding:0 0 6px"><b>Logged before this version of the card.</b> '
+          +'The movements below are drawn from today\u2019s program, so if the program has changed since, they may not match what you did. '
+          +'This is the record of what actually happened:</div>'
+          +'<pre class="mono" style="white-space:pre-wrap;font-size:12px;line-height:1.5;margin:0;opacity:.9">'
+          +String(vr.c.report).replace(/</g,'&lt;')+'</pre></div>';
+      }
+    }catch(e){}
     if(!dayLocked())
       h+='<div class="lockbar lockfree" data-resave="1" role="button" tabindex="0" style="border-color:var(--green)"'
         +' aria-label="Write your corrections into this session\u2019s log">'
@@ -7537,6 +7556,22 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.06d', date:'2026-09-06', title:'Your finished sessions are now set in stone', items:[
+    'A session you had already logged could change on you when the program changed \u2014 an update that added a main lift to a day, a new max, a movement you removed later. The past day was being rebuilt from today\u2019s program every time you opened it, so it showed movements you never did and today\u2019s weights instead of the ones you lifted.',
+    'Fixed. From this version on, every session is saved exactly as you finished it \u2014 the movements in order, the weight you used, every set \u2014 and a finished session shows that and only that. Nothing that happens to the program afterwards can touch it.',
+    'Corrections still work: unlock a finished session, fix a set, write it into the log, and the fix stays.',
+    'Sessions you logged before this version were saved the old way. Those days now carry a plain note saying so, with the session report \u2014 the record of what you actually did \u2014 shown right beside them. Nothing is guessed.',
+    'Your next session, and every session ahead of you, still follow the program \u2014 that is the point of the program.'
+  ], bulk:'The past is yours now and nothing I do can rewrite it. Here is what was happening: when you opened a day you had already trained, I was rebuilding it from the program as it is TODAY \u2014 so if a main lift got added or a max moved, your finished session quietly changed to match. Movements you never did, weights you never lifted, wearing your real sets. That is not a record, that is a forgery, and I am sorry. From now on every session is saved the moment you finish it, exactly as you finished it, and a finished day shows that and only that. Fix a set and the fix stays. The days from before this update are marked, with your session report right beside them so the truth is one glance away. And tomorrow still follows the program \u2014 the future is the program\u2019s to change. The past is not.'},
+
+  {build:'2026.09.06c', date:'2026-09-06', title:'Editing a day no longer disturbs the sets you already logged', items:[
+    'If you added an exercise to a day, dragged it up the order, and later deleted it, the card was moving other movements\u2019 logged sets onto the wrong lines \u2014 and losing some of them.',
+    'It came from sets being tracked by their POSITION in the day. Delete something from the middle and everything below it shifted up a slot, taking someone else\u2019s sets with it. Only the week you were standing in got fixed up; every week you had already trained kept the old positions.',
+    'Fixed. Sets now follow the exercise they belong to, through every change \u2014 add, remove, restore, delete, drag \u2014 and across every week of the block.',
+    'Removing a movement no longer throws its history away either. It waits, and restoring the movement brings its logged sets back with it.',
+    'And \u201cHard sets per week\u201d on the Rate tab counts the work you actually did. Editing today\u2019s plan is not a claim about what happened three weeks ago \u2014 it was reading low because of this.'
+  ], bulk:'Your weekly work chart was lying to you and it was my fault. I track sets by where an exercise sits in the day, so when you deleted one out of the middle, everything below it slid up a slot and took the wrong sets with it \u2014 and I only tidied up the week you were standing in. Every week you had already trained kept the old layout. That is why your hard sets per week looked like it was sliding while you were adding weight. Sets now follow the exercise they belong to, everywhere, every week. Take a movement out and its history waits for it; put it back and the sets come home. And the chart counts what you did, not what your plan looks like today.'},
+
   {build:'2026.09.06b', date:'2026-09-06', title:'Bulk got funnier, and got a lot more to say', items:[
     'Bulk had four greetings on rotation, so if you train four days a week you had heard all of him inside a fortnight. He now has more than twenty greetings, twenty sign-offs, and a joke book of over two hundred gym jokes.',
     'Every letter that is not bad news now ends with the day\u2019s joke \u2014 and it suits the day, so leg day gets leg day jokes and a deload week gets deload jokes.',
@@ -10671,6 +10706,57 @@ function dayOrderNames(code){
   S.day=keep;
   return applyOrder(code,res.map(function(n){ return {name:n}; })).map(function(x){ return x.name; });
 }
+// ---- THE PARK: sets whose exercise has left the day -------------------------
+// FIELD 2026-09-06, from his own backup. His "hard sets per week" chart read 123 / 109 / 94
+// while his session reports said 120 / 137 / 91 - week 2 was short by 28 real sets. Day F of
+// week 2 held 26 logged sets in the report and NOTHING in the card's set state; day C was
+// missing exactly the six sets of the two hip machines he had added that week.
+//
+// Set state is keyed by an exercise's POSITION in the day. Every path that changed a day's
+// shape maintained those positions differently, and two of them maintained them wrongly:
+//   - deleting an added movement computed its slot from planDay().exercises.length, the RAW
+//     plan, while the day on screen has already had S.outs removed from it. One removal in
+//     that day and the arithmetic is off by one, so the delete-and-slide ran from the wrong
+//     slot and walked over the logged sets of whatever was actually there. That is day F.
+//   - it also only ever touched exKey(), which is the CURRENT week. Every past week kept its
+//     old positions while the day got shorter, so history silently misaligned by one.
+//   - removing a plan movement (S.outs) and restoring it touched no set data at all.
+// Set data is not just a chart: blockSuccess() reads these same slots to judge whether the
+// prescribed reps were hit, and that feeds max progression. A slot off by one credits one
+// movement's reps to another lift.
+//
+// Everything now goes through remapData, which maps by NAME across every week and block. What
+// no longer has a home is not deleted and never written over a neighbour - it is parked under
+// its movement's name, so restoring the movement brings its sets back, and the weekly counts
+// still know the work happened.
+var DPARK_MAX=600;
+function dparkAll(){ if(!S.dpark || typeof S.dpark!=='object' || Array.isArray(S.dpark)) S.dpark={}; return S.dpark; }
+function dparkKey(pre, name){ return pre+'\u0001'+name; }
+function dparkPut(pre, name, st){
+  try{ if(!name || !st) return;
+    var P=dparkAll(); P[dparkKey(pre,name)]=st;
+    var ks=Object.keys(P);
+    if(ks.length>DPARK_MAX) ks.slice(0, ks.length-DPARK_MAX).forEach(function(k){ delete P[k]; });
+  }catch(e){}
+}
+function dparkTake(pre, name){
+  try{ var P=dparkAll(), k=dparkKey(pre,name), v=P[k];
+    if(v){ delete P[k]; return v; }
+  }catch(e){}
+  return null;
+}
+// how many parked sets belong to this week - the work was done, the movement just left the day
+function dparkSets(pre){
+  var n=0;
+  try{ var P=dparkAll();
+    Object.keys(P).forEach(function(k){
+      if(k.indexOf(pre+'\u0001')!==0) return;
+      (P[k].sets||[]).forEach(function(s){ if(s && s.st!=='pend') n++; });
+    });
+  }catch(e){}
+  return n;
+}
+
 // move logged sets so they follow their exercise
 function remapData(code, oldNames, newNames, dropMissing){
   if(!S.data) return 0;
@@ -10688,10 +10774,35 @@ function remapData(code, oldNames, newNames, dropMissing){
     var items=buckets[pre], stash={};
     items.forEach(function(it){ stash[it.i]=S.data[it.k]; delete S.data[it.k]; });
     Object.keys(stash).forEach(function(oi){
-      if(to[oi]==null){ if(dropMissing) return; S.data[pre+'|'+oi]=stash[oi]; moved++; return; }
-      S.data[pre+'|'+to[oi]]=stash[oi]; moved++; });
+      var ni=to[oi];
+      if(ni==null){
+        // No home. The old branch wrote it back at its OLD index, where another movement has
+        // just landed - one exercise's sets on another exercise's line, which is worse than
+        // losing them. Park it under the name it belongs to instead.
+        if(!dropMissing) dparkPut(pre, oldNames[+oi], stash[oi]);
+        return;
+      }
+      S.data[pre+'|'+ni]=stash[oi]; moved++;
+    });
+    // a movement coming back gets its own sets back with it
+    newNames.forEach(function(nm, ni){
+      if(oldNames.indexOf(nm)>-1) return;              // it was already here
+      if(S.data[pre+'|'+ni]) return;                   // occupied - never overwrite
+      var back=dparkTake(pre, nm);
+      if(back){ S.data[pre+'|'+ni]=back; moved++; }
+    });
   });
   return moved;
+}
+// Every change to a day's shape goes through here, so no caller has to remember. It reads the
+// shape, lets the caller change it, then moves the set data of EVERY week to match.
+function dayReshape(code, mutate){
+  var oldNames=[], newNames=[];
+  try{ oldNames=dayOrderNames(code); }catch(e){}
+  var r=mutate();
+  try{ newNames=dayOrderNames(code); }catch(e){}
+  try{ if(oldNames.length||newNames.length) remapData(code, oldNames, newNames, false); }catch(e){}
+  return r;
 }
 
 // deleting an added movement really deletes it - and its logged sets go with it,
@@ -10705,7 +10816,9 @@ function deleteAdded(code,name){
   var o=outList(code), oi=o.indexOf(name); if(oi>-1) o.splice(oi,1);
   if(S.order&&S.order[code]) S.order[code]=S.order[code].filter(function(n){ return n!==name; });
   var newNames=dayOrderNames(code);
-  remapData(code, oldNames, newNames, true);
+  // was dropMissing:true - deleting a movement from the Plan tab erased every week's logged
+  // sets for it. Park them: the athlete edited a plan, they did not un-train a session.
+  remapData(code, oldNames, newNames, false);
   save(); render(); alertToast(name+' deleted');
 }
 function setOrder(code, newNames){
@@ -11794,9 +11907,13 @@ function libAdd(name, code){
     if(an && S.maxes && S.maxes[an.base]!=null){
       var step=(an.unit==='sled')?10:5;
       est={val:Math.max(step,Math.round(an.f*S.maxes[an.base]/step)*step)}; } }
-  custList(code).push({b:cyc(), w:S.week, cid:Date.now()+Math.floor(Math.random()*999), name:name,
-    load:(r[5]==='bw'?'BW':(est&&est.val!=null? est.val : 25)),
-    sets:d.sets, reps:d.reps, perHand:(r[5]==='perHand')});
+  // through dayReshape as well: a custom lands at the end of the base list, but S.order can
+  // place it anywhere, and anything it lands in front of has to take its sets with it.
+  dayReshape(code, function(){
+    custList(code).push({b:cyc(), w:S.week, cid:Date.now()+Math.floor(Math.random()*999), name:name,
+      load:(r[5]==='bw'?'BW':(est&&est.val!=null? est.val : 25)),
+      sets:d.sets, reps:d.reps, perHand:(r[5]==='perHand')});
+  });
   save(); render(); alertToast(name+' added to day '+code);
 }
 function wirePlan(){
@@ -13088,7 +13205,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v209';
+const BUILD = 'v211';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -13456,13 +13573,108 @@ function customsFor(code){
   if(!f || !f.c) return all;
   return all.filter(function(x){ return f.c.indexOf(x.cid)>-1; });
 }
-function isOut(name){ var f=frzGet(S.week, S.day);
+function isOut(name){
+  try{ var ref=docRef(); if(ref) return ref.shape.some(function(s){ return s.n===name && s.out; }); }catch(e){}
+  var f=frzGet(S.week, S.day);
   if(f && f.o) return f.o.indexOf(name)>-1;
   const o=(S.outs&&S.outs[S.day])||[]; return o.indexOf(name)>-1; }
 function dayObjRaw(){ const p=planDay();
   const cs=customsFor(p.code).map(c=>({name:c.name, sets:c.sets, reps:String(c.reps), load:String(c.load), loadNum:(isFinite(parseFloat(c.load))? parseFloat(c.load):null), rest:'1:30', rir:'1', perHand:!!c.perHand, custom:true, cid:c.cid}));
   return Object.assign({}, p, {exercises: p.exercises.concat(cs)}); }
-function dayObj(){ var d=dayObjRaw();
+// ===== A BANKED SESSION IS A DOCUMENT =====
+// His rule, 2026-09-06: "Make sure that all training in the past does not change due to
+// revisions of the application... The change edited past training when it should have left it
+// alone." What he saw: c203 made the barbell row the opener of every pull day, and every pull
+// session he had ALREADY LOGGED re-rendered with Barbell Row at the top - carrying the four sets
+// he had actually done on Cable Rows - and every movement below it shifted down one, wearing the
+// wrong sets and today's weights. His 20 Aug session showed "Barbell Row 4 sets @155" for a
+// movement he has never performed.
+//
+// The freeze above (S.froze) was built for this rule and only ever froze the athlete's own
+// additions and removals; the base plan, the order, the loads and the sets as performed were
+// all still rebuilt from the live program every time the day was opened. A build that edits
+// the program edits history.
+//
+// So a session now writes its SHAPE into its own log when it banks - the movements in order,
+// as performed, with the weight actually used and every set's result - and a finished session
+// renders from that shape and nothing else. Two rules the layer holds to:
+//   - it only ever applies to a FINISHED session being visited. The live session, previews of
+//     future sessions, and a session reopened for a repeat pass all keep the normal path.
+//   - a log written before this existed has no shape and is left exactly as it was, with a
+//     plain notice and the banked report beside it. Nothing about the past is invented.
+var _docMemo=null, _docBusy=false;
+function docRef(){
+  if(_docBusy) return null;                  // isVisiting -> nextSession -> dayObj -> here
+  try{
+    var k=[S.day, S.week, cyc(), (logKeys||[]).length, !!S.rePass, S.splitMode||'', (S.when&&S.when.date)||''].join('|');
+    if(_docMemo && _docMemo.k===k) return _docMemo.ref;
+    _docBusy=true;
+    var ref=null;
+    try{
+      if(isVisiting()){
+        var v=visitedLogRef();
+        if(v && v.c && Array.isArray(v.c.shape) && v.c.shape.length){
+          var suffix='-'+S.day+'-W'+S.week+'B'+cyc();
+          var key=(logKeys||[]).filter(function(x){ return x.endsWith(suffix); }).sort().pop();
+          if(key) ref={key:key, shape:v.c.shape};
+        }
+      }
+    }catch(e){ ref=null; }
+    _docBusy=false;
+    _docMemo={k:k, ref:ref};
+    return ref;
+  }catch(e){ _docBusy=false; return null; }
+}
+// the shape of the day on screen, as performed - taken at bank and at every correction
+function sessionShape(){
+  var out=[];
+  try{
+    var d=dayObj();
+    d.exercises.forEach(function(ex,i){
+      var st=S.data[exKey(i)]||{};
+      var sets=(st.sets||[]).map(function(x){ x=x||{};
+        return {st:x.st||'pend', reps:(x.reps!=null? x.reps:null), rir:(x.rir!=null? x.rir:null),
+                w:(x.w!=null? x.w:null), g:!!x.g, t:(x.t!=null? x.t:null), added:!!x.added}; });
+      var w=null; try{ w=curLoad(ex,st); }catch(e){}
+      var out0=false; try{ out0=isOut(ex.name); }catch(e){}
+      var rr='', rs=''; try{ rr=String(exReps(ex)); }catch(e){ rr=String(ex.reps||''); }
+      try{ rs=String(exRest(ex)||ex.rest||''); }catch(e){ rs=String(ex.rest||''); }
+      out.push({n:ex.name, sub:st.sub||null, r:rr, rir:String(ex.rir||''), rest:rs,
+                w:(typeof w==='number'? w:null), load:String(ex.load||''), ph:!!ex.perHand,
+                main:!!isMain(ex), out:out0, feel:(st.feel!=null? st.feel:null), sets:sets});
+    });
+  }catch(e){}
+  return out;
+}
+// the day, rebuilt from its shape - plain objects that every reader already understands
+function docExercises(shape){
+  return shape.map(function(s){
+    return {name:s.n, sets:(s.sets||[]).length, reps:s.r, rir:s.rir||'', rest:s.rest||'',
+            load:(s.w!=null? String(s.w) : (s.load||'')), loadNum:(s.w!=null? s.w : null),
+            perHand:!!s.ph, primary:!!s.main, doc:true, custom:false, subs:[]};
+  });
+}
+// set state for a document lives under its own keys and is built from the shape on first
+// visit. It carries the set results and the weight used; nothing about it comes from S.data's
+// position-keyed history, which is what drifted.
+function docMaterialize(ref){
+  try{
+    ref.shape.forEach(function(s,i){
+      var k='doc|'+ref.key+'|'+i;
+      if(S.data[k]) return;
+      S.data[k]={sets:(s.sets||[]).map(function(x){ return {st:x.st||'pend', reps:x.reps, rir:x.rir, w:x.w, g:!!x.g, t:x.t, added:!!x.added}; }),
+                 w:(s.w!=null? s.w:null), feel:(s.feel!=null? s.feel:null), open:-1, wopen:false, sub:s.sub||null};
+    });
+  }catch(e){}
+}
+function docDayObj(ref){
+  var p=planDay();
+  docMaterialize(ref);
+  return Object.assign({}, p, {exercises:docExercises(ref.shape), doc:true});
+}
+function dayObj(){
+  try{ var ref=docRef(); if(ref) return docDayObj(ref); }catch(e){}
+  var d=dayObjRaw();
   try{
     var ordered=applyOrder(d.code,d.exercises);
     var f=sessApply(ordered, d.code);
@@ -13661,9 +13873,11 @@ function sessApply(exs, code){
   return {exercises:out, sp:sp};
 }
 function cyc(){ return S.cycle||1; }
-function exKey(i){ return cyc()+'c|'+S.week+'|'+S.day+'|'+i; }
+function exKey(i){
+  try{ var ref=docRef(); if(ref) return 'doc|'+ref.key+'|'+i; }catch(e){}
+  return cyc()+'c|'+S.week+'|'+S.day+'|'+i; }
 function exState(i, ex){
-  const n = isDeload()? 2 : exSets(ex);
+  const n = (ex && ex.doc)? ex.sets : (isDeload()? 2 : exSets(ex));
   if(!S.data[exKey(i)]){
     S.data[exKey(i)] = { sets:Array.from({length:n},()=>({st:'pend',reps:null,rir:null})), w:null, feel:null, open:-1, wopen:false, sub:null };
   }
@@ -13775,7 +13989,8 @@ function bwSets(ex){
     return 2;                  // 40+ reps a set - two is already a serious amount of work
   }catch(e){ return null; }
 }
-function exSets(ex){ const g=goalDef();
+function exSets(ex){ if(ex && ex.doc) return ex.sets;   // a finished session is what it was
+  const g=goalDef();
   // Start prescribes two sets on purpose. The goal's accessory volume is for people who
   // asked for a goal - a beginner never did, and four sets is how you lose them in week two.
   if(isStartProgram()) return ex.sets||2;
@@ -14925,7 +15140,10 @@ async function saveSessionLog(quiet){
   // stashed against this log key first, so re-saving the SAME session doesn't lose them.
   const noteBefore=S.notes;
   if(!String(S.notes||'').trim() && S.noteStashKey===key && S.noteStash) S.notes=S.noteStash;
-  const snap={date:S.when.date, time:S.when.time, day:S.day, week:S.week, report:report()};
+  // the shape goes in beside the report: the report is for people, the shape is what the card
+  // itself renders this session from, forever, whatever the program becomes
+  var shape0=[]; try{ shape0=sessionShape(); }catch(e){ shape0=[]; }
+  const snap={date:S.when.date, time:S.when.time, day:S.day, week:S.week, report:report(), shape:shape0};
   try{
     // stSet returns FALSE when the write fails - a full device, most often - and this line
     // used to discard that answer and carry on to "Session saved". The athlete finished a
@@ -17033,11 +17251,21 @@ function absWeek(){ const s=new Date(PLAN.start+'T12:00:00'); const n=new Date(s
   return Math.max(1, Math.floor((n-s)/(7*86400000))+1); }
 function calCycle(){ return Math.floor((absWeek()-1)/PLAN.weeks)+1; }
 function blockWeek(){ return ((absWeek()-1)%PLAN.weeks)+1; }
+// Both counts include PARKED sets. "Hard sets per week" is a record of work that was done,
+// and editing today's plan is not a claim about what happened three weeks ago - which is
+// exactly what his chart was reporting when it showed week 2 at 109 against a session report
+// of 137.
 function cycleSets(c){ let n=0; const pre=c+'c|';
   Object.keys(S.data).forEach(k=>{ if(k.indexOf(pre)===0) (S.data[k].sets||[]).forEach(s=>{ if(s.st!=='pend') n++; }); });
+  try{ const P=dparkAll();
+    Object.keys(P).forEach(k=>{ if(k.indexOf(pre)!==0) return;
+      (P[k].sets||[]).forEach(s=>{ if(s && s.st!=='pend') n++; }); }); }catch(e){}
   return n; }
 function weekSets(c,w){ let n=0; const pre=c+'c|'+w+'|';
   Object.keys(S.data).forEach(k=>{ if(k.indexOf(pre)===0) (S.data[k].sets||[]).forEach(s=>{ if(s.st!=='pend') n++; }); });
+  try{ const P=dparkAll();
+    Object.keys(P).forEach(k=>{ if(k.indexOf(pre)!==0) return;
+      (P[k].sets||[]).forEach(s=>{ if(s && s.st!=='pend') n++; }); }); }catch(e){}
   return n; }
 function pruneCycles(keep){ const floor=cyc()-(keep||2)+1;
   Object.keys(S.data).forEach(k=>{ const m=k.match(/^(\d+)c\|/); if(m && +m[1]<floor) delete S.data[k]; }); }
@@ -17470,23 +17698,32 @@ document.addEventListener('click',function(e){ const t=e.target; if(!t) return;
   if(xo!=null){ const i=+xo; const d=dayObj(); const ex=d.exercises[i]; if(!ex) return;
     const k='exout:'+S.day+':'+i;
     if(armDel===k){ armDel=null;
-      if(ex.custom){ const cs=S.customs[S.day]||[]; const ci=cs.findIndex(c=>c.cid===ex.cid);
-        if(ci>-1){ cs.splice(ci,1);
-          const base=planDay().exercises.length;
-          delete S.data[exKey(base+ci)];
-          for(let j=base+ci+1;j<=base+cs.length;j++){ if(S.data[exKey(j)]){ S.data[exKey(j-1)]=S.data[exKey(j)]; delete S.data[exKey(j)]; } }
-        }
+      // AUDIT 2026-09-06: this whole branch used to do its own slot arithmetic off the RAW plan
+      // length and then slide keys around by hand, for the current week only. It was off by one
+      // in any day that also had a movement removed, and it destroyed 26 of his logged sets on
+      // one day alone. dayReshape moves the set data of every week by name instead.
+      const dayCode=S.day;
+      if(ex.custom){ dayReshape(dayCode, function(){
+          const cs=S.customs[dayCode]||[]; const ci=cs.findIndex(c=>c.cid===ex.cid);
+          if(ci>-1) cs.splice(ci,1);
+        });
       } else { if(!S.outs[S.day]) S.outs[S.day]=[];
         // FIELD-CAUGHT 2026-09-02: outStamp() was called here and defined NOWHERE - a phantom
         // from an abandoned "when was this benched" idea. It threw between the push and the
         // save, so removing a movement looked like it worked and was never persisted.
         // Nothing reads a stamp, so the call goes; S.outs is the whole feature.
-        if(S.outs[S.day].indexOf(ex.name)<0){ S.outs[S.day].push(ex.name); } }
+        // and removing a PLAN movement used to touch no set data at all, so every position
+        // after it shifted by one in every week that had already been logged.
+        dayReshape(S.day, function(){
+          if(S.outs[S.day].indexOf(ex.name)<0) S.outs[S.day].push(ex.name); }); }
       save(); render();
     } else arm(k);
     return; }
   const rs=t.getAttribute&&t.getAttribute('data-restore');
-  if(rs){ const o=S.outs[S.day]||[]; const ix=o.indexOf(rs); if(ix>-1){ o.splice(ix,1); save(); render(); } return; }
+  if(rs){ const o=S.outs[S.day]||[]; const ix=o.indexOf(rs);
+    // restoring shifts every later position back again, and the movement's own parked sets
+    // come home with it. Neither happened before: restore just spliced and re-rendered.
+    if(ix>-1){ dayReshape(S.day, function(){ o.splice(ix,1); }); save(); render(); } return; }
   var wob=t.closest&&t.closest('[data-wuopen]');
   if(wob){ var wi=+wob.getAttribute('data-wuopen'); WU.open=(WU.open===wi)?null:wi; render(); return; }
   if(t.closest&&t.closest('[data-nextgo]')){ var _nx=nextSession(); if(_nx){ S.day=_nx.code; S.week=_nx.week; save(); render(); } return; }
