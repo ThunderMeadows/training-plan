@@ -6903,7 +6903,22 @@ function adStalled(){
   var out=[];
   try{
     Object.keys(S.e1rmH||{}).forEach(function(k){
-      var h=(S.e1rmH[k]||[]).slice(-6);
+      // FIELD 2026-09-05, his overhead press: 181 -> 162 -> 154 across three sessions he
+      // completed as written, and the rule cut his max 150 -> 140. Nothing had declined. Heavy
+      // days press EIGHTS and volume days press TENS, and a ten-rep set estimates lower off the
+      // same strength by arithmetic alone: 135x8 @RIR2 = 181, 110x10 @RIR2 = 162, 105x10 = 154.
+      // So every time a volume day followed a heavy day the series looked like it was falling.
+      // The file already knew this - "volume days do not set maxes" sits above E1_MAXREPS - but
+      // that gate is reps>10 and his volume day prescribes exactly 10, one rep too generous to
+      // catch his own program.
+      // Narrowing the gate would not have fixed it: a five-rep day and an eight-rep day mix the
+      // same way. The comparison is what was wrong, so points are now compared only against
+      // points from the SAME rep target. Untagged points - written before the tag existed -
+      // cannot be placed in a bucket and are not judged at all: no evidence, no cut.
+      var all=S.e1rmH[k]||[];
+      var last=all[all.length-1];
+      if(!last || last.n==null) return;
+      var h=all.filter(function(x){ return x.n===last.n; }).slice(-6);
       if(h.length<AD_STALL_MIN_SESSIONS) return;
       var last=h[h.length-1].v, prev=h[h.length-AD_STALL_MIN_SESSIONS].v;
       if(last>prev) return;                                  // still climbing, leave it alone
@@ -7307,10 +7322,16 @@ function adaptUndo(){
 //      bar 8% heavier by a repair pass;
 //   4. there is enough history to judge at all.
 // Everything else is left exactly where it is.
+// The repair pass is versioned, not a boolean. It was "once per card, ever" - and when the pass
+// itself was given better judgement (c207: a fall is only a fall when measured like against
+// like), every card that had already run the old one was permanently ineligible for the new one.
+// Jefe's card had spent the flag on 2026-09-04, so the improved pass could never reach the very
+// cut it was written to put back. Bump this whenever the pass's judgement changes.
+var AD_FIX_VER=2;
 function adRepairStalls(){
   try{
-    if(S.adFixStall) return 0;                       // once per card, ever
-    S.adFixStall=1;
+    if((S.adFixStall||0)>=AD_FIX_VER) return 0;      // once per card PER VERSION of this pass
+    S.adFixStall=AD_FIX_VER;
     var log=S.adLog||[], fixed=[];
     log.slice().forEach(function(a){
       if(!a || a.kind!=='stall' || !a.lift || !a.from || !a.to) return;
@@ -7320,9 +7341,30 @@ function adRepairStalls(){
       var win=h.slice(-AD_STALL_MIN_SESSIONS);
       var struggled=win.filter(function(x){ return x.c===0; }).length;
       if(struggled>=2) return;                                    // 2. the cut was earned
-      if(win[win.length-1].v < win[0].v) return;                  // 3. genuinely falling, leave it
+      // 3. genuinely falling - but only if "falling" is measured like against like. This gate
+      // was what kept his overhead press cut in place: 154 < 181 looked like decline and was
+      // really an eight-rep day followed by two ten-rep days. When the window cannot be built
+      // from one rep target, the fall is not evidence of anything and must not protect the cut;
+      // gate 2 above still holds the line for cuts that were actually earned by struggle.
+      var lw=win.filter(function(x){ return x.n!=null && x.n===win[win.length-1].n; });
+      if(lw.length>=AD_STALL_MIN_SESSIONS && lw[lw.length-1].v < lw[0].v) return;
+      // Could this restore actually be PROVEN? Only when the window is one rep target throughout;
+      // then a flat or rising line is real evidence the cut was wrong, and the number goes back
+      // as a standing max. On untagged history it is not evidence either way - the cut cannot be
+      // justified, but neither can the restore. Rather than choose which athlete to be wrong
+      // about, put the number back ON TRIAL: the card already has the machinery for a max that is
+      // believed but not yet demonstrated. Two missed or ground-out sessions and it steps back
+      // down, never below the number it was cut to, which is a load already trained.
+      var proven=(lw.length>=AD_STALL_MIN_SESSIONS);
       S.maxes[a.lift]=a.from;
-      fixed.push({lift:a.lift, from:a.to, to:a.from, d:a.d});
+      if(!proven){
+        try{
+          if(!S.mxProv) S.mxProv={};
+          S.mxProv[a.lift]={tested:a.from, from:a.to, floor:a.to, since:shiftDate(),
+                            start:a.from, src:'putback'};
+        }catch(e){ oops('adRepairProv',e); }
+      }
+      fixed.push({lift:a.lift, from:a.to, to:a.from, d:a.d, prov:!proven});
     });
     if(!fixed.length){ save(); return 0; }
     S.adLog=log.filter(function(a){
@@ -7425,6 +7467,12 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.05d', date:'2026-09-05', title:'Backed-off lifts put back \u2014 the card misread your rep scheme', items:[
+    'If a main lift was cut for \u201cthree sessions without progress\u201d while you were doing exactly what was asked, it has been put back, and the card will say so.',
+    'The reason: your heavy day presses eights and your volume day presses tens, and a ten-rep set estimates a lower one-rep max off the same strength \u2014 that is arithmetic, not weakness. The card was comparing a heavy day against a volume day and reading the difference as you going backwards.',
+    'It now compares like with like: sessions are only measured against other sessions with the same rep target. Nothing you logged has changed.',
+    'Where your history is too old to tell the two kinds of session apart, the weight comes back ON TRIAL: it is yours again now, and if it turns out not to hold, it steps back down \u2014 never below the number you were already training.'
+  ], bulk:'I owe you a correction and a number back. If I ever backed a lift off for "three sessions without progress" while you were hitting everything I asked for, I was wrong, and it is restored. Here is what I was doing: your heavy day presses eights and your volume day presses tens, and ten reps at the same effort always estimates a lower max than eight does. That is arithmetic, not you getting weaker. I was lining a heavy day up against a volume day and reading the gap as decline. From now on I only compare a session against other sessions with the same rep target. Where your history is too old for me to tell a heavy day from a volume day, I am giving the weight back on trial \u2014 it is yours now, and if it does not hold I will step it back down, never below what you were already training. Check your maxes and put weight back on the bar.'},
   {build:'2026.09.05c', date:'2026-09-05', title:'The empty-day fix, actually finished', items:[
     'The last update was supposed to stop an untrained day being filed by mistake, and it did not. What made a day count as trained was too loose: your cardio could vouch for it, and the cardio panel is one timer shared by every day that nothing reset overnight - so last session\u2019s cardio was still switched on and answered for a day you had not started.',
     'The rule is simpler now. A session is your training day: at least one set of it done. Cardio and a finisher are things you add to a day, not what makes one.',
@@ -12599,7 +12647,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c206';
+const BUILD = 'c207';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -14929,8 +14977,11 @@ function renderInner(){
            var H=pvSessions(mi.k),
                ok=H.filter(function(x){ return x.c===1; }).length,
                bad=H.filter(function(x){ return x.c===0; }).length;
-           return '<div class="cue" style="padding:6px 0 0;color:var(--amber)">On trial from your tested '
-             +WV(p.tested)+' '+uLbl()+' \u2014 '+ok+' of '+PV_OK+' clean sessions'
+           return '<div class="cue" style="padding:6px 0 0;color:var(--amber)">'
+             +(p.src==='putback'
+                ? 'Put back to '+WV(p.tested)+' '+uLbl()+' after a back-off I could not justify \u2014 on trial for now'
+                : 'On trial from your tested '+WV(p.tested)+' '+uLbl())
+             +' \u2014 '+ok+' of '+PV_OK+' clean sessions'
              +(bad? ', '+bad+' of '+PV_BAD+' missed or ground out' : '')
              +'. This lift will not climb while it is on trial. If it does not hold it steps back '
              +'to '+WV(p.floor)+' '+uLbl()+', which you have already trained.</div>'; })()
@@ -15214,7 +15265,7 @@ function renderInner(){
     +streakHTML()
     +'<div class="savelog'+(sessionHasWork()? '':' nowork')+'" id="saveLog">Save session to log</div>'
     +(sessionHasWork()? ''
-      : '<div class="hint" style="font-size:11px;color:var(--faint);margin-top:6px">Nothing logged yet \u2014 log a set, cardio or a finisher and this opens up.</div>')
+      : '<div class="hint" style="font-size:11px;color:var(--faint);margin-top:6px">Nothing logged yet \u2014 log a set of today\u2019s session and this opens up.</div>')
     +'<div class="savelog lockfree" id="exportLogs">Export all logs</div>'
     +'';
   if(logKeys.length===0) h+='<div class="hint" style="font-size:11px;color:var(--faint);margin-top:6px">No saved sessions yet. Copying a report also saves it automatically.</div>';
@@ -17285,7 +17336,10 @@ function updateE1RM(){
       if(!S.e1rmH[ex.maxKey]) S.e1rmH[ex.maxKey]=[];
       const hd=S.when.date||localDate(); const hArr=S.e1rmH[ex.maxKey];
       const hix=hArr.findIndex(x=>x.d===hd);
-      if(hix>-1){ if(e>hArr[hix].v){ hArr[hix].v=e; hArr[hix].r=rAdj; } hArr[hix].c=clean; } else { hArr.push({d:hd,v:e,r:rAdj,c:clean}); hArr.sort((a,b)=>a.d<b.d?-1:1); }
+      // FIELD 2026-09-05: every point carries the REP TARGET of the day it came from. Without
+      // it the history mixes session kinds and reads as decline whenever the kind changes - see
+      // adStalled(). n is the day's prescribed reps, which is what actually moves the estimate.
+      if(hix>-1){ if(e>hArr[hix].v){ hArr[hix].v=e; hArr[hix].r=rAdj; hArr[hix].n=tgt; } hArr[hix].c=clean; if(hArr[hix].n==null) hArr[hix].n=tgt; } else { hArr.push({d:hd,v:e,r:rAdj,c:clean,n:tgt}); hArr.sort((a,b)=>a.d<b.d?-1:1); }
       if(hArr.length>60) S.e1rmH[ex.maxKey]=hArr.slice(-60);
       touched[ex.maxKey]=1;
     });
