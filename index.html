@@ -4326,21 +4326,56 @@ function autoCalibrate(){
     });
     if(!changed.length) return null;
     applyMaxesToPlan();
-    S.acLog=(S.acLog||[]).concat([{d:shiftDate(), changed:changed}]).slice(-12);
+    var acd=shiftDate();
+    S.acLog=(S.acLog||[]).concat([{d:acd, changed:changed}]).slice(-12);
+    // AUDIT 2026-09-06: this is the biggest automatic move to a max in the card - up to 15% at
+    // once - and it was the only one with no way back. c188-c190 shipped per-item "put back" on
+    // the promise that any change the card made to a max can be undone on its own; calibration
+    // wrote to acLog, which nothing reverses. It goes in the same record as every other change.
+    S.adLog=(S.adLog||[]).concat(changed.map(function(c){
+      return {kind:'calib', lift:c.k, from:c.from, to:c.to, d:acd,
+              why:'your own logged sets estimate a '+(c.to>c.from?'higher':'lower')+' max \u2014 '
+                 +c.n+' sessions of evidence'};
+    })).slice(-30);
+    S.adNew=(S.adNew||0)+changed.length;
     save();
     return changed;
   }catch(e){ return null; }
 }
 // rebuild every weekly load in the generated plan from the revised maxes
+// AUDIT 2026-09-06: a generated plan was adopted on the strength of `days.length` alone. A plan
+// whose day lacked an `exercises` array passed that check, became PLAN, and the very first
+// dayObj() did `p.exercises.concat(...)` on undefined - a white screen at boot with no way back
+// in, on a card holding the athlete's whole history. This is the one failure class the card
+// must never have: it cannot be recovered from inside the card. Every adoption site now asks
+// this first. A plan that fails is left exactly where it is in S.genPlan (nothing of the
+// athlete's is deleted), it simply is not driven, and the starter block runs instead.
+function planUsable(p){
+  try{
+    if(!p || typeof p!=='object') return false;
+    if(!Array.isArray(p.days) || !p.days.length) return false;
+    if(!(p.weeks>0)) return false;
+    for(var i=0;i<p.days.length;i++){
+      var d=p.days[i];
+      if(!d || typeof d.code!=='string' || !d.code) return false;
+      if(!Array.isArray(d.exercises)) return false;
+      for(var j=0;j<d.exercises.length;j++){ var ex=d.exercises[j]; if(!ex || typeof ex.name!=='string') return false; }
+    }
+    return true;
+  }catch(e){ return false; }
+}
 function applyMaxesToPlan(){
   try{
-    if(!S.genPlan) return;
+    if(!S.genPlan || !planUsable(S.genPlan)) return;
     S.genPlan.maxes=Object.assign({}, S.maxes);
     S.genPlan.days.forEach(function(d){
       d.exercises.forEach(function(ex){
         if(ex.maxKey && ex.pct && S.maxes[ex.maxKey]){
           ex.wk=ex.pct.map(function(p){ return Math.max(45, Math.round(S.maxes[ex.maxKey]*p/5)*5); });
-          ex.loadNum=ex.wk[0]; ex.load=String(ex.wk[0]); ex.deload=ex.wk[5];
+          // AUDIT 2026-09-06: wk[5] hard-coded the sixth rung. Every generated block is six weeks
+          // so it is right today, but a restored or hand-edited plan with a shorter ladder wrote
+          // deload=undefined, and that value is what a deload week falls back to for its load.
+          ex.loadNum=ex.wk[0]; ex.load=String(ex.wk[0]); ex.deload=ex.wk[ex.wk.length-1];
         }
       });
     });
@@ -6662,7 +6697,7 @@ async function rosterSwitch(id){
     try{ PLAN=JSON.parse(JSON.stringify(PLAN_DEFAULT||PLAN)); }catch(e){}
     await load();                              // reads from curSKEY() -> their drawer
     // whatever they have generated is theirs; nobody else's plan may survive the switch
-    try{ PLAN=(S.genPlan && S.genPlan.days && S.genPlan.days.length)? S.genPlan
+    try{ PLAN=planUsable(S.genPlan)? S.genPlan
               : JSON.parse(JSON.stringify(PLAN_DEFAULT||PLAN)); }catch(e){}
     // stepping out of an athlete returns you to the screen the roster lives on, not to
     // whatever training day happened to be saved
@@ -7008,8 +7043,19 @@ var AD_RATE_CAP=0.015;         // never more than 1.5% of the training max per w
 function adRate(lift){
   try{
     var today=shiftDate();
-    var H=(S.e1rmH&&S.e1rmH[lift]||[]).filter(function(x){
+    var all=(S.e1rmH&&S.e1rmH[lift]||[]).filter(function(x){
       var a=adDays(x.d, today); return a>=0 && a<=AD_RATE_DAYS; });
+    // AUDIT 2026-09-06: this is the same fault the stall rule was field-caught on the day before,
+    // sitting in its sibling. The trend was least-squares fitted across every point in the window
+    // regardless of rep target, so a split that alternates a heavy day with a volume day feeds it
+    // a sawtooth. Identical, unchanging strength read as +1.7 lb a week or -1.7 depending only on
+    // which kind of day the 56-day window happened to end on; with a wide enough gap between the
+    // two kinds (5-rep day against a 12-rep day) it added 5 lb to a flat lift EVERY week, forever.
+    // Compare like with like: the most recent rep target only. Untagged points predate the tag and
+    // cannot be bucketed, so they are not judged at all - no evidence, no move.
+    var lastPt=all[all.length-1];
+    if(!lastPt || lastPt.n==null) return null;
+    var H=all.filter(function(x){ return x.n===lastPt.n; });
     if(H.length<AD_RATE_MIN_PTS) return null;
     // least squares on (weeks ago, estimate) - slope is lb per week
     var n=H.length, sx=0, sy=0, sxx=0, sxy=0;
@@ -7022,6 +7068,19 @@ function adRate(lift){
     return Math.round(slope*10)/10;                 // lb per week
   }catch(e){ oops('adRate',e); return null; }
 }
+// AUDIT 2026-09-06: autoCalibrate() runs on every bank and the rate pass runs weekly, and both
+// read the SAME estimate history. On a single bank a 300 lb squat went 300 -> 340 (calibration,
+// at its 15% cap) -> 345 (rate) - 45 lb off four logged sets, the second move paid for evidence
+// the first had already spent. One automatic writer per lift per week.
+function acMovedRecently(k){
+  try{
+    var today=shiftDate();
+    return (S.acLog||[]).some(function(e){
+      return adDays(e.d, today)<7 && (e.changed||[]).some(function(c){ return c.k===k; });
+    });
+  }catch(e){ return false; }
+}
+
 function adRateMove(lift){
   try{
     var cur=(S.maxes||{})[lift]; if(!cur) return null;
@@ -7150,9 +7209,17 @@ function pvJudge(){
       var ok =H.filter(function(x){ return x.c===1; }).length;
       if(bad>=PV_BAD){
         var cur=(S.maxes||{})[k]||0; if(!cur) return;
+        // AUDIT 2026-09-06: the floor is a floor, never a target. Clamping to it unconditionally
+        // meant a FAILING trial could put weight ON the bar - a max hand-lowered to 175 in
+        // Programming maxes, or cut by the layoff pass, was raised back up to its 200 floor as the
+        // penalty for two bad sessions, and the reason line read "comes back -25 lb". If the number
+        // is already at or under the weight this trial replaced there is nothing left to walk down
+        // to: the trial is simply over and the max is left where the athlete has it.
+        if(cur<=p.floor){ delete S.mxProv[k]; return; }
         var to=pvRound(cur*(1-PV_STEP));
         if(to>=cur) to=cur-pvUnit();                 // always move, even on a small number
         if(to<p.floor) to=p.floor;                   // never below what was already proven
+        if(to>=cur){ delete S.mxProv[k]; return; }   // nowhere left to step: end it, move nothing
         S.maxes[k]=to;
         acts.push({kind:'prov', lift:k, from:cur, to:to, d:today,
           why:'the tested max has not held \u2014 '+bad+' sessions with missed reps or a grind, so the working weight comes back '+WV(cur-to)+' '+uLbl()});
@@ -7225,6 +7292,7 @@ function adaptRun(force){
       Object.keys(S.maxes||{}).forEach(function(k){
         if(acts.some(function(a){ return a.lift===k; })) return;   // already handled this lift
         if(pvOn(k)) return;   // THE RAMP HOLD: you cannot test a number that is still moving
+        if(acMovedRecently(k)) return;   // calibration already spent this evidence - see above
         var mv=adRateMove(k); if(!mv) return;
         S.maxes[k]=mv.to;
         acts.push({kind:'rate', lift:k, from:mv.from, to:mv.to, rate:mv.rate, d:today,
@@ -7261,7 +7329,7 @@ function adaptRun(force){
 // that half works.
 function adUndoable(a){
   return !!a && !a.undone &&
-    (a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov'
+    (a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov'||a.kind==='calib'
      ||a.kind==='weak'||a.kind==='deload');
 }
 // FIELD/REVIEW 2026-09-03: undo used to reverse only the most recent PASS, so any change with
@@ -7277,7 +7345,7 @@ function adaptUndoOne(i){
   try{
     var log=S.adLog||[], a=log[i];
     if(!adUndoable(a)) return false;
-    if((a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov')
+    if((a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov'||a.kind==='calib')
        && S.maxes && a.from!=null && a.to!=null && S.maxes[a.lift]!=null){
       var cur=S.maxes[a.lift];
       S.maxes[a.lift] = (cur===a.to) ? a.from : (cur + (a.from - a.to));
@@ -7379,7 +7447,8 @@ function adRepairStalls(){
 function adFixedHTML(){
   try{
     var f=S.adFixed||[]; if(!f.length) return '';
-    var LN={squat:'Back Squat', bench:'Bench Press', dead:'Deadlift', ohp:'Overhead Press'};
+    var LN={squat:'Back Squat', bench:'Bench Press', dead:'Deadlift', ohp:'Overhead Press',
+            row:'Barbell Row'};
     return '<div class="block adapt"><h3>Put back \u2014 the card was wrong</h3>'
       +'<div class="cue" style="padding:0 0 6px">These were cut for \u201cthree sessions without '
       +'progress\u201d while you were doing exactly what the card asked. A rising-percentage block '
@@ -7399,13 +7468,14 @@ function adaptHTML(){
     // Was: only the batch sharing the newest date. Everything older sat in S.adLog and was never
     // drawn, so a change you disagreed with vanished from view the moment another pass ran - and
     // prov/provok had no row at all, which made every probation step from c184 invisible here.
-    var LN={squat:'Back Squat', bench:'Bench Press', dead:'Deadlift', ohp:'Overhead Press'};
+    var LN={squat:'Back Squat', bench:'Bench Press', dead:'Deadlift', ohp:'Overhead Press',
+            row:'Barbell Row'};
     var AD_SHOW=12;
     var order=[]; for(var q=log.length-1;q>=0 && order.length<AD_SHOW;q--) order.push(q);
     var lastD=null;
     var rows=order.map(function(i){
       var a=log[i], nm=esc(LN[a.lift]||a.lift||''), body='';
-      if(a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov')
+      if(a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov'||a.kind==='calib')
         body='<b>'+nm+'</b> '+WV(a.from)+' \u2192 '+WV(a.to)+' '+uLbl()+' \u2014 '+esc(a.why);
       else if(a.kind==='provok') body='<b>'+nm+'</b> \u2014 '+esc(a.why);
       else if(a.kind==='deload')  body='<b>Deload earned early</b> \u2014 '+esc(a.why);
@@ -7467,6 +7537,14 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.06a', date:'2026-09-06', title:'Your accessory weights stopped shrinking after every deload', items:[
+    'If your curls, rows, face pulls or Romanian deadlifts kept getting lighter block after block, that was the card, not you. Deload week is meant to be light \u2014 but the card was treating that light week as your new normal weight and building the next block from it.',
+    'Every block it did that again, so the weight kept sliding down even when you hit every rep asked of you. A 260 lb Romanian deadlift could read 180 one block later and 125 the block after that.',
+    'Fixed. Your deload week is still logged like any other day, but the weight the next block starts from is the last real working session \u2014 so you pick up where you left off and keep climbing.',
+    'Two more, both about the card adding weight it had not earned: a lift could gain 5 lb a week from nothing but a heavy day and a volume day sitting next to each other in the history, and a tested max that was NOT holding could put weight back ON the bar instead of taking it off. Both corrected.',
+    'And when the card revises a max from your own logged sets, that change now shows up in \u201cWhat the card changed\u201d with a Put it back button, like every other change it makes.'
+  ], bulk:'Owe you one, and this one has been quietly costing you weight. Deload week is supposed to be light \u2014 that is the point of it \u2014 but I was writing that light week down as your normal working weight and building the next block from it. Every block. Your accessories just slid downhill: a 260 Romanian deadlift reading 180 the next block, 125 after that, while you hit every rep I asked for. Fixed. Deload still gets logged, it just does not get to decide what you lift next block \u2014 your last real working session does. I also caught myself adding weight I had not earned twice over, and a failing tested max that came back UP instead of down. Both shut. And when I revise a number off your own sets, it now shows in What the card changed with a Put it back button.'},
+
   {build:'2026.09.05d', date:'2026-09-05', title:'Backed-off lifts put back \u2014 the card misread your rep scheme', items:[
     'If a main lift was cut for \u201cthree sessions without progress\u201d while you were doing exactly what was asked, it has been put back, and the card will say so.',
     'The reason: your heavy day presses eights and your volume day presses tens, and a ten-rep set estimates a lower one-rep max off the same strength \u2014 that is arithmetic, not weakness. The card was comparing a heavy day against a volume day and reading the difference as you going backwards.',
@@ -12647,7 +12725,9 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // BOTH histories. Personal Training-Card logs now live under their own prefix. Roster
 // athletes were never exposed: their keys carry an id segment the Session Card filters out.
 const TLOGP='tc-log:';
-const BUILD = 'c207';
+// Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
+// The number keeps counting - it is the same sequence, only the letter changed.
+const BUILD = 'v208';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -13644,7 +13724,10 @@ function accAnchor(ex){
   if(ex.maxKey) return null;                       // main lifts run off percentages
   const nm=ex.name;
   const LP=(S.lastPerf||{})[nm];
-  if(LP && LP.w!=null) return {val:LP.w, src:'logged', conf:'high'};
+  // AUDIT 2026-09-06: a stored zero or negative weight - a bodyweight movement logged with a
+  // number, a mangled restore - was taken as a real anchor. It scaled the ladder to nothing and
+  // the card prescribed the smallest weight the implement makes, 5 lb, labelled "logged".
+  if(LP && LP.w!=null && LP.w>0) return {val:LP.w, src:'logged', conf:'high'};
   const e=estAccessory(nm);
   if(!e) return null;
   return {val:e.val, src:'est', conf:e.conf, base:e.base};
@@ -16546,7 +16629,17 @@ function rateHTML(){
     +'one strong day cannot fake it, and one rough day cannot ruin it.</div>';
   return h;
 }
-function recordPerf(){ const d=dayObj(); if(!S.lastPerf) S.lastPerf={};
+function recordPerf(){
+  // AUDIT 2026-09-06. A deload week is not evidence about the working load. updateE1RM() already
+  // refuses to let a 40-50% week set a max - "a deload is not a strength test" - but the ACCESSORY
+  // anchor never got the same rule, and that anchor is what the whole accessory ladder is scaled
+  // from in accLoad(). So every deload re-based every accessory to its deload weight and the next
+  // block was built from there. Traced end to end: Romanian Deadlift ran 220 -> 260 across a block,
+  // deloaded to 155, and came back at 155; three blocks read 260 -> 180 -> 125 on an athlete who
+  // topped the rep range in every session. Hammer Curls went 25 -> 15 -> 10. The deload week is
+  // still logged like any other day; it just does not become the weight the next block starts from.
+  try{ if(isDeload() && PLAN && PLAN.weeks>1) return; }catch(e){}
+  const d=dayObj(); if(!S.lastPerf) S.lastPerf={};
   d.exercises.forEach((ex,i)=>{ const st=S.data[exKey(i)]; if(!st) return;
     const done=st.sets.filter(s=>s.st!=='pend'); if(!done.length) return;
     const nm=st.sub||ex.name; const numeric=st.sub? true: ex.loadNum!=null;
@@ -17244,7 +17337,14 @@ function startTick(){
 function firstInt(s,def){ const m=String(s==null?'':s).match(/\d+/); return m? +m[0]:def; }
 // Epley is only trustworthy on heavy, low-rep work taken near enough to failure.
 // A 4x10 @68% RIR-2 volume day is NOT a max test - feeding it in drags the estimate
-// far below true single-rep strength. E1_MAXREPS gates that out.
+// far below true single-rep strength.
+// AUDIT 2026-09-06: the line that used to end this comment - "E1_MAXREPS gates that out" -
+// was false. The gate is reps>10 and a volume day prescribes exactly 10, so ten-rep sets have
+// always fed the estimate. That is deliberate now and safe now: since c207 every point carries
+// the rep target it came from (n), and the stall rule only compares points that share one, so
+// a ten-rep day can never read as decline against an eight-rep day. The gate stays at 10 so
+// volume work still contributes its own series; it is the COMPARISON that protects the athlete,
+// not the collection. Do not "fix" this by lowering the number.
 // ============================================================
 // LOAD-INTENSITY REFERENCE
 // Zourdos MC et al. (2016) "Novel Resistance Training-Specific Rating of Perceived Exertion
@@ -17339,7 +17439,13 @@ function updateE1RM(){
       // FIELD 2026-09-05: every point carries the REP TARGET of the day it came from. Without
       // it the history mixes session kinds and reads as decline whenever the kind changes - see
       // adStalled(). n is the day's prescribed reps, which is what actually moves the estimate.
-      if(hix>-1){ if(e>hArr[hix].v){ hArr[hix].v=e; hArr[hix].r=rAdj; hArr[hix].n=tgt; } hArr[hix].c=clean; if(hArr[hix].n==null) hArr[hix].n=tgt; } else { hArr.push({d:hd,v:e,r:rAdj,c:clean,n:tgt}); hArr.sort((a,b)=>a.d<b.d?-1:1); }
+      // AUDIT 2026-09-06: c was ASSIGNED here, so when two movements on one day share a max key
+      // - a main bench and a back-off also keyed to bench - whichever was processed last wrote the
+      // day's struggle flag. A ground-out main followed by a clean back-off filed c:1 and the
+      // struggle vanished from the record the stall rule and the trial judge both read. Struggle
+      // anywhere in the lift's day is struggle: keep the worse of the two.
+      if(hix>-1){ if(e>hArr[hix].v){ hArr[hix].v=e; hArr[hix].r=rAdj; hArr[hix].n=tgt; }
+        hArr[hix].c=Math.min(hArr[hix].c==null? 1 : hArr[hix].c, clean); if(hArr[hix].n==null) hArr[hix].n=tgt; } else { hArr.push({d:hd,v:e,r:rAdj,c:clean,n:tgt}); hArr.sort((a,b)=>a.d<b.d?-1:1); }
       if(hArr.length>60) S.e1rmH[ex.maxKey]=hArr.slice(-60);
       touched[ex.maxKey]=1;
     });
@@ -17931,10 +18037,12 @@ load().then(async()=>{
   // returning user looks like a first-timer
   setTimeout(function(){ try{ whatsNewBoot(); }catch(e){ oops('whatsNewBoot',e); } }, 60);
   // a plan built by onboarding supersedes the shipped template
-  try{ if(S.genPlan && S.genPlan.days && S.genPlan.days.length){
+  try{ if(S.genPlan && planUsable(S.genPlan)){
     PLAN=S.genPlan;
     if(!PLAN.days.some(function(d){ return d.code===S.day; })) S.day=PLAN.days[0].code;
     if(!S.maxes) S.maxes=Object.assign({}, PLAN.maxes);
+  } else if(S.genPlan){
+    oops('planUnusable', new Error('generated plan failed shape check; running the starter block instead'));
   } }catch(e){}
   // Cold start never resumes a half-finished questionnaire. With no plan yet and setup unfinished,
   // begin again at the welcome screen (the boot animation still plays over it). A finished plan opens
