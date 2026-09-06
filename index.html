@@ -7537,6 +7537,14 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.06b', date:'2026-09-06', title:'Bulk got funnier, and got a lot more to say', items:[
+    'Bulk had four greetings on rotation, so if you train four days a week you had heard all of him inside a fortnight. He now has more than twenty greetings, twenty sign-offs, and a joke book of over two hundred gym jokes.',
+    'Every letter that is not bad news now ends with the day\u2019s joke \u2014 and it suits the day, so leg day gets leg day jokes and a deload week gets deload jokes.',
+    'One joke a day, fixed for that day: open the card five times and it is the same joke, not five. Across two months you will not see the same one twice. The better ones do come back eventually.',
+    'Bulk still does not write just to write. Quiet days get no letter and no badge \u2014 but the joke of the day is waiting in the mailbox whenever you feel like opening it.',
+    'And he keeps a straight face where it matters: no punchline under a streak warning, a backup warning, or anything about your numbers changing.'
+  ], bulk:'New material. You had heard all four of my greetings by about week two, which is my fault and slightly humiliating for a professional. I now have over two hundred gym jokes and I have been waiting all day to start. One a day, picked to suit what you are actually training \u2014 leg day gets leg day jokes, and I have a lot of those. It stays the same joke all day, so if you open the card five times you get one bear with one bit, not five bears arguing. Quiet days I still will not write to you, because I am not going to buzz your phone to tell you a joke about a treadmill. It will be sitting in the mailbox if you want it. And I promise to keep a straight face when it is actually serious.'},
+
   {build:'2026.09.06a', date:'2026-09-06', title:'Your accessory weights stopped shrinking after every deload', items:[
     'If your curls, rows, face pulls or Romanian deadlifts kept getting lighter block after block, that was the card, not you. Deload week is meant to be light \u2014 but the card was treating that light week as your new normal weight and building the next block from it.',
     'Every block it did that again, so the weight kept sliding down even when you hit every rep asked of you. A 260 lb Romanian deadlift could read 180 one block later and 125 the block after that.',
@@ -9589,21 +9597,346 @@ function mailPrune(){
       .slice(0, ks.length-400).forEach(function(k){ delete sent[k]; }); }
   }catch(e){}
 }
-function mailPush(id, txt, face){
+// The 4th argument is the day's joke, and it is passed EXPLICITLY at each call site rather
+// than attached to every letter by rule. A punchline under "your max came down" or "back up or
+// lose everything" is not a joke, it is a card that does not know what it just said. Only the
+// letters that are already in a good mood carry one.
+function mailPush(id, txt, face, joke){
   var m=mailBox(), sent=mailSent();
   if(sent[id]) return false;                       // sent once, ever - cleared or not
   if(m.some(function(x){ return x.id===id; })) return false;
   sent[id]=shiftDate();
-  m.push({id:id, d:shiftDate(), txt:txt, face:(MAIL_FACES[face]? face : 'focused'), read:false});
+  m.push({id:id, d:shiftDate(), txt:txt, face:(MAIL_FACES[face]? face : 'focused'), read:false,
+          j:(typeof joke==='string' && joke)? joke : null});
   while(m.length>30){ var i=m.findIndex(function(x){ return x.read; }); if(i<0) break; m.splice(i,1); }
   save(); return true;
 }
 function mailUnread(){ return mailBox().filter(function(x){ return !x.read; }).length; }
+// ===== BULK'S JOKE BOOK =====
+// His ask, 2026-09-06: "Can you have Bulk spill out funny jokes in his emails? A large joke
+// library. Gym fitness related? Something new almost everyday. Some repeats occasionally
+// depending on the humor. He gets dry after a few."
+//
+// He was right about dry. MAIL_GREET held four lines picked by date-of-month % 4, so the same
+// greeting came back every fourth training day and an athlete saw Bulk's entire personality
+// inside a fortnight.
+//
+// Tags let a joke suit the day it lands on - the card already knows whether today is legs or
+// pulls or a deload. `k:1` marks a keeper: the ones worth hearing twice, which are the only
+// jokes allowed back inside the no-repeat window. Everything else waits its turn.
+//
+// House rules for anything added here. Nothing about being weak, small, fat or slow - the card
+// is friendly and forgiving and a joke that lands on the athlete is not a joke. Nothing about
+// skipping meals, cutting weight or "earning" food. No drugs, no injuries, no bodies. Bulk is
+// the butt of most of these, which is the correct place for him.
+var BULK_JOKES=[
+  // ---- Bulk himself: a gummy bear who lives in the gym and loves pizza ----
+  {j:'I tried to spot someone today. I am four inches tall. It was moral support with extra steps.', t:'bulk', k:1},
+  {j:'The gym gave me a locker. I live in it. They have not asked questions and I have not offered.', t:'bulk'},
+  {j:'A guy asked if I was a pre-workout gummy. I have never been so insulted or so tempted.', t:'bulk', k:1},
+  {j:'My deadlift is technically a sugar crash.', t:'bulk'},
+  {j:'People keep trying to eat me between sets. It is flattering and it is a workplace hazard.', t:'bulk', k:1},
+  {j:'I do not sweat. I glaze. It is worse.', t:'bulk'},
+  {j:'I asked for a bear-sized barbell. They gave me a paperclip. We are in negotiations.', t:'bulk'},
+  {j:'My warm-up is climbing the bench. My cool-down is getting back down off the bench.', t:'bulk'},
+  {j:'I benched a chalk cube today. Twice. I am not going to stop talking about it.', t:'bulk'},
+  {j:'The gym cat and I have an understanding. He does not train, and I do not mention it.', t:'bulk'},
+  {j:'I have no bones. This makes my mobility work extremely smug.', t:'bulk', k:1},
+  {j:'I keep a training journal. Every entry says PIZZA with the date next to it.', t:'bulk'},
+  {j:'I got stuck to a dumbbell handle for an hour. Best hang time of my life.', t:'bulk'},
+  {j:'The front desk calls me "the mascot". I call myself an athlete. We are both correct.', t:'bulk'},
+  {j:'My one-rep max is a bottle cap. Contested. There was a witness. He was also a gummy bear.', t:'bulk'},
+  {j:'I do not use pre-workout. I AM pre-workout. That is not a joke, that is a nutrition label.', t:'bulk', k:1},
+  {j:'I tried yoga. I am already this flexible. It was mostly bragging.', t:'bulk'},
+  {j:'I ordered a pizza to the squat rack. The driver found me immediately. I am orange.', t:'bulk'},
+  {j:'They asked me to demonstrate a plank. I laid down. I have been a plank this whole time.', t:'bulk', k:1},
+  {j:'I do partial reps on purpose so my sugar stays evenly distributed. That is science I made up.', t:'bulk'},
+  {j:'Somebody sat on me on the leg press. I logged it as a PR for both of us.', t:'bulk'},
+  {j:'I have a rivalry with the water fountain. It has never once acknowledged me.', t:'bulk'},
+  {j:'My protein shake is a juice box with ambitions.', t:'bulk'},
+  {j:'I have never skipped a session, mostly because I cannot leave the building.', t:'bulk'},
+
+  // ---- leg day ----
+  {j:'Leg day is the only appointment your legs will remember for four days.', t:'leg', k:1},
+  {j:'Squats: the exercise where the hardest rep is the one where you unrack it.', t:'leg'},
+  {j:'Nobody has ever walked confidently out of a leg day. It is a shuffle. It is always a shuffle.', t:'leg', k:1},
+  {j:'The stairs know what you did. The stairs always know.', t:'leg', k:1},
+  {j:'Leg day is just an argument with gravity where gravity has all the leverage.', t:'leg'},
+  {j:'Lunges are how you find out your apartment is longer than you thought.', t:'leg'},
+  {j:'A squat is a deadlift that decided to take the scenic route.', t:'leg'},
+  {j:'The hardest part of the leg press is deciding whether you are done or trapped.', t:'leg'},
+  {j:'Bulgarian split squats were invented by someone who was owed money.', t:'leg', k:1},
+  {j:'You do not skip leg day. You just get very interested in your shoulders for six weeks.', t:'leg'},
+  {j:'Hack squats look easy. So does a swan. Ask the swan.', t:'leg'},
+  {j:'Calf raises: two hundred reps, no visible evidence, tremendous personal growth.', t:'leg'},
+  {j:'Leg extensions are a machine that asks one question and asks it forty times.', t:'leg'},
+  {j:'Every squat has a rep where you make a face. That rep is the one that counts.', t:'leg'},
+  {j:'Front squats are back squats for people who like being told the truth immediately.', t:'leg', k:1},
+  {j:'You will sit down tomorrow. It will take planning. Bring a friend.', t:'leg'},
+  {j:'Leg day tip: the door on the way out is heavier than anything you just lifted.', t:'leg'},
+  {j:'Romanian deadlifts are named after the sound you make on the last rep.', t:'leg'},
+  {j:'The leg press sled has never once looked scared. That is the disrespect I train against.', t:'leg'},
+  {j:'Walking lunges are a great way to see the whole gym slowly and regret all of it.', t:'leg'},
+
+  // ---- pull / back ----
+  {j:'Pull-ups are just the earth and you having a disagreement about where you should be.', t:'pull', k:1},
+  {j:'Nobody has ever finished a set of rows and had good posture on the way to the water fountain.', t:'pull'},
+  {j:'Lat pulldowns: the machine that makes you swear you will do pull-ups next week.', t:'pull', k:1},
+  {j:'You cannot see your back. Train it anyway. Trust is important in a relationship.', t:'pull'},
+  {j:'Face pulls look silly and fix everything. Most useful things do.', t:'pull', k:1},
+  {j:'A chin-up is a pull-up that apologised first.', t:'pull'},
+  {j:'The last rep of a row is negotiated, not performed.', t:'pull'},
+  {j:'Deadlifts are simple. Pick it up. That is it. That is the whole sport and it is exhausting.', t:'pull', k:1},
+  {j:'Shrugs are the only exercise where doing nothing and doing it right look identical.', t:'pull'},
+  {j:'If your back is not sore tomorrow you did rows. If it is, you did rows correctly.', t:'pull'},
+  {j:'Straight-arm pulldowns: an exercise nobody can explain and everybody feels.', t:'pull'},
+  {j:'Every gym has one person who can do twenty pull-ups. Nobody has ever seen them arrive.', t:'pull'},
+
+  // ---- push / chest / arms / shoulders ----
+  {j:'Bench press is the only lift where a stranger will appear at your head uninvited and be welcome.', t:'push', k:1},
+  {j:'Overhead press is bench press for people who want the truth about their shoulders.', t:'push'},
+  {j:'The bar is heaviest between your chest and the decision to move it.', t:'push'},
+  {j:'Incline press: same exercise, new angle, entirely new opinion of yourself.', t:'push'},
+  {j:'Dips are what happens when push-ups get ambitious.', t:'push'},
+  {j:'Nobody warms up their triceps. Everybody should. This has been a public service joke.', t:'push'},
+  {j:'Lateral raises are five pounds and a full personality change.', t:'push', k:1},
+  {j:'Curls in the squat rack is a crime. Curls anywhere else is a lifestyle.', t:'push', k:1},
+  {j:'Push-ups are free, portable, and universally avoided. Like advice.', t:'push'},
+  {j:'The last two reps of a press are done entirely with your eyebrows.', t:'push', k:1},
+  {j:'Skull crushers are named honestly, which is rare in this industry.', t:'push'},
+  {j:'Cable flyes: for when you want to hug something at great personal expense.', t:'push'},
+  {j:'A close-grip bench is a regular bench that got serious.', t:'push'},
+  {j:'Nobody knows how many arm exercises there are. New ones appear. We just accept them.', t:'push'},
+  {j:'The bench is always at the wrong height. Every bench. Every gym. It is a conspiracy.', t:'push'},
+  {j:'Hammer curls are for people who looked at curls and said: what if it was also carpentry.', t:'push'},
+
+  // ---- cardio ----
+  {j:'The treadmill is the only machine that gets faster when you get worse at it.', t:'cardio', k:1},
+  {j:'Zone 2 is the pace where you can hold a conversation and have absolutely nothing to say.', t:'cardio', k:1},
+  {j:'The rowing machine is honest work and I resent it for that.', t:'cardio'},
+  {j:'The stairmaster is a machine that goes nowhere and takes you with it.', t:'cardio', k:1},
+  {j:'The assault bike was named by someone in the middle of using an assault bike.', t:'cardio', k:1},
+  {j:'A five minute walk on the treadmill is a warm-up. A six minute walk is cardio. I do not make the rules.', t:'cardio'},
+  {j:'Cardio: the only time you will voluntarily watch a small number go up slowly.', t:'cardio'},
+  {j:'The elliptical is where good intentions go to be gentle.', t:'cardio'},
+  {j:'Running is just falling forward while apologising to your knees.', t:'cardio'},
+  {j:'Every treadmill has a screen showing a hill you are not on. It is called ambition.', t:'cardio'},
+  {j:'Jump rope looks easy until rep four, when the rope reveals its true nature.', t:'cardio'},
+  {j:'Sled pushes are cardio disguised as a legitimate errand.', t:'cardio'},
+  {j:'The first minute of any conditioning piece is a lie. The third minute is the truth.', t:'cardio', k:1},
+  {j:'Nobody in history has ever finished a bike sprint and said "that was fine".', t:'cardio'},
+  {j:'Cardio makes lifting easier. That is not encouragement, that is a threat.', t:'cardio'},
+  {j:'The stationary bike is stationary. So is my enthusiasm. We understand each other.', t:'cardio'},
+  {j:'Interval training: sixty seconds of regret, sixty seconds of planning the next regret.', t:'cardio'},
+  {j:'The rower is the only machine with a leaderboard and no friends.', t:'cardio'},
+
+  // ---- core ----
+  {j:'Planks are just a staring contest with the floor and the floor has never blinked.', t:'core', k:1},
+  {j:'The last ten seconds of a plank last four business days.', t:'core', k:1},
+  {j:'Ab wheels are a device for finding out how many muscles you own.', t:'core'},
+  {j:'Hanging leg raises: an exercise where the grip fails first and lies about why.', t:'core'},
+  {j:'Nobody counts core reps honestly. Nobody. We all know.', t:'core'},
+  {j:'A dead bug is an exercise that looks like a nap and is not a nap.', t:'core', k:1},
+  {j:'Side planks exist so both sides of you can be equally suspicious of me.', t:'core'},
+  {j:'Carries are the most honest exercise: pick it up, go for a walk, question everything.', t:'core', k:1},
+  {j:'Farmer carries are grocery shopping with extra steps and better posture.', t:'core'},
+  {j:'Your core is working right now. It has been all along. Unpaid.', t:'core'},
+
+  // ---- records, strength, progress ----
+  {j:'A personal record is just your old self losing an argument.', t:'pr', k:1},
+  {j:'Adding five pounds does not feel like progress until you look at where you started.', t:'pr'},
+  {j:'The bar does not know it is heavy. That is its whole advantage over you.', t:'pr', k:1},
+  {j:'Strength is boring to build and thrilling to have. That is the entire trade.', t:'pr'},
+  {j:'Everyone wants the number. Almost nobody wants the eleven weeks in front of the number.', t:'pr'},
+  {j:'A record set on a bad day counts double, and I will fight the record book about it.', t:'pr'},
+  {j:'Your first rep and your last rep weigh the same. Only one of them believes it.', t:'pr', k:1},
+  {j:'Progress is mostly showing up and occasionally being surprised.', t:'pr'},
+  {j:'Nobody remembers the set. Everybody remembers the number. Do the set anyway.', t:'pr'},
+  {j:'The plates do not care about your week.', t:'pr'},
+  {j:'You cannot rush a max. You can only walk toward it repeatedly on a Tuesday.', t:'pr'},
+  {j:'A five pound plate is the smallest thing in the gym with the biggest opinion.', t:'pr'},
+  {j:'PRs are just paperwork for something you already became.', t:'pr', k:1},
+  {j:'Two years from now this weight is your warm-up. That is not a promise, it is arithmetic.', t:'pr', k:1},
+
+  // ---- deload / rest / recovery ----
+  {j:'A deload is not a day off. It is the part of the plan that does the actual repairing.', t:'deload', k:1},
+  {j:'Light week: the hardest week for anyone with a personality.', t:'deload', k:1},
+  {j:'Deload week is when you find out how much of your identity was the weight.', t:'deload'},
+  {j:'Resting is training you do horizontally.', t:'deload', k:1},
+  {j:'Sleep is the only supplement that has never once been sued.', t:'deload', k:1},
+  {j:'Muscle is not built in the gym. It is built in bed, which is the best news anyone ever gave you.', t:'deload'},
+  {j:'A rest day is a scheduled part of the plan. Guilt is not on the schedule.', t:'deload'},
+  {j:'Nobody ever got weaker sleeping eight hours. This has been checked. Repeatedly.', t:'deload'},
+  {j:'Going lighter on purpose is a skill. Most people never learn it and their joints file a complaint.', t:'deload'},
+  {j:'Recovery is my specialty. I am a gummy bear. I am always recovering from something.', t:'deload', k:1},
+  {j:'Take the easy week. The hard weeks are counting on it.', t:'deload'},
+  {j:'Stretching: eleven seconds of good intentions, held for four.', t:'deload'},
+  {j:'Foam rolling is just apologising to your legs with a tube.', t:'deload', k:1},
+  {j:'The best training week of your life will be followed by a nap. Respect the nap.', t:'deload'},
+  {j:'Water. That is the joke. Drink some. I am four inches tall and even I manage it.', t:'deload'},
+  {j:'Your program has a light week in it because someone smarter than both of us insisted.', t:'deload'},
+
+  // ---- the gym itself, equipment, etiquette ----
+  {j:'Every gym has one broken machine with a sign on it that has been there since the invention of signs.', t:'gym', k:1},
+  {j:'The 45 pound plates are always on the far rack. Always. It is part of the workout.', t:'gym'},
+  {j:'Wiping down the bench is free and makes you a legend. Low bar. Clear it.', t:'gym', k:1},
+  {j:'Re-racking your weights is the cheapest respect available in this building.', t:'gym', k:1},
+  {j:'There is one guy on his phone in the rack you need. There is always one guy. He is eternal.', t:'gym'},
+  {j:'Gym chalk gets everywhere. On everything. Forever. It is a lifestyle you did not consent to.', t:'gym'},
+  {j:'The mirror is for checking your form. It is not, but we agreed to say that.', t:'gym', k:1},
+  {j:'Every gym playlist has one song that adds ten pounds to your lift and one that removes twenty.', t:'gym', k:1},
+  {j:'Somebody has left one 2.5 plate on the bar. Nobody knows who. Nobody ever will.', t:'gym'},
+  {j:'The squat rack is not a coat rack, a phone stand or a place to curl. It has one job.', t:'gym'},
+  {j:'A good gym has bad lighting and heavy dumbbells. A bad gym has the opposite.', t:'gym'},
+  {j:'The water fountain with good pressure is the most valuable real estate in the building.', t:'gym'},
+  {j:'Every gym bag contains one shaker bottle that must never be opened again.', t:'gym', k:1},
+  {j:'Lifting shoes do not make you stronger. They make you the kind of person who owns lifting shoes, which does.', t:'gym'},
+  {j:'The clock in every gym is two minutes fast. This is deliberate and I support it.', t:'gym'},
+  {j:'You will never once see somebody use all the equipment in a functional training area.', t:'gym'},
+  {j:'A belt is not a personality. It is a very good tool with a personality problem.', t:'gym'},
+  {j:'The dumbbell rack goes 45, 50, 55, and then a mysterious gap where the 60s should live.', t:'gym', k:1},
+  {j:'Nobody knows what the Smith machine is for and everybody has an opinion about it.', t:'gym', k:1},
+  {j:'The gym at 5am and the gym at 6pm are two different countries with different customs.', t:'gym'},
+  {j:'The best piece of equipment in any gym is the one nobody else has figured out yet.', t:'gym'},
+  {j:'Somebody is deadlifting in the mirror area right now and they know exactly what they did.', t:'gym'},
+  {j:'Headphones in the gym mean "I am busy". Headphones off means "please, someone, anyone".', t:'gym'},
+  {j:'A gym towel is not optional. It is the difference between an athlete and a rumour.', t:'gym'},
+
+  // ---- general, training life, absurd ----
+  {j:'The hardest set of the day is the one where you decide to go.', t:'general', k:1},
+  {j:'Motivation is a guest. Discipline pays rent.', t:'general', k:1},
+  {j:'Nobody has ever regretted the session they did. Thousands regret the one they skipped. The data is unkind.', t:'general'},
+  {j:'You are not too tired to train. You are usually just too tired to start.', t:'general'},
+  {j:'The plan works when it is boring. That is not a bug.', t:'general', k:1},
+  {j:'Consistency is the least glamorous superpower and it beats every other one.', t:'general'},
+  {j:'You do not need a perfect session. You need this session.', t:'general'},
+  {j:'Half a workout is infinitely more than no workout. Infinitely. Check the maths.', t:'general', k:1},
+  {j:'Every strong person you admire was once confused about which machine this is.', t:'general', k:1},
+  {j:'Comparison is the thief of gains and also a very poor training partner.', t:'general'},
+  {j:'Two months of showing up beats two years of researching programs.', t:'general', k:1},
+  {j:'Warm-ups are boring, quick, and the reason you get to keep doing this at sixty.', t:'general'},
+  {j:'Form first. Weight second. Ego does not get a seat at this table.', t:'general'},
+  {j:'The gym is one of the last places where effort and result are still directly related. Enjoy that.', t:'general', k:1},
+  {j:'Doing it tired is the whole skill. Anyone can do it fresh.', t:'general'},
+  {j:'You will be sore. Sore is a receipt, not an injury.', t:'general'},
+  {j:'Everyone in here is thinking about their own set. Nobody is watching. It is wonderfully lonely.', t:'general', k:1},
+  {j:'A bad session logged beats a great session imagined.', t:'general'},
+  {j:'The number on the bar is not the point. It is just the easiest part to talk about.', t:'general'},
+  {j:'If it was easy the whole building would be full at 5am. Look around.', t:'general'},
+  {j:'Small plates, long time. That is the entire secret and it is a terrible marketing slogan.', t:'general', k:1},
+  {j:'Some days you move the weight. Some days you just move. Both count.', t:'general'},
+  {j:'Rest between sets exists. Use it. Scrolling is not resting, it is waiting.', t:'general'},
+  {j:'You cannot out-train a Tuesday you did not show up for.', t:'general'},
+  {j:'Nobody starts strong. Everybody starts confused. Confused is a fine place to start.', t:'general', k:1},
+  {j:'The program is a suggestion. Showing up is not.', t:'general'},
+  {j:'Somewhere there is a version of you who did the session. Go be him.', t:'general'},
+  {j:'Training is the only bill where paying early makes it cheaper.', t:'general'},
+  {j:'Do the boring thing for long enough and people will call it talent.', t:'general', k:1},
+  {j:'The best program is the one still on your phone in March.', t:'general', k:1},
+  {j:'A missed session is a missed session. It is not a referendum on your character.', t:'general', k:1},
+  {j:'One good set is worth four half ones, and takes a quarter of the time to regret.', t:'general'},
+  {j:'Everything in here is heavy until it is not. That is the only promise the gym makes.', t:'general'},
+  {j:'Progress happens on a schedule you do not control and cannot rush. Annoying. True.', t:'general'},
+  {j:'The people who get strong are just the people who did not stop. That is the whole trick.', t:'general', k:1},
+  {j:'Weights are honest. They will never flatter you and they will never lie to you.', t:'general'},
+  {j:'Nothing in this building cares how you feel about it, which is exactly why it works.', t:'general'},
+  {j:'You are allowed to be proud of a session nobody saw.', t:'general', k:1},
+  {j:'Rest days are in the program. Rest weeks are in the program. Quitting is not in the program.', t:'general'},
+  {j:'Train the lift you avoid. That is where the whole prize is kept.', t:'general', k:1},
+
+  // ---- food, protein, the eternal pizza question ----
+  {j:'Protein: eat some. That is the extent of my nutrition qualification and I stand by it.', t:'food'},
+  {j:'A pizza is a balanced meal if you spin it fast enough. I have not tested this.', t:'food', k:1},
+  {j:'Eating enough is training. It is just training you do with a fork.', t:'food', k:1},
+  {j:'Everyone underestimates how much food building something takes.', t:'food'},
+  {j:'The post-session meal is the best meal of the week and it is not close.', t:'food'},
+  {j:'Nobody has ever built anything on an empty tank. Fuel the work.', t:'food'},
+  {j:'Chicken and rice is not a personality. It is a foundation. Build a personality on top of it.', t:'food'},
+  {j:'The best supplement is the one you actually remember to take, which is none of them.', t:'food', k:1},
+  {j:'Water first. Everything works better hydrated, including your mood about leg day.', t:'food'},
+  {j:'Meal prep on Sunday, feel smug all week. It is the cheapest smugness available.', t:'food'}
+];
+
+// The day's joke is fixed for the day: reopening the card must not reroll it, or the athlete
+// who reads a letter twice sees two different punchlines and Bulk looks like several bears.
+// S.jokeH is a ring of recent picks so a joke waits its turn. Keepers - the ones worth hearing
+// twice - are the only ones allowed back inside that window, which is what he asked for: mostly
+// new, some repeats depending on the humour.
+var JOKE_WINDOW=70, JOKE_KEEPER_WAIT=24;
+function jokeHist(){ if(!Array.isArray(S.jokeH)) S.jokeH=[]; return S.jokeH; }
+// FNV-1a with a final mix. The first cut used n*31+charCode, which is fine for a hash table
+// and useless here: consecutive dates differ by one character, so the seed differed by one and
+// seed%POOL walked the greeting pool in order - exactly the visible cycle the date-of-month %4
+// was being replaced for. This avalanches, so one day tells you nothing about the next.
+function jokeSeed(iso){ var n=2166136261, s=String(iso||'');
+  for(var i=0;i<s.length;i++){ n^=s.charCodeAt(i); n=Math.imul(n,16777619); }
+  n^=n>>>15; n=Math.imul(n,2246822507); n^=n>>>13; return n>>>0; }
+// what KIND of day is it? the card already knows - use it so the joke suits the work
+function jokeTagToday(){
+  try{
+    if(typeof isDeload==='function' && isDeload()) return 'deload';
+    var d=dayObj(); if(!d || !d.exercises) return 'general';
+    var names=d.exercises.map(function(e){ return String(e.name||''); }).join(' ').toLowerCase();
+    if(/squat|leg press|lunge|romanian|calf|hamstring|quad/.test(names)) return 'leg';
+    if(/pull|row|lat |deadlift|chin|face pull|shrug/.test(names)) return 'pull';
+    if(/bench|press|dip|fly|curl|tricep|lateral|raise/.test(names)) return 'push';
+    if(/plank|carry|ab |crunch|hollow|dead bug/.test(names)) return 'core';
+  }catch(e){}
+  return 'general';
+}
+function bulkJoke(tag){
+  try{
+    if(!BULK_JOKES.length) return '';
+    var iso=shiftDate();
+    if(S.jokeToday && S.jokeToday.d===iso && BULK_JOKES[S.jokeToday.i]) return BULK_JOKES[S.jokeToday.i].j;
+    var H=jokeHist(), want=tag||jokeTagToday();
+    var recent=H.slice(-JOKE_WINDOW), keeperOK=H.slice(-JOKE_KEEPER_WAIT);
+    var pick=function(list){ return list.length? list : null; };
+    var idx=BULK_JOKES.map(function(x,i){ return i; });
+    var fresh=idx.filter(function(i){ return recent.indexOf(i)<0; });
+    // keepers may come back sooner than everything else, but never two days running
+    var keepers=idx.filter(function(i){ return BULK_JOKES[i].k && keeperOK.indexOf(i)<0; });
+    var pool=pick(fresh.filter(function(i){ return BULK_JOKES[i].t===want; }))
+          || pick(fresh)
+          || pick(keepers)
+          || idx;
+    var i=pool[jokeSeed(iso)%pool.length];
+    H.push(i); if(H.length>JOKE_WINDOW*2) S.jokeH=H.slice(-JOKE_WINDOW*2);
+    S.jokeToday={d:iso, i:i};
+    save();
+    return BULK_JOKES[i].j;
+  }catch(e){ return ''; }
+}
+
+// His note, 2026-09-06: "He gets dry after a few." Four lines on a date-of-month % 4 rotation
+// meant the same greeting every fourth training day - an athlete met the whole of Bulk's
+// personality inside a fortnight. Wider pool, and picked off a date hash with the last few
+// remembered, so the order is not a visible cycle either.
 var MAIL_GREET=[
   'Training day. I already chalked up. I do not have hands, but the intent is there.',
   'Training day. The bar missed you. It told me. We talk.',
   'Training day. I stretched for both of us. You are welcome.',
-  'Training day. Plan says work. I say pizza after. Both are law.'
+  'Training day. Plan says work. I say pizza after. Both are law.',
+  'Training day. I have been sitting on the bench since 4am holding it for you. It is warm now. Sorry.',
+  'Training day. I put your name on the whiteboard. There is no whiteboard. The intent stands.',
+  'Training day. Nothing clever today. Just go. I will be here doing bicep curls with a bottle cap.',
+  'Training day. I checked the weather. It is indoors.',
+  'Training day. The plates are stacked, the bar is loaded, and I have been rehearsing this speech.',
+  'Training day. Somewhere in this building there is a squat rack with your name on it and a guy on his phone in it.',
+  'Training day. I have already told everyone you are coming. Do not make me a liar in front of the treadmills.',
+  'Training day. Warm up properly and I will pretend I did not see the last time.',
+  'Training day. You do not have to be excited. You just have to be here. I will handle excited.',
+  'Training day. I looked at your program this morning and made a small noise of respect.',
+  'Training day. The hard part is the car park. After that it is just lifting.',
+  'Training day. I believe in you, and separately, I believe in the sandwich afterwards.',
+  'Training day. No speech. Chalk, bar, work, home. Beautiful in its simplicity.',
+  'Training day. I have been awake since three thinking about your set-up. This is not healthy for either of us.',
+  'Training day. The gym is not going to lift itself. I have tried. I am four inches tall.',
+  'Training day. Bring water. Bring effort. Bring nothing else, especially not your ego.',
+  'Training day. Today counts even if it is ugly. Most of the good ones were ugly.',
+  'Training day. I am not saying today is the day you surprise yourself, but I am saying I brought a camera.',
+  'Training day. Everything on the sheet has been chosen on purpose. Even the one you hate. Especially that one.',
+  'Training day. Go be slightly harder to kill than you were on Monday.'
 ];
 function mailShiftIso(iso, n){ var d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n);
   return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
@@ -9613,7 +9946,23 @@ var MAIL_DONE=[
   'Session banked. That is the whole job. Go eat something with protein in it.',
   'Work is done and logged. The bar is tired now. I checked.',
   'Already trained today. I have nothing to nag you about, which is unsettling for me.',
-  'Done and filed. Recovery starts now, and recovery is my specialty.'
+  'Done and filed. Recovery starts now, and recovery is my specialty.',
+  'Banked. I wrote it in the books in my best handwriting. My handwriting is terrible. I have no hands.',
+  'Done. Nobody saw that session but me, and I was extremely impressed, for what a gummy bear is worth.',
+  'Logged. You can spend the rest of today being a normal person. You have earned the disguise.',
+  'That is filed. The version of you from six weeks ago could not have done that. I keep receipts.',
+  'Session in the books. Now the boring part that actually builds it: food, water, sleep. Go.',
+  'Done. I would offer a high five but I would stick to your hand and we would both regret it.',
+  'Banked and counted. I have already started thinking about the next one. It is a problem I have.',
+  'Trained and logged. Every one of these is a small deposit and the interest is absurd.',
+  'That is done. Go and be tired somewhere comfortable.',
+  'Session complete. I am going to sit on the dumbbell rack and think about what you did.',
+  'Filed. Nothing dramatic happened today. That is what a good program looks like from the inside.',
+  'Done. You showed up on a day you could have not shown up. That is the entire sport.',
+  'Logged. If today was ugly it still counts. The books do not have a column for pretty.',
+  'Banked. Somewhere your next PR just moved a little closer and told nobody.',
+  'That is in. Rest properly - I am not just saying it, it is literally the other half of the program.',
+  'Session done. I am proud in a way that is slightly embarrassing for a piece of candy.'
 ];
 function mailSweep(){
   try{
@@ -9625,8 +9974,11 @@ function mailSweep(){
     try{
       if(calTrainDays().indexOf(new Date(today+'T12:00:00').getDay())>-1){
         var didToday=false; try{ didToday=!!streakDayset()[today]; }catch(e2){}
-        if(didToday) mailPush('done-'+today, MAIL_DONE[new Date(today+'T12:00:00').getDate()%MAIL_DONE.length], 'encouraging');
-        else mailPush('greet-'+today, MAIL_GREET[new Date(today+'T12:00:00').getDate()%MAIL_GREET.length], 'playful');
+        // date HASH, not date-of-month modulo: the old index walked the pool in order, so the
+        // greetings arrived in the same sequence every month. And every one of these carries the
+        // day's joke - his ask, and the reason the pool above got bigger.
+        if(didToday) mailPush('done-'+today, MAIL_DONE[jokeSeed(today)%MAIL_DONE.length], 'encouraging', bulkJoke());
+        else mailPush('greet-'+today, MAIL_GREET[jokeSeed(today)%MAIL_GREET.length], 'playful', bulkJoke());
       }
     }catch(e){}
     // 2 - streak guard, the day it matters
@@ -9680,7 +10032,7 @@ function mailSweep(){
           try{ var ixw=calIndex(), bws=Object.keys(ixw).filter(function(k){ return k>=lo&&k<=hi&&ixw[k].bw!=null; }).sort();
             if(bws.length>=2){ var d0=ixw[bws[0]].bw, d1=ixw[bws[bws.length-1]].bw, df=Math.round((d1-d0)*10)/10;
               if(df) line+=' \u00b7 bodyweight '+(df>0?'+':'')+df; } }catch(e2){}
-          mailPush('wk-'+lo, line+'. I keep the books. The books look good.', 'reflective');
+          mailPush('wk-'+lo, line+'. I keep the books. The books look good.', 'reflective', bulkJoke());
         }
       }
     }catch(e){}
@@ -9704,9 +10056,18 @@ function mailShow(){
             +'<div style="flex:1;min-width:0">'
             +'<div class="sleeve-label">BULK \u00b7 '+x.d+'</div>'
             +'<div style="font-size:14.5px;line-height:1.6;margin-top:2px">'+String(x.txt).replace(/</g,'&lt;')+'</div>'
+            +(x.j? '<div class="cue" style="margin-top:8px;font-style:italic;opacity:.85">'
+                   +String(x.j).replace(/</g,'&lt;')+'</div>' : '')
             +'</div></div>'
             +'</div>'; }).join('')
         : '<p>Nothing today. Bulk only writes when there is something true to say.</p>')
+      // A joke a day was the ask, but a letter a day was not: an empty week still earns silence
+      // and no badge. So the quiet days keep their joke here, where opening the box is the
+      // athlete's own idea, and nothing pings a phone to deliver a punchline.
+      +'<div class="block" style="margin-top:10px">'
+      +'<div class="sleeve-label">BULK \u00b7 JOKE OF THE DAY</div>'
+      +'<div style="font-size:14.5px;line-height:1.6;margin-top:2px;font-style:italic">'
+      +String(bulkJoke()||'').replace(/</g,'&lt;')+'</div></div>'
       +(m.some(function(x){ return x.read; })? '<div class="prof-edit" id="mailClear" style="padding:10px 0;text-align:center">Clear read mail</div>' : '')
       +'</div>';
     document.body.appendChild(v);
@@ -12727,7 +13088,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v208';
+const BUILD = 'v209';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
