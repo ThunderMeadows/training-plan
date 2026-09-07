@@ -4616,9 +4616,52 @@ function nextSession(){
   }catch(e){}
   return null;
 }
+// His ask, 2026-09-06: "Anytime i close out the app it keeps the user on the same page they
+// where on when they closed it. Can you automatically place them on their training day
+// instead?" syncToNext() below already brings a stale day pointer forward on open, but it was
+// written never to leave a tab - close the app on Rate and it opened on Rate. This is the door
+// in front of it: every open starts on the training day, and so does a return after long
+// enough away that it is a new visit rather than a glance at another app. Two things it will
+// not do: pull an athlete off a session in progress (no log yet - that is where they should be),
+// or move the focus on a day they were already standing on.
+var LAND_AWAY_MS=30*60*1000, landHiddenAt=null;
+function landOnTraining(){
+  try{
+    if(!PLAN || !PLAN.days || !PLAN.days.length) return false;
+    var was=S.day+'|'+S.week;
+    var onTab=!PLAN.days.some(function(d){ return d.code===S.day; });
+    if(onTab){
+      var nx=null; try{ nx=nextSession(); }catch(e){}
+      if(nx){ S.day=nx.code; S.week=nx.week; }
+      else {
+        // the block's weeks are spent: the day view carries the block-end review, so land on
+        // the last training day they stood on, or the first day of the split
+        var lt=S.lastTDay;
+        S.day=(lt && PLAN.days.some(function(d){ return d.code===lt; }))? lt : PLAN.days[0].code;
+      }
+    }
+    try{ syncToNext(); }catch(e){}
+    var moved=(S.day+'|'+S.week)!==was;
+    if(moved){ try{ S.focus=firstOpenFocus(); }catch(e){ S.focus=0; } S.calSel=null; }
+    return moved;
+  }catch(e){ return false; }
+}
+try{
+  document.addEventListener('visibilitychange', function(){
+    try{
+      if(document.hidden){ landHiddenAt=Date.now(); return; }
+      var away=landHiddenAt? (Date.now()-landHiddenAt) : 0; landHiddenAt=null;
+      if(away<LAND_AWAY_MS) return;                      // a glance at another app, not a new visit
+      if(typeof SET_BUSY!=='undefined' && SET_BUSY) return;
+      if(landOnTraining()){ save(); render(); }
+    }catch(e){}
+  });
+}catch(e){}
 function syncToNext(){
   // On open, land on the next unsaved session. Never hijack a tab (YOU/RATE/CAL/PLAN) or a
   // session still in progress (no saved log yet) — only advance once the current one is banked.
+  // (v212: landOnTraining() above now handles the tab case before this runs - a cold open no
+  // longer stays on a tab. The in-progress rule is unchanged and lives here.)
   try{
     if(!PLAN.days.some(function(d){ return d.code===S.day; })) return;
     // OPEN with a weekday map: land on the session this weekday actually owns, if it is still
@@ -7556,6 +7599,13 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.06e', date:'2026-09-06', title:'The card now opens on your training day', items:[
+    'Close the card on the Rate tab and it used to come back on the Rate tab. Now every open lands on your training day \u2014 the session in progress, or the next one up.',
+    'Come back after half an hour or more in another app and it does the same. A quick look at your messages between sets moves nothing.',
+    'A session you are in the middle of is never abandoned: reopen the card and you are right where you left off, on the same exercise.',
+    'The tabs are still one tap away. This is only about where the card starts.'
+  ], bulk:'Small one. When you closed me on the Rate tab, I came back on the Rate tab, which is a strange place to start a training day. Now I open on your session \u2014 the one in progress, or the next one up \u2014 and I do the same if you come back from long enough in another app for it to be a new visit. Glance at a message between sets and I do not move. Mid-session I do not move either; you come back to the exact exercise you were on. The tabs are all still there. I just stop parking you on them.'},
+
   {build:'2026.09.06d', date:'2026-09-06', title:'Your finished sessions are now set in stone', items:[
     'A session you had already logged could change on you when the program changed \u2014 an update that added a main lift to a day, a new max, a movement you removed later. The past day was being rebuilt from today\u2019s program every time you opened it, so it showed movements you never did and today\u2019s weights instead of the ones you lifted.',
     'Fixed. From this version on, every session is saved exactly as you finished it \u2014 the movements in order, the weight you used, every set \u2014 and a finished session shows that and only that. Nothing that happens to the program afterwards can touch it.',
@@ -13205,7 +13255,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v211';
+const BUILD = 'v212';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -18670,7 +18720,7 @@ load().then(async()=>{
     }
     if(S.fin && S.fin.done && S.fin.d && S.fin.d!==shiftDate()){ S.fin=null; save(); }
   }catch(e){ oops('cardioDayRoll',e); }
-  if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs(); try{ syncToNext(); }catch(e){}
+  if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs(); try{ landOnTraining(); }catch(e){ try{ syncToNext(); }catch(e2){} }
   try{ if(S._avaPick){ profEdit=true; S._avaPick=null; save(); } }catch(e){}
   try{ if(S.avaBig){ delete S.avaBig; save(); } }catch(e){}   // strip the legacy persisted viewer flag
   try{ adRepairStalls(); }catch(e){ oops('adRepairStalls',e); }   // before the first paint, so the restored numbers are what the athlete sees
