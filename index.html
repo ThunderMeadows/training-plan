@@ -4656,6 +4656,7 @@ try{
       var away=landHiddenAt? (Date.now()-landHiddenAt) : 0; landHiddenAt=null;
       if(away<LAND_AWAY_MS) return;                      // a glance at another app, not a new visit
       if(typeof SET_BUSY!=='undefined' && SET_BUSY) return;
+      try{ if(!accessOK()){ accessEnforce(); bootAccess(); return; } }catch(e){}
       if(landOnTraining()){ save(); render(); }
     }catch(e){}
   });
@@ -6916,6 +6917,11 @@ function rosterWire(){
   };
 }
 function coachToggleHTML(){
+  // ACCESS (v214): the switch is only offered to a holder with coach rights
+  if(typeof coachAllowed==='function' && !coachAllowed()){
+    return '<div class="block" id="coachNeed"><h3>Who is using this card</h3>'
+      +'<div class="cue">Coaching other people from this card needs a coach code. Enter one under Settings \u2192 Access.</div></div>';
+  }
   return '<div class="block"><h3>Who is using this card</h3>'
     +'<div class="cue">'+(ROSTER.mode==='coach'
         ? 'Coaching others. You keep your own card, and each athlete on the roster gets their own.'
@@ -7602,6 +7608,13 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.07a', date:'2026-09-07', title:'The card is now by invitation', items:[
+    'New cards ask for an access code before anything else. The code sets what the card can do \u2014 athlete or coach \u2014 and is good for three months.',
+    'You already use the card, so you have athlete access from today with no code needed. You will see it under Settings \u2192 Access, with the date it runs to.',
+    'When it runs out the card asks for a current code. Nothing is lost \u2014 every session stays on your phone behind the door.',
+    'Coaching other people from a card needs a coach code, entered under Settings \u2192 Access.'
+  ], bulk:'A door on the front of the card now. If you are reading this you are already inside \u2014 you have athlete access from today, three months, no code needed, and Settings shows the date. When it runs out I will ask for a current code and hold everything for you in the meantime; nothing you logged goes anywhere. Coaching other people needs a coach code. That is all it is \u2014 a door, and you are on the right side of it.'},
+
   {build:'2026.09.06f', date:'2026-09-06', title:'The \u201cBefore you train\u201d screen now stays gone once you have read it', items:[
     'That screen was coming back on every open, for everyone, no matter how many times you had tapped I understand. It was checking for your answer before your saved data had loaded, so it never found it. Fixed \u2014 once is once.',
     'On some phones the I understand button was not responding at all. The button now accepts a plain tap however your phone delivers it, and it stays pinned to the bottom of the screen so it can never scroll out of reach on a small phone.',
@@ -8412,6 +8425,7 @@ function settingsBodyHTML(){
     +'</div>'
     +'<div class="exnote" style="padding:8px 0 0">If a day is shorter than this, the card fills the time for you. It adds a set to the light exercises first, then an exercise you need, then some easy cardio. It never removes work you have logged.</div>'
     +'</div></div>';
+  try{ h+=accessHTML(); }catch(e){}
   h+='<div class="ex"><div class="ex-head">'
     +'<div class="prof-edit" data-discshow="1" style="padding:6px 0">Read the training disclaimer</div>'
     +'<div class="prof-edit" data-termsshow="1" style="padding:6px 0">Terms &amp; Privacy</div>'
@@ -9036,8 +9050,8 @@ var GB_GO={
   // NB these are two different things and I wired the first question to the wrong one:
   // coachvoice is how much the card TALKS (a setting); coachmode is who the card is FOR.
   coachvoice:{label:'Take me to Coaching text', set:true, sel:'[data-uimode]'},
-  coachmode:{label:'Take me to Who is using this card', day:'MAX', sel:'#coachToggle', needs:'coachToggleHTML'},
-  roster:   {label:'Take me to the roster',    day:'MAX', sel:'#coachToggle', needs:'rosterHTML'},
+  coachmode:{label:'Take me to Who is using this card', day:'MAX', sel:'#coachToggle,#coachNeed', needs:'coachToggleHTML'},
+  roster:   {label:'Take me to the roster',    day:'MAX', sel:'#coachToggle,#coachNeed', needs:'rosterHTML'},
   profile:  {label:'Take me to my profile',   day:'MAX',  sel:'#profEditBtn'},
   // 'today' is a sentinel, not a tab: these live on the session itself, and the athlete could
   // be sitting on any tab when they ask. Resolve it to whichever training day is current.
@@ -9462,6 +9476,139 @@ function bootDisc(force){
     if(ok) ok.onclick=function(){ discAccept(); };
   }catch(e){}
 }
+
+// ===== ACCESS =====
+// His ask, 2026-09-07: "I want to add a security gate before being able to access the app.
+// Depending what code you input will depend what rights you are given... either athlete rights
+// or coach rights. You have to enter it once before you begin. It's only good for 3 months and
+// then you must renew. Anyone who has access to the app right now will automatically be given
+// athlete rights unless manually changed through their setting."
+//
+// What this is and is not. The card is one static file with no server behind it, so the check
+// runs on the athlete's own phone, against data that is already on that phone. It is a GATE:
+// it decides who gets in and which tools they see, and it lets him cut access at renewal by
+// controlling who holds a current code. It is not a lock against someone editing their own
+// phone's storage. The codes are never in this file - only their SHA-256 fingerprints are, so
+// nobody can read a code out of the source. Rotating codes means new fingerprints and a build.
+var ACCESS_SALT='deadstop-access-v1', ACCESS_DAYS=90;
+var ACCESS_CODES=[
+  {h:'68e6fe86d657339613bde915da9f9278e06e105bb9845e65c3a6dffe08b1ec2e', role:'athlete'},
+  {h:'5c1139b4c46386e92c0c572f7920130e78b5fb0f07b9c4ba2684b316ee2d2aef', role:'coach'}
+];
+// SHA-256, plain JS, so the gate works the same on every phone and in every test runner
+// (crypto.subtle is async and absent in some contexts). Standard construction; nothing clever.
+function sha256hex(msg){
+  var K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  var bytes=[]; var s=unescape(encodeURIComponent(String(msg)));
+  for(var i=0;i<s.length;i++) bytes.push(s.charCodeAt(i)&255);
+  var bitLen=bytes.length*8; bytes.push(0x80);
+  while(bytes.length%64!==56) bytes.push(0);
+  for(var j=7;j>=0;j--) bytes.push(j>=4? 0 : (bitLen>>>(j*8))&255);
+  var rotr=function(x,n){ return (x>>>n)|(x<<(32-n)); };
+  for(var off=0; off<bytes.length; off+=64){
+    var w=new Array(64);
+    for(var t=0;t<16;t++) w[t]=(bytes[off+t*4]<<24)|(bytes[off+t*4+1]<<16)|(bytes[off+t*4+2]<<8)|bytes[off+t*4+3];
+    for(t=16;t<64;t++){ var s0=rotr(w[t-15],7)^rotr(w[t-15],18)^(w[t-15]>>>3), s1=rotr(w[t-2],17)^rotr(w[t-2],19)^(w[t-2]>>>10); w[t]=(w[t-16]+s0+w[t-7]+s1)|0; }
+    var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+    for(t=0;t<64;t++){
+      var S1=rotr(e,6)^rotr(e,11)^rotr(e,25), ch=(e&f)^(~e&g), t1=(h+S1+ch+K[t]+w[t])|0;
+      var S0=rotr(a,2)^rotr(a,13)^rotr(a,22), mj=(a&b)^(a&c)^(b&c), t2=(S0+mj)|0;
+      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+    }
+    H[0]=(H[0]+a)|0; H[1]=(H[1]+b)|0; H[2]=(H[2]+c)|0; H[3]=(H[3]+d)|0; H[4]=(H[4]+e)|0; H[5]=(H[5]+f)|0; H[6]=(H[6]+g)|0; H[7]=(H[7]+h)|0;
+  }
+  return H.map(function(x){ return ('00000000'+(x>>>0).toString(16)).slice(-8); }).join('');
+}
+function accessNorm(c){ return String(c||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase(); }
+function accessFp(c){ return sha256hex(ACCESS_SALT+'|'+accessNorm(c)); }
+function accessOK(){ try{ var a=S.access; return !!(a && a.role && a.until && shiftDate()<=a.until); }catch(e){ return false; } }
+function accessRole(){ return accessOK()? S.access.role : null; }
+function coachAllowed(){ return accessRole()==='coach'; }
+function accessGrant(role, via){
+  var t=shiftDate(), u=new Date(t+'T12:00:00'); u.setDate(u.getDate()+ACCESS_DAYS);
+  S.access={role:role, since:t, until:u.toISOString().slice(0,10), via:via||'code'};
+  save();
+}
+function accessTry(code){
+  if(accessNorm(code).length<6) return null;
+  var fp=accessFp(code), hit=null;
+  ACCESS_CODES.forEach(function(x){ if(x.h===fp) hit=x; });
+  if(!hit) return null;
+  accessGrant(hit.role,'code');
+  return hit.role;
+}
+// "Anyone who has access to the app right now will automatically be given athlete rights."
+// A card that has been used - accepted the disclaimer, banked a log, finished setup, holds a
+// plan - and has no access record yet is a card from before the gate existed. Athlete, 90 days.
+// A card with nothing in it is a new card, and a new card meets the gate.
+function accessLegacy(){
+  try{
+    if(S.access) return false;
+    var used=!!S.discAck || (logKeys||[]).length>0 || !!(S.onb && S.onb.done) || !!(S.genPlan && S.genPlan.days);
+    if(!used) return false;
+    accessGrant('athlete','legacy');
+    return true;
+  }catch(e){ return false; }
+}
+function accessUntilText(){ try{ var a=S.access; if(!a||!a.until) return ''; var d=new Date(a.until+'T12:00:00'); return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return (S.access&&S.access.until)||''; } }
+function bootAccess(force){
+  try{
+    if(!force && accessOK()) return;
+    var had=document.getElementById('accessGate');
+    if(had){   // already standing: bring the athlete to it rather than doing nothing
+      try{ var im=had.querySelector('#accessMsg'); if(im) im.textContent='Enter the code you were given.'; had.querySelector('#accessIn').focus(); }catch(e){}
+      return;
+    }
+    var expired=!!(S.access && S.access.until && !accessOK());
+    var v=document.createElement('div'); v.id='accessGate'; v.className='disc-wrap lockfree'; v.style.zIndex='412';
+    v.innerHTML='<div class="disc-inner">'
+      +'<h2>'+(force? 'Access code' : (expired? 'Your access has expired' : 'Enter your access code'))+'</h2>'
+      +'<p>'+(force
+          ? 'Enter a code to renew your access or change what this card can do. Your current access: <b>'+esc(accessRole()||'none')+'</b>'+(accessOK()? ' until '+esc(accessUntilText()) : '')+'.'
+          : (expired
+             ? 'Nothing has been lost \u2014 every session is still on this phone. Enter a current code to carry on.'
+             : 'This card is by invitation. Enter the code you were given. It sets what the card can do and is good for three months.'))+'</p>'
+      +'<input type="text" id="accessIn" class="dtin" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX" style="width:100%;box-sizing:border-box;font-size:20px;letter-spacing:.12em;text-align:center;margin-top:8px">'
+      +'<div id="accessMsg" class="cue" style="min-height:20px;padding:6px 0 0;color:var(--amber)"></div>'
+      +'<button type="button" class="daybtn" id="accessOk" style="margin-top:12px;width:100%">Continue</button>'
+      +(force? '<div class="disc-more" id="accessCancel">Keep what I have</div>' : '')
+      +'</div>';
+    document.body.appendChild(v);
+    var input=v.querySelector('#accessIn'), msg=v.querySelector('#accessMsg');
+    var go=function(){
+      try{
+        var role=accessTry(input.value);
+        if(!role){ msg.textContent='That code is not recognised. Check it and try again.'; input.focus(); return; }
+        try{ v.remove(); }catch(e){}
+        try{ alertToast((role==='coach'? 'Coach' : 'Athlete')+' access until '+accessUntilText()); }catch(e){}
+        try{ if(role!=='coach' && ROSTER && ROSTER.mode==='coach'){ ROSTER.mode='solo'; rosterSave(); } }catch(e){}
+        try{ render(); }catch(e){}
+      }catch(e){}
+    };
+    v.querySelector('#accessOk').onclick=go;
+    input.addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); go(); } });
+    var cancel=v.querySelector('#accessCancel'); if(cancel) cancel.onclick=function(){ try{ v.remove(); }catch(e){} };
+    setTimeout(function(){ try{ input.focus(); }catch(e){} }, 50);
+  }catch(e){}
+}
+// a coach-mode card whose holder does not have coach rights runs as a solo card. The roster is
+// kept, untouched; it comes back the moment a coach code is entered and the switch is flipped.
+function accessEnforce(){
+  try{ if(ROSTER && ROSTER.mode==='coach' && !coachAllowed()){ ROSTER.mode='solo'; rosterSave(); return true; } }catch(e){}
+  return false;
+}
+function accessHTML(){
+  var r=accessRole();
+  return '<div class="block"><h3>Access</h3>'
+    +'<div class="cue">'+(r
+        ? ('<b>'+(r==='coach'? 'Coach':'Athlete')+'</b> access until <b>'+esc(accessUntilText())+'</b>.'
+           +(r==='coach'? ' Coach tools are on.' : ' Coach tools need a coach code.'))
+        : 'No current access.')+'</div>'
+    +'<div class="toggle" data-accesscode="1" style="margin-top:8px">Enter a code</div>'
+    +'</div>';
+}
+
 // ===== TERMS & PRIVACY =====
 // The depth layer under the disclaimer gate (2026-09-01). The gate stays four lines because
 // short text gets read; this is where the detail lives, reachable from the gate and from
@@ -13297,7 +13444,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v213';
+const BUILD = 'v214';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -16484,6 +16631,7 @@ function wire(){
     try{ SET_OPEN=false; settingsSync(); }catch(e){}
     render(); });
   document.querySelectorAll('[data-discshow]').forEach(b=>b.onclick=()=>{ bootDisc(true); });
+  document.querySelectorAll('[data-accesscode]').forEach(b=>b.onclick=()=>{ bootAccess(true); });
   document.querySelectorAll('[data-gocal]').forEach(b=>b.onclick=()=>{ S.day='CAL'; save(); render(); });
   document.querySelectorAll('[data-mailopen]').forEach(b=>b.onclick=()=>{ mailShow(); });
   document.querySelectorAll('[data-foldtog]').forEach(b=>b.onclick=()=>{ var id=b.dataset.foldtog; S.fold=S.fold||{}; S.fold[id]=!foldOpen(id, b.getAttribute('aria-expanded')==='true'); save(); render(); });
@@ -18729,6 +18877,9 @@ load().then(async()=>{
   // actually enforced, now that the acknowledgment has been loaded. The splash is still over the
   // top at this point, so nobody sees the gate come and go.
   try{ if(!discPending()){ var g0=document.getElementById('discGate'); if(g0 && !g0.__force) g0.remove(); } }catch(e){}
+  // ACCESS (v214): a card from before the gate becomes an athlete card for 90 days; a card whose
+  // holder lacks coach rights runs solo; anything without current access meets the gate.
+  try{ accessLegacy(); accessEnforce(); if(!accessOK()) bootAccess(); }catch(e){}
   // must run AFTER the saved state is in, or S.seenBuild is still empty and every
   // returning user looks like a first-timer
   setTimeout(function(){ try{ whatsNewBoot(); }catch(e){ oops('whatsNewBoot',e); } }, 60);
