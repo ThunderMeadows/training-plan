@@ -718,7 +718,10 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
   padding:28px 22px calc(28px + env(safe-area-inset-bottom));display:flex;align-items:flex-start;}
 .disc-inner{max-width:480px;margin:auto;width:100%;}
 #discOk{min-height:48px;line-height:1.2;display:flex;align-items:center;justify-content:center;
-  width:100%;box-sizing:border-box;-webkit-tap-highlight-color:rgba(255,255,255,.15);touch-action:manipulation;}
+  width:100%;box-sizing:border-box;-webkit-tap-highlight-color:rgba(255,255,255,.15);touch-action:manipulation;
+  /* pinned to the bottom of the gate's own scroll box: on a short phone the four paragraphs can
+     push the button below the fold, and a gate whose button is off-screen reads as frozen */
+  position:sticky;bottom:0;}
 .disc-inner h2{font-size:22px;letter-spacing:-.01em;margin:0 0 12px;}
 .disc-inner p{font-size:14.5px;line-height:1.65;color:var(--chalk);margin:0 0 12px;}
 .disc-inner p b{color:var(--amber);}
@@ -7599,6 +7602,12 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.06f', date:'2026-09-06', title:'The \u201cBefore you train\u201d screen now stays gone once you have read it', items:[
+    'That screen was coming back on every open, for everyone, no matter how many times you had tapped I understand. It was checking for your answer before your saved data had loaded, so it never found it. Fixed \u2014 once is once.',
+    'On some phones the I understand button was not responding at all. The button now accepts a plain tap however your phone delivers it, and it stays pinned to the bottom of the screen so it can never scroll out of reach on a small phone.',
+    'You can still re-read the notice any time from Settings.'
+  ], bulk:'Two apologies in one. First: that \u201cBefore you train\u201d screen was meant to show once and it was showing every single time you opened me. I was checking for your answer before I had loaded it. Fixed. Second: on some phones the I understand button was dead \u2014 the tap was arriving, I just was not listening for it the way that phone sends it. Now I accept a tap any way it comes, and the button stays on screen no matter how small the phone. If you ever want to read the notice again, it is in Settings. It will not ambush you at the door.'},
+
   {build:'2026.09.06e', date:'2026-09-06', title:'The card now opens on your training day', items:[
     'Close the card on the Rate tab and it used to come back on the Rate tab. Now every open lands on your training day \u2014 the session in progress, or the next one up.',
     'Come back after half an hour or more in another app and it does the same. A quick look at your messages between sets moves nothing.',
@@ -9396,6 +9405,39 @@ function discAccept(){
 }
 try{ window.addEventListener('click', function(ev){
   var t=ev.target; if(t && t.closest && t.closest('#discOk')){ discAccept(); } }, true); }catch(e){}
+// FIELD 2026-09-06, THIRD report of a dead "I understand" - his sister, first open, "frozen,
+// buttons don't work". Every path above depends on a CLICK event arriving. A phone can withhold
+// one: iOS drops the synthesized click after a touch that a handler preventDefault-ed, after a
+// finger that moved, after a touch that overlapped a scroll of the gate's own container. The
+// acknowledgment is the tap, not the event name it arrives under - so the gate now also accepts
+// the tap as a pointer-up or touch-end on the button that did not travel, and a watchdog behind
+// all of it: a pointer went DOWN on the button and the gate is still standing half a second
+// later, the tap is honoured. Whatever a phone withholds, it cannot withhold the finger.
+var _discDown=null;
+function discTapEnd(ev){
+  try{
+    var t=ev.target; if(!t || !t.closest || !t.closest('#discOk')) return;
+    var p=(ev.changedTouches && ev.changedTouches[0]) || ev;
+    if(_discDown && p && p.clientX!=null && Math.hypot(p.clientX-_discDown.x, p.clientY-_discDown.y)>14) return;  // that was a scroll
+    discAccept();
+  }catch(e){}
+}
+try{
+  window.addEventListener('pointerdown', function(ev){
+    try{ var t=ev.target; if(!t || !t.closest || !t.closest('#discOk')) return;
+      _discDown={x:ev.clientX, y:ev.clientY, t:Date.now()};
+      setTimeout(function(){ try{
+        var g=document.getElementById('discGate'); if(!g || g.__done) return;
+        if(_discDown && Date.now()-_discDown.t>=450) discAccept();
+      }catch(e){} }, 520);
+    }catch(e){} }, true);
+  window.addEventListener('touchstart', function(ev){
+    try{ var t=ev.target; if(!t || !t.closest || !t.closest('#discOk')) return;
+      var p=ev.touches && ev.touches[0]; if(p) _discDown={x:p.clientX, y:p.clientY, t:Date.now()};
+    }catch(e){} }, {capture:true, passive:true});
+  window.addEventListener('pointerup', discTapEnd, true);
+  window.addEventListener('touchend', discTapEnd, {capture:true, passive:true});
+}catch(e){}
 function bootDisc(force){
   try{
     if(!force && S.discAck && S.discAck.v>=DISC_V) return;
@@ -13255,7 +13297,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v212';
+const BUILD = 'v213';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -18681,6 +18723,12 @@ try{
   }
 }catch(e){}
 load().then(async()=>{
+  // FIELD 2026-09-06: bootDisc() runs at script end, BEFORE this - with S still the default
+  // state, so S.discAck was never there to read and the gate stood on EVERY open, for everyone,
+  // since the day it shipped. "Acknowledged once per DISC_V" was the rule; this is where it is
+  // actually enforced, now that the acknowledgment has been loaded. The splash is still over the
+  // top at this point, so nobody sees the gate come and go.
+  try{ if(!discPending()){ var g0=document.getElementById('discGate'); if(g0 && !g0.__force) g0.remove(); } }catch(e){}
   // must run AFTER the saved state is in, or S.seenBuild is still empty and every
   // returning user looks like a first-timer
   setTimeout(function(){ try{ whatsNewBoot(); }catch(e){ oops('whatsNewBoot',e); } }, 60);
