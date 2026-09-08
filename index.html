@@ -9572,31 +9572,103 @@ function bootAccess(force){
       +'<input type="text" id="accessIn" class="dtin" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX" style="width:100%;box-sizing:border-box;font-size:20px;letter-spacing:.12em;text-align:center;margin-top:8px">'
       +'<div id="accessMsg" class="cue" style="min-height:20px;padding:6px 0 0;color:var(--amber)"></div>'
       +'<button type="button" class="daybtn" id="accessOk" style="margin-top:12px;width:100%">Continue</button>'
+      +((expired||force)? renewButtonsHTML() : '')
       +(force? '<div class="disc-more" id="accessCancel">Keep what I have</div>' : '')
       +'</div>';
     document.body.appendChild(v);
     var input=v.querySelector('#accessIn'), msg=v.querySelector('#accessMsg');
     var go=function(){
       try{
+        if(v.__done) return;
         var role=accessTry(input.value);
         if(!role){ msg.textContent='That code is not recognised. Check it and try again.'; input.focus(); return; }
-        try{ v.remove(); }catch(e){}
-        try{ alertToast((role==='coach'? 'Coach' : 'Athlete')+' access until '+accessUntilText()); }catch(e){}
-        try{ if(role!=='coach' && ROSTER && ROSTER.mode==='coach'){ ROSTER.mode='solo'; rosterSave(); } }catch(e){}
-        try{ render(); }catch(e){}
+        v.__done=true;
+        accessAfterGrant(role);
+        // say it before leaving: the sheet behind this gate may look exactly as it did
+        var inner=v.querySelector('.disc-inner');
+        inner.innerHTML='<h2>'+(role==='coach'? 'Coach access is on' : 'Athlete access is on')+'</h2>'
+          +'<p>Good until <b>'+esc(accessUntilText())+'</b>.'
+          +(role==='coach'
+              ? ((ROSTER && ROSTER.mode==='coach')? ' Coaching is switched on and your roster is back where it was.'
+                                                    : ' You can now switch on coaching under <b>You \u2192 Who is using this card</b>.')
+              : ' This card is set up for your own training.')
+          +'</p><button type="button" class="daybtn" id="accessDone" style="margin-top:12px;width:100%">Done</button>';
+        var done=function(){ try{ v.remove(); }catch(e){} try{ render(); }catch(e){} };
+        var db=inner.querySelector('#accessDone'); db.onclick=done;
+        db.addEventListener('pointerup', done); db.addEventListener('touchend', done, {passive:true});
       }catch(e){}
     };
-    v.querySelector('#accessOk').onclick=go;
+    var okb=v.querySelector('#accessOk');
+    okb.onclick=go;
+    // same lesson as the disclaimer button (v213): a phone can withhold the click. Take the tap
+    // as a pointer-up or touch-end on the button as well - go() ignores the second arrival.
+    okb.addEventListener('pointerup', go);
+    okb.addEventListener('touchend', go, {passive:true});
     input.addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); go(); } });
+    input.setAttribute('autocorrect','off'); input.setAttribute('autocomplete','off');
     var cancel=v.querySelector('#accessCancel'); if(cancel) cancel.onclick=function(){ try{ v.remove(); }catch(e){} };
+    var rc=v.querySelector('[data-renewcopy]'); if(rc) rc.onclick=renewCopy;
     setTimeout(function(){ try{ input.focus(); }catch(e){} }, 50);
   }catch(e){}
 }
 // a coach-mode card whose holder does not have coach rights runs as a solo card. The roster is
 // kept, untouched; it comes back the moment a coach code is entered and the switch is flipped.
 function accessEnforce(){
-  try{ if(ROSTER && ROSTER.mode==='coach' && !coachAllowed()){ ROSTER.mode='solo'; rosterSave(); return true; } }catch(e){}
+  try{ if(ROSTER && ROSTER.mode==='coach' && !coachAllowed()){ ROSTER.mode='solo'; ROSTER.wasCoach=true; rosterSave(); return true; } }catch(e){}
   return false;
+}
+// FIELD 2026-09-07, his own card, first open on v214: "I entered the coach code, selected
+// enter, and nothing happened." The code WAS accepted and the gate closed - but the card had
+// switched his roster to solo when it found no coach rights, accepting the code did not switch
+// it back, and behind the gate the Settings sheet still read "Athlete access". A two-second
+// toast was the only sign. A coach code now hands the roster straight back, the gate says in
+// its own words what it just did before it goes, and the Settings sheet is refreshed in place.
+function accessAfterGrant(role){
+  try{
+    if(role==='coach'){
+      if(ROSTER && (ROSTER.wasCoach || (ROSTER.athletes||[]).length) && ROSTER.mode!=='coach'){
+        ROSTER.mode='coach'; delete ROSTER.wasCoach; rosterSave();
+      }
+    } else if(ROSTER && ROSTER.mode==='coach'){ ROSTER.mode='solo'; ROSTER.wasCoach=true; rosterSave(); }
+  }catch(e){}
+  try{ if(typeof SET_OPEN!=='undefined' && SET_OPEN) settingsRefresh(); }catch(e){}
+  try{ render(); }catch(e){}
+}
+// His ask, 2026-09-07: "Add the expiration date to the calendar and have a 'good till' in the
+// header somewhere. Or renew? Then a link that sends the user to send me a direct email or
+// message with an auto message asking for a renewal."
+// RENEW_EMAIL / RENEW_SMS are his. Either may be blank; with neither set, the button puts the
+// request on the clipboard so it can be pasted anywhere. The message is prefilled - the athlete
+// only has to send it.
+var RENEW_EMAIL='', RENEW_SMS='', RENEW_SOON_DAYS=14;
+function accessDaysLeft(){ try{ var a=S.access; if(!a||!a.until) return null;
+  return Math.round((new Date(a.until+'T12:00:00')-new Date(shiftDate()+'T12:00:00'))/86400000); }catch(e){ return null; } }
+function accessSoon(){ var d=accessDaysLeft(); return d!=null && d<=RENEW_SOON_DAYS; }
+function renewText(){
+  var a=S.access||{}, who=(S.profileName||'').trim();
+  var when=a.until? accessUntilText() : 'now';
+  return 'Hi \u2014 my Deadstop Training Card access ('+(a.role||'athlete')+') '
+    +(accessOK()? 'runs out on '+when : 'ran out on '+when)
+    +'. Could you send me a renewal code?'+(who? ' \u2014 '+who : '');
+}
+function renewHref(kind){
+  var body=encodeURIComponent(renewText());
+  if(kind==='sms' && RENEW_SMS) return 'sms:'+RENEW_SMS+'?&body='+body;
+  if(RENEW_EMAIL) return 'mailto:'+RENEW_EMAIL+'?subject='+encodeURIComponent('Training Card renewal')+'&body='+body;
+  return '';
+}
+function renewButtonsHTML(){
+  var h='';
+  if(RENEW_EMAIL) h+='<a class="toggle lockfree" href="'+renewHref('mail')+'" style="display:block;text-align:center;margin-top:8px;text-decoration:none">Email a renewal request</a>';
+  if(RENEW_SMS)   h+='<a class="toggle lockfree" href="'+renewHref('sms')+'" style="display:block;text-align:center;margin-top:8px;text-decoration:none">Text a renewal request</a>';
+  if(!RENEW_EMAIL && !RENEW_SMS) h+='<div class="toggle lockfree" data-renewcopy="1" style="margin-top:8px">Copy a renewal request</div>';
+  return h;
+}
+function renewCopy(){
+  try{ var t=renewText();
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function(){});
+    try{ alertToast('Renewal request copied \u2014 paste it into a message'); }catch(e){}
+  }catch(e){}
 }
 function accessHTML(){
   var r=accessRole();
@@ -9606,6 +9678,7 @@ function accessHTML(){
            +(r==='coach'? ' Coach tools are on.' : ' Coach tools need a coach code.'))
         : 'No current access.')+'</div>'
     +'<div class="toggle" data-accesscode="1" style="margin-top:8px">Enter a code</div>'
+    +renewButtonsHTML()
     +'</div>';
 }
 
@@ -13444,7 +13517,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v214';
+const BUILD = 'v216';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -15692,6 +15765,13 @@ function renderInner(){
       +((typeof isInstalled==='function' && !isInstalled() && typeof onHTTP==='function' && onHTTP()
          && (typeof a2hsPlatform!=='function' || a2hsPlatform()!=='desktop'))
         ? ' \u00b7 <span class="nist-tag lockfree" data-nist="1" role="button" tabindex="0">NOT INSTALLED</span>' : '')
+      // ACCESS (v216): the run-out date lives in the header, and turns into Renew when it is close
+      +(function(){ try{
+          if(!S.access || !S.access.until) return '';
+          var soon=accessSoon(), left=accessDaysLeft();
+          var txt=!accessOK()? 'RENEW' : (soon? 'RENEW \u00b7 '+left+' day'+(left===1?'':'s') : 'Good till '+accessUntilText());
+          return ' \u00b7 <span class="'+(soon||!accessOK()? 'nist-tag':'beta-tag')+' lockfree" data-accesshdr="1" role="button" tabindex="0">'+txt+'</span>';
+        }catch(e){ return ''; } })()
       +'</div></div>'
     +((cyc()===1)? '<div class="hdr-help lockfree" data-tourcore="1" role="button" tabindex="0" aria-label="Replay the quick tour">?</div>' : '')
     +'<div class="hdr-help lockfree" data-mailopen="1" role="button" tabindex="0" aria-label="Mail from Bulk" style="position:relative">'
@@ -16632,6 +16712,8 @@ function wire(){
     render(); });
   document.querySelectorAll('[data-discshow]').forEach(b=>b.onclick=()=>{ bootDisc(true); });
   document.querySelectorAll('[data-accesscode]').forEach(b=>b.onclick=()=>{ bootAccess(true); });
+  document.querySelectorAll('[data-accesshdr]').forEach(b=>b.onclick=()=>{ bootAccess(true); });
+  document.querySelectorAll('[data-renewcopy]').forEach(b=>b.onclick=renewCopy);
   document.querySelectorAll('[data-gocal]').forEach(b=>b.onclick=()=>{ S.day='CAL'; save(); render(); });
   document.querySelectorAll('[data-mailopen]').forEach(b=>b.onclick=()=>{ mailShow(); });
   document.querySelectorAll('[data-foldtog]').forEach(b=>b.onclick=()=>{ var id=b.dataset.foldtog; S.fold=S.fold||{}; S.fold[id]=!foldOpen(id, b.getAttribute('aria-expanded')==='true'); save(); render(); });
@@ -17676,10 +17758,13 @@ function calHTML(){
       if(iso>today) bd='1px solid var(--amber)';
       else if(iso<today) fg='var(--red)';
     }
+    var accEnd=!!(S.access && S.access.until===iso);   // ACCESS (v216): the day access runs out
+    if(accEnd && !(e&&e.days.length)){ bd='2px solid var(--red)'; }
     h+='<div data-calday="'+iso+'" style="min-height:44px;border:'+bd+';border-radius:8px;background:'+bg
       +';padding:3px 2px;text-align:center;cursor:pointer;'+(isToday?'box-shadow:0 0 0 2px var(--amber);':'')+'">'
       +'<div class="mono" style="font-size:12px;font-weight:700;color:'+fg+'">'+d
       +'</div>'
+      +(accEnd? '<div style="font-size:8px;font-weight:800;color:var(--red);letter-spacing:.04em">ACCESS</div>' : '')
       +(e&&e.days.length? '<div style="font-size:10px;font-weight:800;color:'+fg+'">'+e.days.join('')+'</div>':'')
       +(e&&e.bw!=null? '<div style="font-size:8px;color:'+(e.days.length?fg:'var(--faint)')+'">'+Math.round(isKg()? e.bw*0.45359237 : e.bw)+'</div>':'')
       +(function(){ var ns=(calNotes()[iso]||[]); if(!ns.length) return '';
@@ -17695,7 +17780,18 @@ function calHTML(){
    +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;color:var(--red);text-align:center;font-size:9px;line-height:10px;font-weight:800;vertical-align:-1px">7</span> missed</span>'
 
    +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;box-shadow:0 0 0 2px var(--amber);vertical-align:-1px"></span> today</span>'
+   +(S.access&&S.access.until? '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--red);vertical-align:-1px"></span> access runs out</span>' : '')
    +'</div>';
+  // ACCESS (v216): the date in words, and the way to renew, on the tab where dates live
+  try{ if(S.access && S.access.until){
+    var dl=accessDaysLeft();
+    h+='<div class="block" id="calAccess" style="margin-top:10px'+((accessSoon()||!accessOK())? ';border-color:var(--amber)':'')+'">'
+      +'<div class="cue">'+(accessOK()
+          ? ('Access runs out on <b>'+esc(accessUntilText())+'</b>'+(dl!=null? ' \u2014 '+dl+' day'+(dl===1?'':'s')+' from today.' : '.'))
+          : ('Access ran out on <b>'+esc(accessUntilText())+'</b>.'))+'</div>'
+      +'<div class="toggle lockfree" data-accesscode="1" style="margin-top:8px">Enter a code</div>'
+      +renewButtonsHTML()+'</div>';
+  } }catch(e){}
   // month summary
   let n=0, bwF=null, bwL=null;
   Object.keys(ix).forEach(k=>{ if(k.indexOf(ym)!==0) return;
