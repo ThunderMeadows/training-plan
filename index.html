@@ -5841,6 +5841,9 @@ function reviewBarHTML(){
     // record of what actually happened - right beside it. Nothing is reconstructed.
     try{
       var vr=visitedLogRef();
+      if(vr && vr.c && vr.c.shape_src==='report' && Array.isArray(vr.c.shape) && vr.c.shape.length){
+        h+='<div class="cue lockfree" style="padding:6px 0">Rebuilt from the session report \u2014 the movements, weights and sets are the ones written down when this session was banked.</div>';
+      }
       if(vr && vr.c && !(Array.isArray(vr.c.shape) && vr.c.shape.length) && vr.c.report){
         h+='<div class="block lockfree" style="border-color:var(--amber)">'
           +'<div class="cue" style="padding:0 0 6px"><b>Logged before this version of the card.</b> '
@@ -6769,6 +6772,8 @@ async function rosterSwitch(id){
     // whatever training day happened to be saved
     if(!id) S.day='MAX';
     try{ await refreshLogs(); }catch(e){ oops('rosterSwitchLogs',e); }
+    // v219: back on the holder's own card, run the access checks that a drawer defers
+    if(!id){ try{ accessLegacy(); accessEnforce(); if(!accessOK()) bootAccess(); }catch(e){} }
     render();
   }catch(e){ oops('rosterSwitch',e); }
 }
@@ -7608,6 +7613,18 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.08a', date:'2026-09-08', title:'Renewal requests now reach the coach directly', items:[
+    'The renewal button under Settings \u2192 Access, on the calendar, and on the expired screen now opens a prefilled email or text straight to the person who issues codes. One tap, then send.',
+    'Nothing else changes for you. Administrators get a new tab for issuing keys.'
+  ], bulk:'Housekeeping. The renewal button now actually goes somewhere \u2014 one tap opens a prefilled email or text to the person who hands out codes, and you just hit send. That is the whole letter.'},
+
+  {build:'2026.09.07b', date:'2026-09-07', title:'Your older sessions show what you actually did again', items:[
+    'Sessions logged before the card started saving each one in full were still being redrawn from today\u2019s program \u2014 so a movement added to a day later could show up in a session you did before it existed, wearing your real sets.',
+    'Every one of those sessions has now been rebuilt from its own session report \u2014 the record written the moment you banked it. The movements, the weights and every set are the ones you logged.',
+    'Nothing was guessed. If a report cannot be read exactly, that session is left alone with a note and the report beside it.',
+    'Rebuilt sessions carry a small note saying so.'
+  ], bulk:'Follow-up on the forgery business. The sessions from before I started saving each one in full were still being redrawn from today\u2019s program, so an exercise that joined a day last week could show up in a session you did a month ago, wearing your actual sets. I have now rebuilt every one of those from its own session report \u2014 the thing I wrote down the moment you banked it. Same movements, same weights, same sets, in the same order. Where I could not read a report exactly I left it alone rather than guess. The rebuilt ones say so at the top.'},
+
   {build:'2026.09.07a', date:'2026-09-07', title:'The card is now by invitation', items:[
     'New cards ask for an access code before anything else. The code sets what the card can do \u2014 athlete or coach \u2014 and is good for three months.',
     'You already use the card, so you have athlete access from today with no code needed. You will see it under Settings \u2192 Access, with the date it runs to.',
@@ -9491,10 +9508,289 @@ function bootDisc(force){
 // phone's storage. The codes are never in this file - only their SHA-256 fingerprints are, so
 // nobody can read a code out of the source. Rotating codes means new fingerprints and a build.
 var ACCESS_SALT='deadstop-access-v1', ACCESS_DAYS=90;
+// v218. Every code the card will accept, as a salted SHA-256 fingerprint, with its life in days
+// and a version tag so a build can retire a generation. p:1 marks a pool code - one an
+// administrator can issue from the encrypted pool below. The admin key lives a year, by his
+// decision on 2026-09-07 ("admin key should have 1 year expiration").
 var ACCESS_CODES=[
-  {h:'68e6fe86d657339613bde915da9f9278e06e105bb9845e65c3a6dffe08b1ec2e', role:'athlete'},
-  {h:'5c1139b4c46386e92c0c572f7920130e78b5fb0f07b9c4ba2684b316ee2d2aef', role:'coach'}
+  {h:'68e6fe86d657339613bde915da9f9278e06e105bb9845e65c3a6dffe08b1ec2e', role:'athlete', days:90, v:1},
+  {h:'5c1139b4c46386e92c0c572f7920130e78b5fb0f07b9c4ba2684b316ee2d2aef', role:'coach', days:90, v:1},
+  {h:'b17cb67fa70e310101c3bb6346ded2aa3c9f893c27c312042390ef17c3844508', role:'admin', days:365, v:1},
+  {h:'94778787ec5b7f5898ac1784927f2c2354d9e78f9132c7e097b33bdb818d68a5', role:'athlete', days:90, v:1, p:1},
+  {h:'c08d51584dcd26d7b35b4eacbeca619410964cbae55881e2fba974e7596c8fcb', role:'athlete', days:90, v:1, p:1},
+  {h:'c3a6fe018ffa85f10c961595f7ae004937d06a6b50f5797ea13cbded6cc14a89', role:'athlete', days:90, v:1, p:1},
+  {h:'5c6cac51abdb08163ccf8258e579b45e52619ac866aa59f88c5d40a8fc0c6f07', role:'athlete', days:90, v:1, p:1},
+  {h:'03fc441b130578dfb058df6d17d5b488bb5bad0bc9cea59484f996c36912427a', role:'athlete', days:90, v:1, p:1},
+  {h:'8fe7a060fbb60dc6f7112bd40377cb74b6d0d1e32e0d90df6ed75cc0fd85e024', role:'athlete', days:90, v:1, p:1},
+  {h:'cea315a45840caff5d87806ac8a30405ce6d4488d43bbbc0d47a85084426fb9a', role:'athlete', days:90, v:1, p:1},
+  {h:'3fce3063eb2c2a29380bedb101d55196f3d0348a93be42e54ecde7648163ddb1', role:'athlete', days:90, v:1, p:1},
+  {h:'b82833bd9050ed2c9ca0484e7bab9c0a874318051b26b145e8b612e45a213c9a', role:'athlete', days:90, v:1, p:1},
+  {h:'a01f8be7fbe11e35a474ef59cf45c3fe05970e970e64aad5692d06e1e1871f19', role:'athlete', days:90, v:1, p:1},
+  {h:'e34c43e4f91f153469cc4d4166f63b7f007cfbfd2a035603027f5272307f099d', role:'athlete', days:90, v:1, p:1},
+  {h:'fc1fd64f0785e1811240f2aa921209138a49033d5179df63ff5bde343d0427fe', role:'athlete', days:90, v:1, p:1},
+  {h:'33a4cde0cd61f38fb9062a26626242794d2dde3ddeea8b6b64693f62915ae380', role:'athlete', days:90, v:1, p:1},
+  {h:'cf61e768fbf870fe9bff468934c0df2e5c02d672070f557401fcc6328c63ce36', role:'athlete', days:90, v:1, p:1},
+  {h:'92c6fa9db752a76e358d589ade5cb89818ef6cc7e59b53b31ad191fb30940bcb', role:'athlete', days:90, v:1, p:1},
+  {h:'29c2584e5832b2fee0ae565f5a6509d6d9ec4cf361f6b7642b9b424b5dc7b9ed', role:'athlete', days:90, v:1, p:1},
+  {h:'e5afd40c5b0c7e83ee1c1958526d7f4bd27cdb8b5280f4113f9fa5e69f43c665', role:'athlete', days:90, v:1, p:1},
+  {h:'e6b999901ddd01ae63b3cc3da0961d8e4525b8f5ed001254968becfb20aca016', role:'athlete', days:90, v:1, p:1},
+  {h:'a412218c0a07d97bc0ed9727e087f8915bba2c3633f6d822ca212c92ca26d07a', role:'athlete', days:90, v:1, p:1},
+  {h:'0ed54d373ca556c3c9ca052dbbd80e1f4b1e149d9bf0c6f4eb1ef6bdd901f2e3', role:'athlete', days:90, v:1, p:1},
+  {h:'9a859869011bfcad4d8bf2c9a6aabb4bdfd8c991f21edc4614e3637c71f52c22', role:'athlete', days:90, v:1, p:1},
+  {h:'636c51a673c586f560ebbe90c0cc6d1506bb5a3be4f42088972b75860dc3feb3', role:'athlete', days:90, v:1, p:1},
+  {h:'a630c7e124f61112b376645afb02d8fd92c50c27f58207e37160eda07940766c', role:'athlete', days:90, v:1, p:1},
+  {h:'b6713b222df6f4e84681cfa49e977c99d9c053cb7cbf92064222dabb2570075a', role:'athlete', days:90, v:1, p:1},
+  {h:'947a30e9b97dff546f3b67e1bae08b17ccc4e0967d890e5df5cdcb8860930b12', role:'athlete', days:90, v:1, p:1},
+  {h:'032f3dea3fea1bdcc65e1db594f6318042ca6cb39d7d63f6642c98e7a6137c0f', role:'athlete', days:90, v:1, p:1},
+  {h:'8b5a99b8403f82f67512d3d9825b6a042583e5eaae2e8c16f2f648f025075c06', role:'athlete', days:90, v:1, p:1},
+  {h:'86aa2d7492aa286cc17cd060709b2dc5f3ab418a47e53f42af0202fe817aaf93', role:'athlete', days:90, v:1, p:1},
+  {h:'cedc629df10d0d9db8a206743fe3bae7b3d8113c473946279b1a110b9f86a814', role:'athlete', days:90, v:1, p:1},
+  {h:'dffa2c778992dd3abba4bbcdacd05b45fa7dc6e48a4b90fd760ad37103039ebb', role:'athlete', days:90, v:1, p:1},
+  {h:'148b7f95b3e4f73b285573a5b358452a40f67a155d60514eb2cb2f989d3fe0e4', role:'athlete', days:90, v:1, p:1},
+  {h:'f6f1f06609b37311c65c52251a920c6f3f3f2baa97e0ccc025a569730398c3a9', role:'athlete', days:90, v:1, p:1},
+  {h:'96023a467e0cf5d9bbd70a31038370a13b1f3adeef3e54143d20490f7c3c65b2', role:'athlete', days:90, v:1, p:1},
+  {h:'384cfbc8ba6d3871b186a9e58e90505a1c38a5bd82630413c689436faedb4723', role:'athlete', days:90, v:1, p:1},
+  {h:'7e48ea21013ecc591315f45ff67f182df6fe2e563adc4625010370a642e8810f', role:'athlete', days:90, v:1, p:1},
+  {h:'60551fbdfeaff39403268994084820dd2a7d4011bf9ed3a0d3b436be11c9111f', role:'athlete', days:90, v:1, p:1},
+  {h:'ca097d1fd32de630656c5dd00730917fb6b18badc87ec8fd9ee205b36e3ba883', role:'athlete', days:90, v:1, p:1},
+  {h:'9b1705a311a62dbe49938993e397db11589e894bf9201ef78c67a727b60245cd', role:'athlete', days:90, v:1, p:1},
+  {h:'a73ce10451751a5317c51cee92821626e9d8dd52acf2d8212674a865f9ebc72b', role:'athlete', days:90, v:1, p:1},
+  {h:'59f3d33bff4b029147941cfbb7d0f90ac0f658190c37d423b0ba2dc2459e4bac', role:'athlete', days:90, v:1, p:1},
+  {h:'9a7df8e1e5d5fcf69648a435ae3bfe8eeb9ca36bf0194b1ee3c3ca49b7cd5c3b', role:'athlete', days:90, v:1, p:1},
+  {h:'9744b4edc45328f2ec052297f757f39c0db76ea432e0c5e6f2987fa8d282fe77', role:'athlete', days:90, v:1, p:1},
+  {h:'978e71bdd28a2f34cd752dca1abf51cc9fbdd6d5d9b72fe442d865fb31ef5a9a', role:'athlete', days:90, v:1, p:1},
+  {h:'bd12c40c0b2b1549d2dac79d64b3f35fcd63af4da84f917bbabf5a17293973b3', role:'athlete', days:90, v:1, p:1},
+  {h:'d30c73df7351bd25570f121b3f83333b102487f14f46829d6259158427311b3e', role:'athlete', days:90, v:1, p:1},
+  {h:'1b6bb9a6ef79fc0c6e2c2383f0a8b0612eb0d4ce358e1b80f1b774be51da7234', role:'athlete', days:90, v:1, p:1},
+  {h:'d7ceb5738e9cc619ef337d4bb283729fc1fdbb463cc67f02c4d9a24e3a383144', role:'athlete', days:90, v:1, p:1},
+  {h:'104b5c347dfc33b27b2a698047c2626bbd103b9a3b5d91ff651e65ab1872027b', role:'athlete', days:90, v:1, p:1},
+  {h:'0579a614754b55409bb4aa50d13ad862d966d04fb51fb078ff8f34d258060d6f', role:'athlete', days:90, v:1, p:1},
+  {h:'a21789e5bb82324af5a088af2d80ea0378d23e80f0294b8480958c9906bfcd48', role:'athlete', days:90, v:1, p:1},
+  {h:'5418989202b108df0db57431ecced643451a546bcd66927c134bc059b48770c9', role:'athlete', days:90, v:1, p:1},
+  {h:'8886021bca691ab045ecff584fb1b5b738a73ef28dabc2ac87e40c247a27f48a', role:'athlete', days:90, v:1, p:1},
+  {h:'a39ab7a2327709222d09c531985dd2389e995cb86fbd715b6715f533ec66c40d', role:'athlete', days:90, v:1, p:1},
+  {h:'4cdcbffced15c96e89354977dda0fc8484001f3d1ea4614d1e5a11765ad155a7', role:'athlete', days:90, v:1, p:1},
+  {h:'905f6c705ff87b6bf1f94db5914c5ab8398fe440371a7a39e7861d54ddef8c26', role:'athlete', days:90, v:1, p:1},
+  {h:'cd596665be08d2d0bb395ec37056acb005a170aca7c69e9b1cf42e0a1ec077b1', role:'athlete', days:90, v:1, p:1},
+  {h:'9cfc705fc7301890375a8d91c62f4f3078c47e8407402159a150fba28ebe2b04', role:'athlete', days:90, v:1, p:1},
+  {h:'6e199693fa3283a720e976d1f5405a0b18e9e9834b7047d0834b18be682dd1a7', role:'athlete', days:90, v:1, p:1},
+  {h:'1763ab1d0e4eaee4616c34ddc608ba869fe368843973ad4591b6d375f81d735d', role:'athlete', days:90, v:1, p:1},
+  {h:'115bdc8e0f9d5be7f11e281fb3ee4bdd953c36ac28ce212436e072d14005c20d', role:'athlete', days:90, v:1, p:1},
+  {h:'bf1bc94d4c6d97f621e5d257e75f1c26ba516f9d0eef3eff827e212873841f9c', role:'athlete', days:90, v:1, p:1},
+  {h:'94527add97f73db6bb925c2c79d53dd9d0cd955a04d1582c105ae513140de016', role:'athlete', days:90, v:1, p:1},
+  {h:'40ef52d5eca5527dbbc82607271a971f7c6f7e87caa93cd658dbc54a5910d266', role:'athlete', days:90, v:1, p:1},
+  {h:'aa65a65a9c19ea60d5b750f76af73a290820b36cb6cdfa263959a01133aacea1', role:'athlete', days:90, v:1, p:1},
+  {h:'b46d9bd12fd92a85b5ac1e97371701595956728428b94c4a537ae2b87ba8e74c', role:'athlete', days:90, v:1, p:1},
+  {h:'2d8bbd9e6a53e10c6457213bd9e0a070b7c2dd08ea56505a7f4b8dca6ea1652e', role:'athlete', days:90, v:1, p:1},
+  {h:'1d2fb710db24494787e3120a519a362dfcf811c7ac1120216423c20bc3b59a6f', role:'athlete', days:90, v:1, p:1},
+  {h:'373c7ce2813e6fa38ffca92241b26fdd71f647d72d5acf6e776ee064faab6e1a', role:'athlete', days:90, v:1, p:1},
+  {h:'c884744eb6a06df741373c4432fe4e8f2ebc5138cab802e9d54a9439e417207b', role:'athlete', days:90, v:1, p:1},
+  {h:'5bfd40d2a7eb65fb4ee2aab3c36d55a30dfdde9f9ce2025abf342997766d5521', role:'athlete', days:90, v:1, p:1},
+  {h:'ef98be52baf4e96bad365a6267235926b1e8dedbc518e8dc797632eb23a0db89', role:'athlete', days:90, v:1, p:1},
+  {h:'46a2864525bd2a60ea0e997fc1f00d3e8b147b2cca4c27f273f6ffc7022d13c5', role:'athlete', days:90, v:1, p:1},
+  {h:'62231df7e0da086488b0f1edecfd127f58e0350374d14b5b0e3eca0f5532b894', role:'athlete', days:90, v:1, p:1},
+  {h:'e531262e20013859b378495e8bd56d3cddd5f6de764a12fae49aef3c46b43c54', role:'athlete', days:90, v:1, p:1},
+  {h:'dab0cfd67d2b447fa060bdaf34a40cc6097b2a7419912dfbbd2a7558259544cc', role:'athlete', days:90, v:1, p:1},
+  {h:'0468c6e265ba5cb382d6311b25ff52eebc82574ed2f68e90252c38ac23457f21', role:'athlete', days:90, v:1, p:1},
+  {h:'5df20daf28f1dd2246377aff7e541da67a1c130f5c66bd074aae0749b074739e', role:'athlete', days:90, v:1, p:1},
+  {h:'7bbf531a69d60da5d6d114f9f1092ea34e858ea1aeff9e926ea47430384030c8', role:'athlete', days:90, v:1, p:1},
+  {h:'2b8343bfdf6deb12f2dff071982d1da01060da740eab986144ca63dead765255', role:'athlete', days:90, v:1, p:1},
+  {h:'bf2128c6c0d94747f2a9d614e2cda082b3df15163990ae3dbb97313dbc79df19', role:'athlete', days:90, v:1, p:1},
+  {h:'063a2c85af656929bb0af380a8f4ade6134b58ff0f92b4d0b2685d2e089c6aaa', role:'athlete', days:90, v:1, p:1},
+  {h:'f48833e0a65c2bfc335b69a4d9bcad495bdf23d7b396dc294ce7ac92eaf54f07', role:'athlete', days:90, v:1, p:1},
+  {h:'e0caad84a0b92ee0eefe3e75f131e8c1fb2d5fd77b08752ac9306ea97c57a046', role:'athlete', days:90, v:1, p:1},
+  {h:'fca1d79b13a3b628b353f52ad0326a3353aa48f5ad65a87be141a9e9e15f2c6c', role:'athlete', days:90, v:1, p:1},
+  {h:'09f831d5953d0b88cf525a353b13db0cb2969faae5fd0add5d1111d60c466fca', role:'athlete', days:90, v:1, p:1},
+  {h:'87a5f7c661ac98dee47d45b5bd89921545532a4793a207f728c63f42cff8a2af', role:'athlete', days:90, v:1, p:1},
+  {h:'dc96be3c0440cc566c2995d489670719d728e023ac4e3959341fe901fd7a535d', role:'athlete', days:90, v:1, p:1},
+  {h:'9db205e4035211665fbbea84d7e4edf8064f73d789fcf1fb759e016c12a125d5', role:'athlete', days:90, v:1, p:1},
+  {h:'48b1cba865a9cd0017c4b7bc070ea3c4710bebd6613b714c5048056c3263e641', role:'athlete', days:90, v:1, p:1},
+  {h:'510afd99b331f5015545cfa2bc33c804b53467011e9654c63d003bde5d1b7aac', role:'athlete', days:90, v:1, p:1},
+  {h:'2c3602314d4afd991f25a37b1330d26d82ffefc3f5c92b9b54a001e685f99c3c', role:'athlete', days:90, v:1, p:1},
+  {h:'6f031511752fd90eec397fc4fabfeff5509f764c8704406e015d068b1a733cea', role:'athlete', days:90, v:1, p:1},
+  {h:'879cc30bfdd6793e8b28904245cf32f35653c1014a34bbfdfbe3bb2ea8de2e49', role:'athlete', days:90, v:1, p:1},
+  {h:'7e52b9ce4faa7e80cbd5044a416ed7e7b61ed1a6b33ff0748dd90190761101cb', role:'athlete', days:90, v:1, p:1},
+  {h:'6d8006b2238084799b4e9bbfe4625cbae04286d6eb6953e6af23164dcb91d7d8', role:'athlete', days:90, v:1, p:1},
+  {h:'f0612d1a70ac4d9165534dad515ebcf14bdc00870840e9cb183ed750077210f7', role:'athlete', days:90, v:1, p:1},
+  {h:'ebe429e1e7b27cd817002e3a094f9dd1e3d2b1e1c1bb8fe14752f55a8fd33d69', role:'athlete', days:90, v:1, p:1},
+  {h:'1a7743dbd5c4148425b418c55b9e31b055d6f257ceef4e94e1c3820cb7b36c88', role:'athlete', days:90, v:1, p:1},
+  {h:'62d345166e49934feb076b9214bb6faab6a9df9d19ab8b705871d75067e4bc3a', role:'athlete', days:90, v:1, p:1},
+  {h:'fcedd12845d8911afac0ff37f621d186644abb64f9c4c13fd1c655165a42ccce', role:'athlete', days:90, v:1, p:1},
+  {h:'dfb0f8e04ff4e872a650cf6bb0a65c3ab6844ed6bb59c26b322ea6c6aad053b2', role:'athlete', days:90, v:1, p:1},
+  {h:'63cadf2ab13751a784ee484fdbc2e26b516a0317037bddf0c32da410e56f0c7e', role:'athlete', days:90, v:1, p:1},
+  {h:'f9cfd7e264f12857edd11e4590fa4465ccc273b661a96d444f22b124554c2ae1', role:'athlete', days:90, v:1, p:1},
+  {h:'909e42218d2e83ec2a3cfa879739dda345e0f89a4d5ce6aa1245e1a9def2d7d2', role:'athlete', days:90, v:1, p:1},
+  {h:'3c1be88c583cc722d3492b841b74e81bc9bc341c76698202824293bc9f44138c', role:'athlete', days:90, v:1, p:1},
+  {h:'424e0b61ba20240e84f70d027decfacfc53832325be8507aeb51de3aac1a804f', role:'athlete', days:90, v:1, p:1},
+  {h:'26d67c37b2abf5f4d8edde5d04c6d6fa99fbe375f4332f13cf7ce781ecffb68f', role:'athlete', days:90, v:1, p:1},
+  {h:'8d416b072b13958c0f35c6c4de22478e0487c43df52731a5244eccf12821e8fe', role:'athlete', days:90, v:1, p:1},
+  {h:'2059e9450d5f3eb2fcf16521b4c23d7cd193184fcb353cbb4119e8229bb2fa9b', role:'athlete', days:90, v:1, p:1},
+  {h:'5ddaf3603f79eb7d80e37d4fa8ef4aa94262b3ad1faab5528e0072076ac79a62', role:'athlete', days:90, v:1, p:1},
+  {h:'d8080be82911269d8112876a75d27ffb2ce69cb6258a01777369aad8fbb5eb0a', role:'athlete', days:90, v:1, p:1},
+  {h:'1ba368bcff8db8f866e04240a9ccd7e6a9c445610ad49b0956104313294055bd', role:'athlete', days:90, v:1, p:1},
+  {h:'0add921e0102710b11cb16de0e2f1ebd1053f87f078d0827275e4fa82d4352e3', role:'athlete', days:90, v:1, p:1},
+  {h:'3ed4acf7a35b752ca69beeff301b06562ffafa5c28f639b89ff5276513feead9', role:'athlete', days:90, v:1, p:1},
+  {h:'40840fb0c87b78fb7ecdf649ca92e495ab186d90fabb7efaaeb9417fb24016b5', role:'athlete', days:90, v:1, p:1},
+  {h:'a50d8c8b6a5cfb2775e6c89beb5fd9b5e7b50f3d9bf81085e103d4b3fb8c96f8', role:'athlete', days:90, v:1, p:1},
+  {h:'ecd816ac501c04285e3e7a24bba9e1fb00238c22d1f0493606f4e293f970b091', role:'athlete', days:90, v:1, p:1},
+  {h:'6ea3fd0988c4eab3679991d84fe9d7eda4e87cfeafab9318bc26468510f38cd2', role:'athlete', days:90, v:1, p:1},
+  {h:'b9c24d75414b009f8454696772a20217f1b9ef2b22981bcf057f9f939f2ce06b', role:'athlete', days:90, v:1, p:1},
+  {h:'4990871bf7812dcb2e44efab2cf161ffd6c6bf7bd169f160a6a0051cec0853af', role:'athlete', days:90, v:1, p:1},
+  {h:'adca05113d023125d0986434adbd109725cc9b2a395a078438a1b4bf1e45c18e', role:'athlete', days:90, v:1, p:1},
+  {h:'9405b9e4a66c3dd03f968d42d81110cd7ff8a088b2e12de7f3c9024e5eced71a', role:'athlete', days:90, v:1, p:1},
+  {h:'63b8e627c5f814e8e6e1f043b9a2313bff6a62b3114e623a81dafdd897b97fd8', role:'athlete', days:90, v:1, p:1},
+  {h:'6b8c11aa5967e93e7eab982de0ddc29344462d944453900b239e5b9a4491439a', role:'athlete', days:90, v:1, p:1},
+  {h:'25789d4e7deaf54017a45f5ac3b5b5e4789ce2bd8923edaae39acc62875f406d', role:'athlete', days:90, v:1, p:1},
+  {h:'420c6b662fa1b89d7571b010eaf28bf8f65fc258851eb153940de623adcec18a', role:'athlete', days:90, v:1, p:1},
+  {h:'53250b6309407fb6ca0e330ee27023ba0244cf7b6aa3488c2197e29c5e1d67a8', role:'athlete', days:90, v:1, p:1},
+  {h:'f86c857a157e1ca86c483d4f2b8ab0bc9f8b6b9f73491a511853903e8ff3163f', role:'athlete', days:90, v:1, p:1},
+  {h:'5d4453dc2ec37258d081fa213e61f3071a0e4dd24af8a9bee64c7d0c24f29cdd', role:'athlete', days:90, v:1, p:1},
+  {h:'e952b49954c1623fe81b8d2694b8589dde9da7f8e78c503bb84d31f8da5dbc7b', role:'athlete', days:90, v:1, p:1},
+  {h:'87ba3d72cc19241bff804bb1f024183e16221745a6f31872f8f789a57337b9ff', role:'athlete', days:90, v:1, p:1},
+  {h:'e432bfc5ea501c5607a027184a05a61d68bb1870fc97e41d5c76f58325bf8992', role:'athlete', days:90, v:1, p:1},
+  {h:'ff68903a6f03fd8b98325e15fc19c7171a08f4623a610f102c9d821bd251233d', role:'athlete', days:90, v:1, p:1},
+  {h:'5e0848686eae94dab25da561e141cf42aad333ff5c1327637162c70c407a237e', role:'athlete', days:90, v:1, p:1},
+  {h:'a45b120de8f96a7281db9f95616c40407cedffb31361b35fa21b87fad9af8e07', role:'athlete', days:90, v:1, p:1},
+  {h:'673286c7b132c09268fe19d87b44eca384812b16a7473c8b93e0c89ade466b47', role:'athlete', days:90, v:1, p:1},
+  {h:'1c9afb70f1fb89c09bcfb7afb8defd962ac891b502be3fe4acf24683069e290c', role:'athlete', days:90, v:1, p:1},
+  {h:'6575f74faab503a9c0cdb26fb9a270ef3e8d927ae833b63e984f37558b18c19c', role:'athlete', days:90, v:1, p:1},
+  {h:'42a25c3efcc6c6b5ed3be367c4350b237a7a33b19b608c3c71c901b51a4af6af', role:'athlete', days:90, v:1, p:1},
+  {h:'8c95aedb0f6ff48375a346b6b7001d2b84ea816ab3d6e3ed62284fee132fcddb', role:'athlete', days:90, v:1, p:1},
+  {h:'fa0d17f81269872da43017e26ebd9fec694c36319a2cf3c6fc8acbdac7a5c7b7', role:'athlete', days:90, v:1, p:1},
+  {h:'417ed3414bffdf8f005b8bb64929934bed37c5f6be4cb55cb89a971d3fc09442', role:'athlete', days:90, v:1, p:1},
+  {h:'77da3aa452d592ce0836030dc2f57e25fe84d3a3144d80fc8250918d86fab143', role:'athlete', days:90, v:1, p:1},
+  {h:'f3cf70461e49e330ec7a13bba1f6eba100a801ab03b7076874545a216ea3e503', role:'athlete', days:90, v:1, p:1},
+  {h:'4b896b04fddb34ad4f07aa5cfa5df0fb1c5fe1e97bd64348276db2c2c5f13e79', role:'athlete', days:90, v:1, p:1},
+  {h:'326cf0cf35c6b96e55e1afab1d4c9326b7da254c17f449de52bd4f3035115370', role:'athlete', days:90, v:1, p:1},
+  {h:'674447b71423eb913b67686c6f3589c82e8e4fc1165cc9c18c0ba064da678378', role:'athlete', days:90, v:1, p:1},
+  {h:'14c7bf112d7fab3404086c55a41cf9f779fe11ee59924b5b813e3060b873a272', role:'athlete', days:90, v:1, p:1},
+  {h:'5aa22b7b27fbdc01bf5f6687fc47852d6173dd1d4104847665ee40efc07a53e5', role:'athlete', days:90, v:1, p:1},
+  {h:'8d9a99704103bab70b6538b00fbe522795bcea2883aa9fbb905d51f3188b8003', role:'athlete', days:90, v:1, p:1},
+  {h:'b822f826d47164b2bdaada53b132d4c1cc520fd2b2f76c4cc92b7fbf2d74ebbe', role:'athlete', days:90, v:1, p:1},
+  {h:'168ffc22343dd13da9991989a80a43c7c07bdc212f2dc442b4f98081a124aca9', role:'athlete', days:90, v:1, p:1},
+  {h:'854467653217370a647858a7308a86c76c7f99b3d63dcb43cbe16a7e78b39a4c', role:'athlete', days:90, v:1, p:1},
+  {h:'3b8987e91423a9a67ff038e787d289dba19812a4454baf4c166b1cbd9ea0a0e2', role:'athlete', days:90, v:1, p:1},
+  {h:'47ac5b1deef61611f0e3b2b979e40f1b5045b8ec6dfcfb549ad085bac1d6eced', role:'athlete', days:90, v:1, p:1},
+  {h:'dbf31242b151df37fc224d31714a312243339b4e95f2f585b35c1931354d31c5', role:'athlete', days:90, v:1, p:1},
+  {h:'644e1aef60013adae163c982e702221bfc3180cfb36b0b7b0bc12a6ce0b14018', role:'athlete', days:90, v:1, p:1},
+  {h:'8b04667a41a70e72b25b96b6673db3a1d085e7c2ed42c68d8e041b37860ffbb5', role:'athlete', days:90, v:1, p:1},
+  {h:'69f68ca538b169c0699dce44a3a5e6136cc3fcd40449c3e20df9d4ef605ba700', role:'athlete', days:90, v:1, p:1},
+  {h:'59e42f97269c28d8c2ff60050e8598f92d74e0a5ae8af954cef4c42494a7c5d2', role:'athlete', days:90, v:1, p:1},
+  {h:'9471fc20745cff1072523c6a8c1c441b0a4fcc3cb0f0f11669c59746a0ccb859', role:'athlete', days:90, v:1, p:1},
+  {h:'b97693cbf276582227f619787188e59a18d932c6e6fc7c0e9d4222e529fdc23f', role:'athlete', days:90, v:1, p:1},
+  {h:'39a47922eb452f2adaddb1a9f2d033b4ecf82464a9f2e18ba5af0da38d771110', role:'athlete', days:90, v:1, p:1},
+  {h:'0d0f2ee540ccbd9717346aad94d25e5cf28ab6d78cefe70700d2e32e2df7de68', role:'athlete', days:90, v:1, p:1},
+  {h:'02cdf3d02601b474d49ccdfbc260b115548067327d54e12f6e2d404ac89f4cca', role:'athlete', days:90, v:1, p:1},
+  {h:'ec7539b532d0418ac9109f0be11c9d781ffecd10e4f6ff3f476659eef091fe70', role:'athlete', days:90, v:1, p:1},
+  {h:'a967c9f33cc4441c31d12af073ee1316bcb6617763db3ae78ee86a553e67b895', role:'athlete', days:90, v:1, p:1},
+  {h:'50486ef0ed07d08de8094c5af5573bba80d2124462211814b5d85ca02d046484', role:'athlete', days:90, v:1, p:1},
+  {h:'a11e561d7246017eef58f130efae8195c7c7cdec4035629d8cdbc23a2bd8b6e4', role:'athlete', days:90, v:1, p:1},
+  {h:'99705bfa3229d5e5762e3010476f8a0f0c6c0ac20e3c7ebf995bac3dbec5e5ff', role:'athlete', days:90, v:1, p:1},
+  {h:'c1390922a5a405c00c99816a23e243ebe9bdebfd522f90916094fc8e98bc3aa2', role:'athlete', days:90, v:1, p:1},
+  {h:'ef4539cbfe04c1a4c064c21570f2fbee64c71b9fa06bbdc9bb8f464c1717d270', role:'athlete', days:90, v:1, p:1},
+  {h:'2d01ed4b9cadb861a12e1317562a56a9ee3655a3b77bd93191a25f098d86d234', role:'athlete', days:90, v:1, p:1},
+  {h:'ec6708ddd301fc02088f3f6b39d3e6ab80da1b8a309fa7a9d0080a8d69e43d00', role:'athlete', days:90, v:1, p:1},
+  {h:'0b789cb571936788a4c3a0e87252a4d3acee80787d2b0fa93214ac46eff42f8f', role:'athlete', days:90, v:1, p:1},
+  {h:'f836139a66a06ee186299d0565d35db669746591003f9b564a342c59bc53c42a', role:'athlete', days:90, v:1, p:1},
+  {h:'21976b4132e280c7ddac3c357ea8d5e6ab731155074db327307bd7d9a17c6abe', role:'athlete', days:90, v:1, p:1},
+  {h:'080892ed065d9508727a4f2710e7fea6802070a5fb6b5d8bbcfbf48adf4b1632', role:'athlete', days:90, v:1, p:1},
+  {h:'a3d153ba9cd4e2f97a52d029f0fa3cabdcf11cc132d53f45fad7ce706e03ca7d', role:'athlete', days:90, v:1, p:1},
+  {h:'f6c1eea7285b031f05efbd45d721d773eca3dcd2e1cfd3b7ccc429d292d440a6', role:'athlete', days:90, v:1, p:1},
+  {h:'ad4e08318dd7ba2d85252e7121db4c9dd3660535178149e7bf8c59950b096014', role:'athlete', days:90, v:1, p:1},
+  {h:'ff19e2872c6e94d1b7bbad7073b329fbc7b6635c351af8b0610b01c962030d48', role:'athlete', days:90, v:1, p:1},
+  {h:'e883afe4489d232b5dd686aa5ec9b32ad4d71e94177f66a71d4d133220290a9d', role:'athlete', days:90, v:1, p:1},
+  {h:'e99fbbdc9697a03ee92af120436b31b7f7dbcf72f63ee194ee37e7ae96ce0abc', role:'athlete', days:90, v:1, p:1},
+  {h:'9d0bd0e751c579300b3cd5634e8e47dbd3ec74c8e0be9e76bddb1ef263739c55', role:'athlete', days:90, v:1, p:1},
+  {h:'7767427d333c696e98153772ab8d9bfd460c4e3cba94d74aa7e6fab52ee54a53', role:'athlete', days:90, v:1, p:1},
+  {h:'374802db1af658e0aa8e0f4da9c5bdb83f775d4b1b5f6554684a86e56f07d8c0', role:'athlete', days:90, v:1, p:1},
+  {h:'8b5c9d18b4653a76f6bcdc4dd26269787ebab882a1ca31c570c487c5f64aadbc', role:'athlete', days:90, v:1, p:1},
+  {h:'4a11534746691139084603cc0c327e3398d464bc2487661b7888ad1b6a8f1553', role:'athlete', days:90, v:1, p:1},
+  {h:'930d26b28bced750ab16812d4e3558c4968a724f1c4761f5a2c8a5bb68ae8337', role:'athlete', days:90, v:1, p:1},
+  {h:'47f721f255adcab609d9727f55d9c3708c0842c4bbd3c97f52d03b152a5e48d5', role:'athlete', days:90, v:1, p:1},
+  {h:'2c85633d0ddf63d9fccdadb385fed11ce3e18f616ab5a2368a20e69438d14fb8', role:'athlete', days:90, v:1, p:1},
+  {h:'4777daa4950b34efbcbbd3881fcc0f978b4846aabca2987a4351edbbbf9d1b55', role:'athlete', days:90, v:1, p:1},
+  {h:'06b8bf8ea842ae53298471f581c4dbf4ddf9ceadf97e51ccf02d6a7493c1eb09', role:'athlete', days:90, v:1, p:1},
+  {h:'cf3f22c0d662e0a32c0ad4d937cc843daf09bff56dd85460d9321421dbe0e643', role:'athlete', days:90, v:1, p:1},
+  {h:'40c83fc3b19827d30b9707cf1fc56b79099b97cacd6605752036f53de7b46432', role:'athlete', days:90, v:1, p:1},
+  {h:'4198a64e188e1877dd50b4049274518f2cee7d29a83aa48ac38ac072220db4b8', role:'athlete', days:90, v:1, p:1},
+  {h:'caf69f71a28701bcba1a02346ca53742a15444639e3dd096ac7ea1b20c18d994', role:'athlete', days:90, v:1, p:1},
+  {h:'ee399248e6bd6ef06a1105d97e96e39cecf394a62ec532ab1f51073a59a8feee', role:'athlete', days:90, v:1, p:1},
+  {h:'29e6748b77002082d72866f2037b528fb7f530d3a4e3485824db7c291f451abc', role:'athlete', days:90, v:1, p:1},
+  {h:'99cd48fbebd20cdcbe7a030136acb7c1982009da681005a4f3cef9bc9fd8ed60', role:'coach', days:90, v:1, p:1},
+  {h:'e1bc243290d999cfc415d44540eb5a6c594d15daabd9a12318e52a3e8297b909', role:'coach', days:90, v:1, p:1},
+  {h:'13d66d284585dc7e35a64dcf14c96c982f5cbd50f95e1569a4f1bcdf784f58c7', role:'coach', days:90, v:1, p:1},
+  {h:'77efaeb5d045023056fe4bc7c5e197b53e3b12a603bc2612bbb6e58f1df47162', role:'coach', days:90, v:1, p:1},
+  {h:'4c66def92fae4cb44212cb2c37426af170823779df26a9cb4d308f4d7cd8a932', role:'coach', days:90, v:1, p:1},
+  {h:'f97fc222ebd63b02b8c24aabf56950752262ec8d2dded7a16b7a647b6290a361', role:'coach', days:90, v:1, p:1},
+  {h:'887b64352ea7cf14d2a43863de352a6f75274a0167d2cfbe1eb799433422d039', role:'coach', days:90, v:1, p:1},
+  {h:'2edec4a1942ede942776e95c79b8f77ad99b68ca38dbded24a22f7623e148cb3', role:'coach', days:90, v:1, p:1},
+  {h:'03c16606391540bd57027c223ef57d64f2d8894ae7c001ed499d34c95023fd10', role:'coach', days:90, v:1, p:1},
+  {h:'6f8058a9f8b4606d2429d17a740d8d4798b0631922922c46db30662950a20c46', role:'coach', days:90, v:1, p:1},
+  {h:'ec908a3afea63427f9400c91e69e2ce63d77f609f4b1b6b31156e2c329e8c19c', role:'coach', days:90, v:1, p:1},
+  {h:'6c92d33f3d57da3269e569655756bc4454be2a186075213b1672a786c107c39f', role:'coach', days:90, v:1, p:1},
+  {h:'4f4c178d00123ceb279dd16697ad90efcbf18d8ab193188e481462ffea492da0', role:'coach', days:90, v:1, p:1},
+  {h:'72a64b1d51b050e38a892abe425e1536a5385da25d7aa31197a92d4c1078ca3c', role:'coach', days:90, v:1, p:1},
+  {h:'9c95918fe2b24ccd63cdcb0494b6337f3347f4bd1ecf1908fb1dd86a095ea731', role:'coach', days:90, v:1, p:1},
+  {h:'1e0be4b9e65147c5f64de5cb045cfbb23796a23cbf49458b9d6085de5ddf2146', role:'coach', days:90, v:1, p:1},
+  {h:'7ac188618ee35127e451a5d38f190edac23a5a4b71539559c0e6df085d6aab0c', role:'coach', days:90, v:1, p:1},
+  {h:'b017fcaf8257e8abffbfb74ac8e41b60421fe5c9ee7b72d1ba88ee5449ce2dd4', role:'coach', days:90, v:1, p:1},
+  {h:'60044a67a16e403ef8d748570fd79cd59d2c0461caba1580c329da25590b8d9a', role:'coach', days:90, v:1, p:1},
+  {h:'d111f8f3c5a2d6937a5d30d695acb024c63f5851f13cab780f0a5149bb997124', role:'coach', days:90, v:1, p:1},
+  {h:'f7669e1f15e9f4c36d89c848e9bf445159683e3b106158099a9f70376eaac014', role:'coach', days:90, v:1, p:1},
+  {h:'e341904c8db471c1e50fb44a22c685ee2374fce42be084d9d33db6786d5bb462', role:'coach', days:90, v:1, p:1},
+  {h:'069a13a9ea759bd19b194dd7d07f99d5758483d470a94b287fe67b04095176bb', role:'coach', days:90, v:1, p:1},
+  {h:'f048908025082bc0a3233cdef94a7bcacafe1fa9aa6ff4fb00082f0f55fe1e75', role:'coach', days:90, v:1, p:1},
+  {h:'070f3b0ce9ac92770da2f9f13243fad05720f5b37ab39397efd0e7b8ac3d3251', role:'coach', days:90, v:1, p:1},
+  {h:'f61c64320717544439673d0d0c959934770e5ec2d4a9d4e8a9c5233d12c9fc42', role:'coach', days:90, v:1, p:1},
+  {h:'4255ee3ba5007a6ab727a0bc884bcf4a034bf940341d5c64cf77edf5241d074c', role:'coach', days:90, v:1, p:1},
+  {h:'cc8f10328c2c41c73a3594effb3876acc99d4719d3c28468f7e9d586743ee01b', role:'coach', days:90, v:1, p:1},
+  {h:'8e7831b16467edd3c8b2098d3cc3cdc05a0f82c2f0d0cfe037c85c6a61f5a27e', role:'coach', days:90, v:1, p:1},
+  {h:'6ceee1db2985650dad0b78a56e8df3f0e55da0e5cc2ecb5486ebb8a4bba1f5f9', role:'coach', days:90, v:1, p:1},
+  {h:'cf6629332f902b4cdcaa746c8ab0aed1a4f6b577f473b40647ab97ef04cb8fdd', role:'coach', days:90, v:1, p:1},
+  {h:'da2e6fde50934b7fa522bd11ff6080e080a6a923a878f587477661810d956b51', role:'coach', days:90, v:1, p:1},
+  {h:'8712db172d6768c80416223bfa01370c7241310fecfd9d75b67d45a6713772d5', role:'coach', days:90, v:1, p:1},
+  {h:'ae581f803e7f79012957c38020cfa8c3a15dcf491891d489be4d0977351b27f4', role:'coach', days:90, v:1, p:1},
+  {h:'5760c238caa5027c77abe26bf7496deb5376cc3f6597e820f188a13f1c437b3d', role:'coach', days:90, v:1, p:1},
+  {h:'bde6b23e1844df8feed58b2437e39cf0e424ecf2f9d5e15688fb13db33f68f2d', role:'coach', days:90, v:1, p:1},
+  {h:'c49e6c92106047723d76f163e70a094b95fc976cc82828ce87cf63e44b8cf879', role:'coach', days:90, v:1, p:1},
+  {h:'84426fbaf4f9319568f2b2071cef9f4cd49fd0dbb8ba63cec840450611c207fd', role:'coach', days:90, v:1, p:1},
+  {h:'659d83eed138080abd300b7b79a6691bd5dc94fbbf28580db820a172617062af', role:'coach', days:90, v:1, p:1},
+  {h:'fe20bc84f3e80d4affcebac13cf9deac344286656190219c597f1e6935772c0b', role:'coach', days:90, v:1, p:1},
+  {h:'8620d90bf527f0abe1b92fd0e0e3a4d9da1623079dffa66829b2e082490ac85f', role:'coach', days:90, v:1, p:1},
+  {h:'8dee90428fa4c3b5d21402ac3e5229558f456b0487ff1ff769ce07dee574612e', role:'coach', days:90, v:1, p:1},
+  {h:'0c8197d0b206bd42040fd25c536e6614980cdc33261a6b977ccb7abb3a349c06', role:'coach', days:90, v:1, p:1},
+  {h:'bcbbfe7eb33f6fec28fc6ad5efedf34f7ee37f0a328d03b481d85544b54d7329', role:'coach', days:90, v:1, p:1},
+  {h:'0734c2b2acf94994ce051c30fcb8eea37fbb1f2c166b5e7d42017e6eaccaa0b0', role:'coach', days:90, v:1, p:1},
+  {h:'bb32624ae687f6f0b72a1b464d235b23bcd3cd5fd26133787fdaa77c85158988', role:'coach', days:90, v:1, p:1},
+  {h:'e125d96efd193f5a4b56d3b1ead4a2940512209ad02845d548c0d3b228b59e91', role:'coach', days:90, v:1, p:1},
+  {h:'f89c7a2da40f0534d7ccdedce18f2c9884f9ff851db2d171b5b55ee935572414', role:'coach', days:90, v:1, p:1},
+  {h:'ca9b02ec3d001ed60373ccf776eb881a7644ee44a228d2907b9f984be20c4aa1', role:'coach', days:90, v:1, p:1},
+  {h:'44c7b510294b51f38172042a4ed25ccef15bc82c27db42bd9089a3824d81df4a', role:'coach', days:90, v:1, p:1}
 ];
+// ---- THE POOL ----
+// 200 athlete and 50 coach codes, generated at build time and stored here encrypted under a key
+// derived from the ADMIN code. Their fingerprints are in ACCESS_CODES so every card verifies
+// them; their plain text is nowhere in this file. An administrator who enters the admin code
+// derives the key, opens the pool, and issues from it. Anyone reading the source sees noise.
+// This is the design chosen over an algorithmic generator, whose secret would have sat in every
+// copy of the file and turned any reader into a key factory. Adding or replacing codes is a
+// build.
+var ACCESS_POOL_ENC='d2f433980eb06ec6f95c95b45d414dbd4992e1a67c66e7bb00948396379ea200e3d31eb0ac17c9c3941ff87617b73382a39285f1f7b9ea221968b06d7144580e9e2e5c950d7d452e228675b4b288efffc85e99c4f4bf4e537d78b4800033d503fabff9001c5819de1e8ee05f1a79ab90775a42ce86a8a35fce9788270cbd8d6958ac10f205e7f61a0406a1bb3fc9648435dd0f51b87f41914fa41ebedec3d35ea1a8026b30b64937cc0a2c69fdfb230d71032b0c405474560e2d2de23439e209fc43348ed7511783a3d11af5044dbdc8888bccf1b239f0461f3292a5cd7f352ada7cfa6a6661524da157668c2867e4c614c4e58bbaab0369c6e47bd8347fb1616f49fb7118d3f664fe648bf5c483860d9d377762c68f9ccd61e081cdcbc5aea57ed722335a358c7576e75367da21fcc28a44b16154940a9f42c687afdb5a2d768ecdff2e51c63a7d1f69edd942cbbdb5ef5382039c90c4c4d1ab33398ae69b5ba3aed1d9fcfe51d843c3524ebe3c19a330514f01a60bc4716b26d098739cad5824c59644e96eda2e295ad764e97fc511efe3813545053afba5acfefeba583033d4fdf6ddce445be493e13b2b08e178e5892352aa7ceef2b8a9785fcab010a7720c4a57d3349738b5478ef16deec3b61079b1d29355e6f917e4e07ec6b8246c98e76a934e7e4aa96906dc194305ec7393cf24d9d24c5bfd5d0593d54d003a254eb7f00c1926047ad2764e6a54359ffd2ffff24ac1943856580fc67edce8f423c546db0701a5851ee93870b7076fb92f1cb6438989e96300c04c8410a5026e688cdb8d0afb067d1e6b230a33a5e05c463b54867818ad8d78dfe453cbe29842da242635e9afbedb9c3230ef20b538a977f82e8eaa7d25a926c925bbabc6a5ecadb22936f5a964e6fce2a8c06fd7b510380ecf93919141a47855cea47a7876c944470f13ec66c354ba662566967cc76a30c2295f0311569ca156d05c7e5bfa6b99dfabd0687779fbb7c3f5557b44def491f260abfee41a9f47ca96e19037cefe1a929be401dab6287913d42e638e85f49fbbfc27711b040636f86829e1a03af731505d02daf9693a55e6d5469e7de80e90027015b4244f3c1bf9d1661aea6df85431910d5cbac65a8731f157b13a9ddb6600bbc38b0b2652357c64c1ba59c50061dd6e22a912dfb8038ef36545c80005db62bce31cca34f684cc95f64b801df430940e743b25226a8be438a9fa7d6518dbfe9b523774e4678491ae6d99efcd6b95b6252fda0779ca9b53a67f57efa6557999e66d0c76f50b160f3dc3f13f921e4ab19e7d2bce4fb87a2a9f9c1b51b3142d156ed67f6f4fb686b827371fbbb6ca10ef1c8563b0f915d7c24c5e1cd7ee38a91c36caf3d08f109ce80ff5f502440762502bde798d27c6bd53622c07889ade037f0080a699ca9f954aba6f16991103bf1f6de31f2e7cf8d0736096f79c0c55f9539ab3a6d9c99e68112553441659ba0b34cf8c7a3129c48819fc4f972ae9f0c9baace2fa7eb894ef535907e92529d96d4e921ca0de7ef1eab874f13df4395d01709472f69c281a4011aa7b042f9a3e2e8ad335f662b1e90a41913330d62f32b578e2671fa01febe67b7d75f19af30177d614e7907af1b872433c4082d010f6b9b41382d9dca796f5d5ae9b142d2955859643c7c00f121992564f4bcde597b113763db376ae05d701fc1e32203b7823dd0d4812dda0befdd4b8763c40defbd03a5a9503b4f8a092674c46d39bcff237d67d8dc3b4b374b0fcfefb536f1ba1b2ee09f0563d49db0f04959cfe191a67e5f5cb65fb53fae74676cd7b0f13868a0ccbf1a5d861fe95be6e2ef08e10d3f037b9d0a640f1111fba0c46cb187a33d78b4b3d93131966afba368c6d7ca8c0727eeb33e2a4caa223733b8554d20e0d735e3f8139829ba0b0581a72eea4661c050606a5d10fc96cb98888d6e2a04893660de22c5c8bee97f851f12bfa3b78571bc00b4f8b7fe3e8657b27729fe349c075078d06bd78f562c458ea229f7cc374939f263cfbd6ad697263a26cdc4be459b91d84252aa212d54d44c2fac4b481c91ec76fef50b68f362325805e9e99e62690a3f12c25bb7bba1df5324fb90958a02777bbde763ef5e45a66dcd7aaa98d459052ff59126d880acffa9d742a749dcb3398c631e39bcc7caeef375daeed048adeed6b1a92884144f32249cf45961c0e1863443c4ce82a370080073e4feabccc0d917d361a62d60965b7b16067e784e134ef17ecfd5f54e3edbbe11701c865eebe28eb79efbf680e983278ac6af65543d339fe1925a304a7896e884365bfa57673742eb0e3eb3f44c6b347d04c5d30cffeee64860a4e513da750b7362824eedb205c8dcf9e297cee8ea86988e117790bac5122bbb307fbfce1fc20ec0734ab190dc60ae26e9a1633116e63774863fcc0a665498ac3b7fd9cb9e1b642007cda4b3c949531b6e8faf717c4f29277a02907e06d38ae132b6fea922c30a3b0de3bd757be757e2b5673eb4b33b84cdcc63615977bf1fe6b1a080d1bad3b756fea7e2f43fb6dc42a019cfeb42cfda53610f2a4e3fa689bd64861e972d4c7704120565f85e7eac6b79fa11fdea37b712fc37cc0ad871b70f6f76782babe5d75630b5416b28c8546c01ed1dd8da2fbcde08365ffd4969e238b05229dfa216d0312b824fd123c7aab7fc4507fe865192b41f44ffb45bf2fc1cbf29e1b948e12d375e3d3c64623c913b9c69bf175abb8a2c855887876cbbf2b82d8782cfbf4fe7a7a84ece14e8e06d417163517009dc509d7f89f83cefefb659e31ceb0814b6247608aa81a337971d8e4b9cd1729b9b73d51fd8be2ca0fe60994dc5975b219bd930e70b82d274596b67f5a403acebf4d3b41c831faf967243239e24cda4e7a7bec9e147881a5d6a7d2d08d5dce8a98dacf3c020cabb53178a597760b7ee0ac63dc904268872743af360ecc99ba0e109e843eb709a28ce638c895844a62a4982e05c33d2b0764e57b72cd82fb3dc68e9e065f94abee3b50f3878adeced5faacd10554a80b45669ec6d50e72e54c7aa0ef1e89e4ecd07815366e2e15fb69fb9664428871439cd41eee3b832020263520c31059e2b55112e4d0cc2d5af9ead1f0c78399ac0e0e418bce442fa3c345509d8242c09fb1f2d9b37a7d1495e2450ddf15c22396279f36b9da11d096f3fd8ea5bf8f97d6f01ffdfbb7826a88946a1ebcf4e415769bf5996af60ef1078ed1f1deceefb92d2db0dcc2a3ba525b83e265b216f4c4626a5da6eaf1f687508c4960c4f4376c52bc680aa5eacf9e6b1a9a0696cdb16a4eb4606d3f768f496ed466a99383ef4995ca4f2693f41bc43f73f5794f27a4b87278f1a3ab92714f3bfe66978a76faaa56e44b92aba952551c691ee096b6fc7ee54b0f400dd334e803d53eb91ddb63192682af6af12b548bebc6bb00c59b76fff1a2db43b261cfb5500c55658fe27009f40be104f13b5f30b3d8ef7dd64083990ca73285f770158e7e095c845aa05c41d8aa060a798512ced6a6d50eb3f10288448761ada5660a4cfb7902f75aae623600314b3ae11d3520fd0c4d0610415cb17505d8041e2c50e2d2b9ad1f92df81f79f4aa0758a713e3352169d733e7254a19c22374eb2251f9bce309f0bbdfc5c7ea818c692d756b77ab8ed15d924fc1ef3ce956f5ed046ec807d0808034278e40920904c4c39112db8c41f4d00fa9fb3a729b1acd708a5e89e059affece33dbd5baa7c7a61a9f4ff700805a0c2844414dc07ffe5099c249ae599fe916624cb07f419815c4fb762eeab9e20137313ba1e514cb39610e6e5bc979c4ed0dcb16cf930d5bef6da5821fc0611bc0712c6674676f1d35f0361d97607613c0b2ad02dc23df2f9148d96f2b77015df372309f5ffcd17307408c49b24061c808506a59f67092fff833cb43457253bc8af4d880907639ad2a72e79a75256e08cdc9fc4969b6403637c76aab026a4898c25ddb4eed62d851caf37dd6d022def145eb2857a4dc1963c8ff3fd52163d3ab4f43f13e6f6204e2658dd50a230711f6a25d7ecf92e04ee1cd003171f328ba97dcd3a0a6128b9cf89bdd487f377ea67e7b04f10e5149dd9b01a74717f5ce57b72891e7ae324a2f1afdb4bb3763ceccad8c97700d29df1999e2bd1231a30b22e16df781d7a2ddfe2066a12d59c53b93f2a78bb4f69f70c3f15ddf590a68be77ca5851d34748a569725c3d0a1ffa8f717c3b1a323d3ee8271f96efe766c0204b82b67b3c3d66cdcdc1c4cea23bcf502b9776f30908337b51a0fd187c66ab025d117e1bc785a299a7db45e5329f15492b06dc9c12f4503f471e87ffebf2222e043ede81d22f8eba518b3f81b150121ec4d18e34b935c4bd548b3ea8a8e8a1e10939e090c24ab49b40a48f45017d9ff483e5c66714d65531791c887da8cafa01733f920ef29e8fc97b9918f5d3d3be80b11b200732295fc6e91276d14ce89c01eff1a7629aa4d4454e3f393227f21ef4edebcce644397faf32fa187f046b1154d64c6646c396592dce5203fb10d1cce85d6a9e5d3da5fcd731dbd6c56cfce67a08f4e8202245c80d4737d7a428ca046511ac3f5d0a49438851e8d7316ca282f72538d6e8617b6bc9a7d82b4c63d40ebde7af3a208a40c8ff27b881da39433966a6802b347143cddfc5decd5c985e33e36399ac28f8bf9e27d147ddfeb9b3b6ed80df456a1baddd4d3cc4260296aa9e90eec5279f9b51b9b136ca632c24bc151c1d116b62db28e58fb0e86767b262cb3e8b753c9dfb19c44558fae438fe4fc1536ec9bc8c3eb82a33856b63bd4f7a580242d4af8e422d7a67885fb7a42d43b5a266c3d2463ba389374378e87dccca78f80669ca0be39b41ce8338c760e3a93b149fb8b7a596b4a23e5e90d68ce4863097760d54292ffa5509d881cca0f1bba892704199c5075d334fb391ceaad87810bbee4b3fe60e75eb73d04f6154622aed1b192c65ed8ddbe1fb83e7ff0c6145504d97afb53b82e046c264f7634da9c5660213bb938510167e95618c7e5a4096fcc45419af7e3fda2174beb3a2d28f292ae783d1e988027d8df4459874cc11e1e8fe4f7784b9387462e6fe8acd5253792e86073d8fcc7ee6902802a82932fc1a4d6f9b879e324085927249268449e41bf9d0c0bb3c72d0524875458f5a206f2b854007c12294da2e38371efcff60ef5f944d5d56d1e460db54b312130835c269a81c2d98dc582dae8c073c79968746084eda65c20dc3bf209424404bc6908e49d62fdc4d98934a62164bde4c8d7f84c8b8d61ba6344544d082fa806a89261f1e00ba7b1b27188163740f2cfa347f01c5e17eaa8d54f8257e91ab503318352c372c72c85cbe2c290c77fe3c297025f1bd36c779b0da4fb821fed7242d108fd7408d741f027fd9bd28d6beed695e35d5113e8c1d14b5d6ca7873b9b381c79f4bc3b7cbed62c8f3eae22d532dd1c48fbbd05ddac641d064c82ca2471ec5cb714e256bfe128d1df9fedc5f7968049f5deea8881c248bb2b137243a576175f66fd0bd403c03721edb94e33ec4f942ccb3a5436cfb991c5c8196cc37fde5aa8e61d5a7d2977364aa423494c6c1a3fe4c4f1ab26dc327bb6c4f580e628c8339019ca3303f77b8a717d22fb7aacf090b534dcc830fc3b8cd565b6e792d706e8ec819abb7ad6ccbf573649d56d858450fc80cb3da8bab17ad30e6b30f81a35d16e1d4dd7575728ae8761d2b9b88876e9e9c1150c9d296686a9f0cd6f8c56ba526ca8b46261144df9186e96171c51c5eb14c4722f7c6d6ea22712e73541820b70fb1e5ecb4a6fce4b8ccb51ec528c24a202d022abf1173e9e50f4bbe743a84596f1995ad77bf5b51f49c430dd46a57ad7c4506dab0a7dda57f0da6399a1ec8f27c4733b459a38015c511b146ef20b31ccede5798a6ef771ffa735052dcfd1650450cff89d99e8ec2b8be55ab289f97e285fefed77737e2c403e5a65d3ef8b91f089d8e849d521ac0e6f9f9415699932d48d8d68381f38e641b4b3b90ae2f2ddcbd398f39221402ee06e32ca8425';
+function poolKeyFor(adminCode){ return sha256hex('deadstop-pool-v1|'+accessNorm(adminCode)); }
+function hexBytes(h){ var out=[]; for(var i=0;i<h.length;i+=2) out.push(parseInt(h.substr(i,2),16)); return out; }
+function poolOpen(K){
+  try{
+    var ct=hexBytes(ACCESS_POOL_ENC), out=[];
+    for(var i=0;i<ct.length;i+=32){
+      var ks=hexBytes(sha256hex(K+'|'+(i/32)));
+      for(var j=0;j<32 && i+j<ct.length;j++) out.push(ct[i+j]^ks[j]);
+    }
+    var txt=decodeURIComponent(out.map(function(b){ return '%'+('0'+b.toString(16)).slice(-2); }).join(''));
+    var obj=JSON.parse(txt);
+    if(!obj || !Array.isArray(obj.athlete) || !Array.isArray(obj.coach)) return null;
+    return obj;
+  }catch(e){ return null; }   // a wrong key is garbage, and garbage does not parse
+}
 // SHA-256, plain JS, so the gate works the same on every phone and in every test runner
 // (crypto.subtle is async and absent in some contexts). Standard construction; nothing clever.
 function sha256hex(msg){
@@ -9522,20 +9818,38 @@ function sha256hex(msg){
 }
 function accessNorm(c){ return String(c||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase(); }
 function accessFp(c){ return sha256hex(ACCESS_SALT+'|'+accessNorm(c)); }
-function accessOK(){ try{ var a=S.access; return !!(a && a.role && a.until && shiftDate()<=a.until); }catch(e){ return false; } }
-function accessRole(){ return accessOK()? S.access.role : null; }
-function coachAllowed(){ return accessRole()==='coach'; }
-function accessGrant(role, via){
-  var t=shiftDate(), u=new Date(t+'T12:00:00'); u.setDate(u.getDate()+ACCESS_DAYS);
-  S.access={role:role, since:t, until:u.toISOString().slice(0,10), via:via||'code'};
-  save();
+// AUDIT 2026-09-08. A coach who opens an athlete's drawer has S REPLACED by the athlete's
+// state (rosterSwitch -> load()), and the athlete's drawer has no access record. Every access
+// read then said "nobody": coachAllowed() went false, the header chip vanished, and a resume or
+// a boot inside the drawer ran accessEnforce() and demoted the coach's own roster to solo
+// while they were working in it. Access belongs to the card HOLDER, not to whichever drawer is
+// open, so the holder's grant is mirrored into ROSTER (which is loaded on its own, drawer or
+// not) and read from there whenever a drawer is active. Inside a drawer nothing is granted,
+// enforced, or gated; that all waits for the holder's own card.
+function inDrawer(){ try{ return !!(ROSTER && ROSTER.active); }catch(e){ return false; } }
+function accessRec(){ try{ if(inDrawer()) return (ROSTER.access||null); return S.access||null; }catch(e){ return null; } }
+function accessOK(){ try{ var a=accessRec(); return !!(a && a.role && a.until && shiftDate()<=a.until); }catch(e){ return false; } }
+function accessRole(){ return accessOK()? accessRec().role : null; }
+function coachAllowed(){ var r=accessRole(); return r==='coach' || r==='admin'; }
+function adminAllowed(){ return accessRole()==='admin'; }
+function accessGrant(role, via, days){
+  var t=shiftDate(), u=new Date(t+'T12:00:00'); u.setDate(u.getDate()+(days||ACCESS_DAYS));
+  var rec={role:role, since:t, until:u.toISOString().slice(0,10), via:via||'code'};
+  if(!inDrawer()){ S.access=rec; save(); }
+  try{ if(ROSTER){ ROSTER.access=rec; rosterSave(); } }catch(e){}
+  // AUDIT 2026-09-08: an admin who later entered a lesser code kept S.poolKey, so a forged
+  // role reopened the pool. Any grant below admin drops the key.
+  if(role!=='admin'){ try{ delete S.poolKey; save(); }catch(e){} }
 }
 function accessTry(code){
   if(accessNorm(code).length<6) return null;
   var fp=accessFp(code), hit=null;
   ACCESS_CODES.forEach(function(x){ if(x.h===fp) hit=x; });
   if(!hit) return null;
-  accessGrant(hit.role,'code');
+  accessGrant(hit.role,'code',hit.days);
+  // an administrator's card keeps the pool key so the Admin tab can open the pool. It is the
+  // admin's own phone and the admin's own backup; the pool never leaves it in plain text.
+  if(hit.role==='admin'){ try{ S.poolKey=poolKeyFor(code); save(); }catch(e){} }
   return hit.role;
 }
 // "Anyone who has access to the app right now will automatically be given athlete rights."
@@ -9544,17 +9858,19 @@ function accessTry(code){
 // A card with nothing in it is a new card, and a new card meets the gate.
 function accessLegacy(){
   try{
-    if(S.access) return false;
+    if(inDrawer()) return false;           // a drawer is not the holder's card
+    if(S.access){ try{ if(ROSTER && !ROSTER.access){ ROSTER.access=S.access; rosterSave(); } }catch(e){} return false; }
     var used=!!S.discAck || (logKeys||[]).length>0 || !!(S.onb && S.onb.done) || !!(S.genPlan && S.genPlan.days);
     if(!used) return false;
     accessGrant('athlete','legacy');
     return true;
   }catch(e){ return false; }
 }
-function accessUntilText(){ try{ var a=S.access; if(!a||!a.until) return ''; var d=new Date(a.until+'T12:00:00'); return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return (S.access&&S.access.until)||''; } }
+function accessUntilText(){ try{ var a=accessRec(); if(!a||!a.until) return ''; var d=new Date(a.until+'T12:00:00'); return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return (S.access&&S.access.until)||''; } }
 function bootAccess(force){
   try{
     if(!force && accessOK()) return;
+    if(inDrawer() && !force) return;      // the gate meets the holder on their own card, not in a drawer
     var had=document.getElementById('accessGate');
     if(had){   // already standing: bring the athlete to it rather than doing nothing
       try{ var im=had.querySelector('#accessMsg'); if(im) im.textContent='Enter the code you were given.'; had.querySelector('#accessIn').focus(); }catch(e){}
@@ -9586,9 +9902,11 @@ function bootAccess(force){
         accessAfterGrant(role);
         // say it before leaving: the sheet behind this gate may look exactly as it did
         var inner=v.querySelector('.disc-inner');
-        inner.innerHTML='<h2>'+(role==='coach'? 'Coach access is on' : 'Athlete access is on')+'</h2>'
+        inner.innerHTML='<h2>'+(role==='admin'? 'Admin access is on' : role==='coach'? 'Coach access is on' : 'Athlete access is on')+'</h2>'
           +'<p>Good until <b>'+esc(accessUntilText())+'</b>.'
-          +(role==='coach'
+          +(role==='admin'
+              ? ' The Admin tab is open, and coach tools with it.'
+              : role==='coach'
               ? ((ROSTER && ROSTER.mode==='coach')? ' Coaching is switched on and your roster is back where it was.'
                                                     : ' You can now switch on coaching under <b>You \u2192 Who is using this card</b>.')
               : ' This card is set up for your own training.')
@@ -9614,7 +9932,10 @@ function bootAccess(force){
 // a coach-mode card whose holder does not have coach rights runs as a solo card. The roster is
 // kept, untouched; it comes back the moment a coach code is entered and the switch is flipped.
 function accessEnforce(){
-  try{ if(ROSTER && ROSTER.mode==='coach' && !coachAllowed()){ ROSTER.mode='solo'; ROSTER.wasCoach=true; rosterSave(); return true; } }catch(e){}
+  try{
+    if(inDrawer() && !(ROSTER && ROSTER.access)) return false;   // holder unknown from here: leave it
+    if(ROSTER && ROSTER.mode==='coach' && !coachAllowed()){ ROSTER.mode='solo'; ROSTER.wasCoach=true; rosterSave(); return true; }
+  }catch(e){}
   return false;
 }
 // FIELD 2026-09-07, his own card, first open on v214: "I entered the coach code, selected
@@ -9625,7 +9946,7 @@ function accessEnforce(){
 // its own words what it just did before it goes, and the Settings sheet is refreshed in place.
 function accessAfterGrant(role){
   try{
-    if(role==='coach'){
+    if(role==='coach' || role==='admin'){
       if(ROSTER && (ROSTER.wasCoach || (ROSTER.athletes||[]).length) && ROSTER.mode!=='coach'){
         ROSTER.mode='coach'; delete ROSTER.wasCoach; rosterSave();
       }
@@ -9640,8 +9961,8 @@ function accessAfterGrant(role){
 // RENEW_EMAIL / RENEW_SMS are his. Either may be blank; with neither set, the button puts the
 // request on the clipboard so it can be pasted anywhere. The message is prefilled - the athlete
 // only has to send it.
-var RENEW_EMAIL='', RENEW_SMS='', RENEW_SOON_DAYS=14;
-function accessDaysLeft(){ try{ var a=S.access; if(!a||!a.until) return null;
+var RENEW_EMAIL='manuel.g.grajeda@outlook.com', RENEW_SMS='+15202346160', RENEW_SOON_DAYS=14;
+function accessDaysLeft(){ try{ var a=accessRec(); if(!a||!a.until) return null;
   return Math.round((new Date(a.until+'T12:00:00')-new Date(shiftDate()+'T12:00:00'))/86400000); }catch(e){ return null; } }
 function accessSoon(){ var d=accessDaysLeft(); return d!=null && d<=RENEW_SOON_DAYS; }
 function renewText(){
@@ -9670,12 +9991,94 @@ function renewCopy(){
     try{ alertToast('Renewal request copied \u2014 paste it into a message'); }catch(e){}
   }catch(e){}
 }
+// ===== ADMIN =====
+// His ask, 2026-09-07: "adding a tab for admin only where an admin can generate keys for
+// athletes and coaches and maybe other potential tools in the future. Only shows for
+// administrators." The value here is the bookkeeping - which key went to whom, when - as much
+// as the issuing. Issued keys are recorded on the admin's own card (S.adminIssued).
+function adminPool(){ try{ if(inDrawer() || !S.poolKey) return null; return poolOpen(S.poolKey); }catch(e){ return null; } }
+function adminIssued(){ if(!Array.isArray(S.adminIssued)) S.adminIssued=[]; return S.adminIssued; }
+function adminNext(role){
+  var pool=adminPool(); if(!pool) return null;
+  var used={}; adminIssued().forEach(function(x){ used[x.code]=1; });
+  var list=pool[role]||[];
+  for(var i=0;i<list.length;i++){ if(!used[list[i]]) return list[i]; }
+  return null;
+}
+function adminIssue(role, to){
+  var c=adminNext(role); if(!c) return null;
+  adminIssued().push({code:c, role:role, to:String(to||'').trim(), d:shiftDate()});
+  save(); return c;
+}
+function adminShareHref(kind, code, role){
+  var body='Your Deadstop Training Card '+role+' code: '+code+'. Open the card, enter it once, and it is good for 90 days from that day.';
+  if(kind==='sms') return 'sms:?&body='+encodeURIComponent(body);
+  return 'mailto:?subject='+encodeURIComponent('Your Training Card code')+'&body='+encodeURIComponent(body);
+}
+function adminHTML(){
+  var pool=adminPool();
+  var h='<div class="sub" style="margin-top:8px">Administration</div>';
+  if(!pool){
+    return h+'<div class="block"><h3>Key pool</h3><div class="cue">The pool is locked. Enter the admin code again under Settings \u2192 Access to open it.</div>'
+      +'<div class="toggle lockfree" data-accesscode="1" style="margin-top:8px">Enter a code</div></div>';
+  }
+  var iss=adminIssued(), used={}; iss.forEach(function(x){ used[x.code]=1; });
+  var left={athlete:pool.athlete.filter(function(c){ return !used[c]; }).length, coach:pool.coach.filter(function(c){ return !used[c]; }).length};
+  h+='<div class="block" id="adminIssue"><h3>Issue a key</h3>'
+    +'<div class="cue">'+left.athlete+' athlete and '+left.coach+' coach keys left in the pool. A key is good for 90 days from the day it is entered, not from today.</div>'
+    +'<input type="text" id="adminTo" class="dtin" placeholder="Who is this for? (name)" style="width:100%;box-sizing:border-box;margin-top:8px">'
+    +'<div style="display:flex;gap:8px;margin-top:8px">'
+    +'<div class="toggle" data-adminissue="athlete" style="flex:1;text-align:center'+(left.athlete? '':';opacity:.4')+'">Athlete key</div>'
+    +'<div class="toggle" data-adminissue="coach" style="flex:1;text-align:center'+(left.coach? '':';opacity:.4')+'">Coach key</div>'
+    +'</div>'
+    +(S.adminLast? '<div class="block" style="margin-top:10px;border-color:var(--green)"><div class="cue">'+esc(S.adminLast.role)+' key for <b>'+esc(S.adminLast.to||'\u2014')+'</b></div>'
+        +'<div class="mono" style="font-size:22px;letter-spacing:.12em;text-align:center;padding:8px 0">'+esc(S.adminLast.code)+'</div>'
+        +'<div style="display:flex;gap:8px">'
+        +'<div class="toggle lockfree" data-admincopy="'+esc(S.adminLast.code)+'" style="flex:1;text-align:center">Copy</div>'
+        +'<a class="toggle lockfree" href="'+adminShareHref('sms',S.adminLast.code,S.adminLast.role)+'" style="flex:1;text-align:center;text-decoration:none">Text it</a>'
+        +'<a class="toggle lockfree" href="'+adminShareHref('mail',S.adminLast.code,S.adminLast.role)+'" style="flex:1;text-align:center;text-decoration:none">Email it</a>'
+        +'</div></div>' : '')
+    +'</div>';
+  h+='<div class="block"><h3>Issued keys</h3>';
+  if(!iss.length) h+='<div class="cue">None yet.</div>';
+  else h+=iss.slice().reverse().map(function(x,i){
+    var idx=iss.length-1-i;
+    return '<div class="ex" style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
+      +'<div><b>'+esc(x.to||'\u2014')+'</b> <span class="cue">\u00b7 '+esc(x.role)+' \u00b7 issued '+esc(x.d)+'</span>'
+      +'<div class="mono" style="font-size:13px;letter-spacing:.08em">'+esc(x.code)+'</div></div>'
+      +'<div style="display:flex;gap:6px"><span class="toggle lockfree" data-admincopy="'+esc(x.code)+'" style="padding:0 10px;font-size:11px">Copy</span>'
+      +'<span class="toggle lockfree" data-adminforget="'+idx+'" style="padding:0 10px;font-size:11px" title="Return this key to the pool">Unissue</span></div>'
+      +'</div></div>'; }).join('');
+  h+='</div>';
+  h+='<div class="block"><h3>Your access</h3><div class="cue">Admin until <b>'+esc(accessUntilText())+'</b>. Adding or replacing keys in the pool is a build.</div></div>';
+  return h;
+}
+function adminWire(){
+  try{
+    document.querySelectorAll('[data-adminissue]').forEach(function(b){ b.onclick=function(){
+      var role=b.getAttribute('data-adminissue'); var to=(document.getElementById('adminTo')||{}).value||'';
+      var c=adminIssue(role, to);
+      if(!c){ alertToast('No '+role+' keys left in the pool'); return; }
+      S.adminLast={code:c, role:role, to:String(to).trim(), d:shiftDate()}; save(); render();
+    }; });
+    document.querySelectorAll('[data-admincopy]').forEach(function(b){ b.onclick=function(){
+      var c=b.getAttribute('data-admincopy');
+      try{ if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(c).catch(function(){}); }catch(e){}
+      alertToast('Copied '+c);
+    }; });
+    document.querySelectorAll('[data-adminforget]').forEach(function(b){ b.onclick=function(){
+      var i=+b.getAttribute('data-adminforget'); var iss=adminIssued(); if(!iss[i]) return;
+      var gone=iss.splice(i,1)[0]; if(S.adminLast && S.adminLast.code===gone.code) delete S.adminLast;
+      save(); render(); alertToast('Returned to the pool');
+    }; });
+  }catch(e){}
+}
 function accessHTML(){
   var r=accessRole();
   return '<div class="block"><h3>Access</h3>'
     +'<div class="cue">'+(r
-        ? ('<b>'+(r==='coach'? 'Coach':'Athlete')+'</b> access until <b>'+esc(accessUntilText())+'</b>.'
-           +(r==='coach'? ' Coach tools are on.' : ' Coach tools need a coach code.'))
+        ? ('<b>'+(r==='admin'? 'Admin' : r==='coach'? 'Coach':'Athlete')+'</b> access until <b>'+esc(accessUntilText())+'</b>.'
+           +(r==='admin'? ' Coach tools and the Admin tab are on.' : r==='coach'? ' Coach tools are on.' : ' Coach tools need a coach code.'))
         : 'No current access.')+'</div>'
     +'<div class="toggle" data-accesscode="1" style="margin-top:8px">Enter a code</div>'
     +renewButtonsHTML()
@@ -13517,7 +13920,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v216';
+const BUILD = 'v219';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -13978,6 +14381,84 @@ function docMaterialize(ref){
                  w:(s.w!=null? s.w:null), feel:(s.feel!=null? s.feel:null), open:-1, wopen:false, sub:s.sub||null};
     });
   }catch(e){}
+}
+// ---- BACKFILL: sessions logged before the shape existed -----------------------------
+// His question, 2026-09-07: "My past still shows bb row. Is that something that ill have to
+// keep?" No. A pre-v211 session has no shape, so it was still being rebuilt from today's plan.
+// But every session has a REPORT, and the report is not prose - report() writes it in a fixed
+// format the card controls:  Name load[/hand]: tok, tok, tok | wts a/b/c | rest .. [tags]
+// Reading that back into a shape is transcription, not reconstruction. What the report cannot
+// say stays null (a ✓ set is "hit target" with no rep number - exactly what the card stored
+// for it in the first place). And it is conservative: one line that does not parse and the
+// whole log is left alone, notice and all. Nothing is invented.
+// every non-movement line report() can emit, plus the athlete's own Notes line and the legend
+var DOC_SKIP=/^(SESSION REPORT|Readiness|Bodyweight|Profile|Supersets|Session length|Rest data|VOLUME|Cardio|Conditioning|Notes:|\()/;
+function docParseTok(t){
+  t=String(t||'').trim(); if(!t) return null;
+  var g=/!$/.test(t); if(g) t=t.slice(0,-1);
+  if(t==='\u00b7') return {st:'pend', reps:null, rir:null, w:null, g:false};
+  if(t==='\u2713') return {st:'hit', reps:null, rir:null, w:null, g:g};
+  if(t==='?') return {st:'done', reps:null, rir:null, w:null, g:g};
+  var m=t.match(/^(\d+(?:\.\d+)?|\d+:\d{2})(?:@(\d+))?$/); if(!m) return null;
+  var reps=m[1].indexOf(':')>-1? (parseInt(m[1].split(':')[0],10)*60+parseInt(m[1].split(':')[1],10)) : +m[1];
+  return {st:'done', reps:reps, rir:(m[2]!=null? +m[2] : null), w:null, g:g};
+}
+function docPlanLookup(name){
+  var out={r:'', rest:'', main:false};
+  try{ (PLAN.days||[]).forEach(function(dd){ (dd.exercises||[]).forEach(function(e){
+    if(e.name===name && !out.r){ out.r=String(e.reps||''); out.rest=String(e.rest||''); out.main=!!e.maxKey; } }); }); }catch(e){}
+  return out;
+}
+function shapeFromReport(rep){
+  try{
+    var lines=String(rep||'').split('\n'), out=[];
+    for(var i=0;i<lines.length;i++){
+      var line=lines[i].trim(); if(!line || DOC_SKIP.test(line)) continue;
+      var nd=line.match(/^(.+): not done$/);
+      if(nd){ var pl0=docPlanLookup(nd[1]); out.push({n:nd[1], sub:null, r:pl0.r, rir:'', rest:pl0.rest, w:null, load:'', ph:false, main:pl0.main, out:false, feel:null, sets:[]}); continue; }
+      var tags=[]; var tm=line.match(/\s\[([^\]]*)\]$/); if(tm){ tags=tm[1].split(' \u2014 '); line=line.slice(0, tm.index); }
+      var segs=line.split(' | '); var head=segs[0];
+      var hm=head.match(/^(.+?) (\S+?)(\/hand)?: (.*)$/); if(!hm) return null;
+      var nm=hm[1], wtok=hm[2], ph=!!hm[3], toks=hm[4].split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+      var sets=[]; for(var k=0;k<toks.length;k++){ var tk=docParseTok(toks[k]); if(!tk) return null; sets.push(tk); }
+      var w=(/^\d+(\.\d+)?$/.test(wtok))? +wtok : null;
+      for(var s2=1;s2<segs.length;s2++){
+        var wm=segs[s2].match(/^wts (.+)$/);
+        if(wm){ var ws=wm[1].split('/'); ws.forEach(function(x,j){ if(sets[j] && /^\d+(\.\d+)?$/.test(x)) sets[j].w=+x; }); }
+      }
+      var orig=null; tags.forEach(function(t){ var sm=t.match(/^sub for (.+)$/); if(sm) orig=sm[1]; });
+      var isOutTag=tags.indexOf('removed')>-1;
+      var name=orig||nm, sub=orig? nm : null;
+      var pl=docPlanLookup(name);
+      out.push({n:name, sub:sub, r:pl.r, rir:'', rest:pl.rest, w:w, load:(w==null? wtok : ''), ph:ph, main:pl.main, out:isOutTag, feel:null, sets:sets});
+    }
+    return out.length? out : null;
+  }catch(e){ return null; }
+}
+// Runs once per build at boot. A log with a report and no shape gets one from its report and
+// is marked shape_src:'report' so the visited day can say so. A log that will not parse is
+// left exactly as it was.
+async function docBackfill(){
+  try{
+    if(S.docBackfill===BUILD) return 0;
+    var n=0, keys=(logKeys||[]).slice();
+    if(!keys.length) return 0;      // nothing loaded yet is not the same as nothing to do
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i];
+      try{
+        var raw0=await stGet(k); if(!raw0) continue;
+        var v=JSON.parse(raw0);
+        if(Array.isArray(v.shape) && v.shape.length) continue;
+        if(!v.report) continue;
+        var sh=shapeFromReport(v.report); if(!sh) continue;
+        v.shape=sh; v.shape_src='report';
+        await stSet(k, JSON.stringify(v)); delete logCache[k]; n++;
+      }catch(e){}
+    }
+    S.docBackfill=BUILD; save(); _docMemo=null;
+    if(n){ try{ render(); }catch(e){} }
+    return n;
+  }catch(e){ return 0; }
 }
 function docDayObj(ref){
   var p=planDay();
@@ -15767,7 +16248,8 @@ function renderInner(){
         ? ' \u00b7 <span class="nist-tag lockfree" data-nist="1" role="button" tabindex="0">NOT INSTALLED</span>' : '')
       // ACCESS (v216): the run-out date lives in the header, and turns into Renew when it is close
       +(function(){ try{
-          if(!S.access || !S.access.until) return '';
+          var arec=(typeof accessRec==='function')? accessRec() : S.access;
+          if(!arec || !arec.until) return '';
           var soon=accessSoon(), left=accessDaysLeft();
           var txt=!accessOK()? 'RENEW' : (soon? 'RENEW \u00b7 '+left+' day'+(left===1?'':'s') : 'Good till '+accessUntilText());
           return ' \u00b7 <span class="'+(soon||!accessOK()? 'nist-tag':'beta-tag')+' lockfree" data-accesshdr="1" role="button" tabindex="0">'+txt+'</span>';
@@ -15792,7 +16274,8 @@ function renderInner(){
     return '<div class="chip'+(x.code===S.day?' on':'')+(x.code===__td?' today':'')+'" data-day="'+x.code+'">'
       +x.code+(done?'<span style="color:var(--green);font-weight:800">\u2713</span>':'')
       +(wd?'<span class="chipwd">'+wd+'</span>':'')+'</div>'; }).join('')+'</div></div>';
-  h+='<div class="tabrow" role="tablist" aria-label="Sections">'+[['MAX','You'],['RATE','Rate'],['CAL','Calendar'],['PLAN','Plan'],['LIB','Library']].map(function(t2){
+  h+='<div class="tabrow" role="tablist" aria-label="Sections">'+[['MAX','You'],['RATE','Rate'],['CAL','Calendar'],['PLAN','Plan'],['LIB','Library']]
+      .concat((typeof adminAllowed==='function' && adminAllowed())? [['ADMIN','Admin']] : []).map(function(t2){
     return '<div class="tab'+(S.day===t2[0]?' on':'')+'" data-day="'+t2[0]+'" role="tab" tabindex="0"'
       +' aria-selected="'+(S.day===t2[0]?'true':'false')+'">'+t2[1]+'</div>'; }).join('')+'</div>';
   var __isTraining=PLAN.days.some(function(dd){ return dd.code===S.day; });
@@ -15805,6 +16288,10 @@ function renderInner(){
     if(S.hist){ h+=histDetailHTML(S.hist); }
     else { h+=printPickerHTML(); try{ h+=foldHTML('road','The road ahead',roadAheadHTML(false),true); }catch(e){} try{ h+=foldHTML('vol','Weekly work',volumeHTML(),true); }catch(e){} h+=routineHTML(); h+=earlyCloseHTML(); h+=foldHTML('hist','Exercise history',histListHTML(),false); h+=foldHTML('why','Why these numbers',whyHTML(),false); try{ h+=foldHTML('prov','Where these numbers come from',provenanceHTML(),false); }catch(e){} h+=shareQRHTML(); h+=installHTML(); try{ h+=wipeHTML(); }catch(e){} }
     app.innerHTML=h; wire(); try{ anaPaintAll(); }catch(e){} try{ settingsSync(); }catch(e){} return;
+  }
+  if(S.day==='ADMIN'){
+    h+=(typeof adminAllowed==='function' && adminAllowed())? adminHTML() : '<div class="block"><div class="cue">Administrators only.</div></div>';
+    app.innerHTML=h; wire(); try{ adminWire(); }catch(e){} try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='LIB'){
     h+=libraryHTML();
@@ -16492,7 +16979,7 @@ function paintFoot(){ var el=document.getElementById('footInner'); if(!el) retur
   // setup owns the screen: no deck under it (field 2026-09-03, "NEXT Overhead Press" under the welcome)
   if(typeof ONB_ACTIVE==='function' && ONB_ACTIVE()){ el.innerHTML=''; return; }
   var training=false;
-  try{ training=(S.setup!==false)&&['CAL','YOU','MAX','TEST','PLAN','RATE','LIB'].indexOf(S.day)<0&&focusMax()>0; }catch(e){}
+  try{ training=(S.setup!==false)&&['CAL','YOU','MAX','TEST','PLAN','RATE','LIB','ADMIN'].indexOf(S.day)<0&&focusMax()>0; }catch(e){}
   if(training&&S.view!=='deck'){ el.innerHTML=focusNavHTML(); }
   else { el.innerHTML=''; }   // Reset day off a training day is meaningless, and the error
                               // reporter is break-glass - neither earns permanent footer space
@@ -18976,6 +19463,7 @@ load().then(async()=>{
   // ACCESS (v214): a card from before the gate becomes an athlete card for 90 days; a card whose
   // holder lacks coach rights runs solo; anything without current access meets the gate.
   try{ accessLegacy(); accessEnforce(); if(!accessOK()) bootAccess(); }catch(e){}
+
   // must run AFTER the saved state is in, or S.seenBuild is still empty and every
   // returning user looks like a first-timer
   setTimeout(function(){ try{ whatsNewBoot(); }catch(e){ oops('whatsNewBoot',e); } }, 60);
@@ -19016,6 +19504,9 @@ load().then(async()=>{
     if(S.fin && S.fin.done && S.fin.d && S.fin.d!==shiftDate()){ S.fin=null; save(); }
   }catch(e){ oops('cardioDayRoll',e); }
   if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs(); try{ landOnTraining(); }catch(e){ try{ syncToNext(); }catch(e2){} }
+  // v217: pre-shape sessions get a shape from their own report - AFTER refreshLogs, or there is
+  // nothing to read. The first cut ran it earlier, saw an empty list, and marked itself done.
+  try{ docBackfill(); }catch(e){}
   try{ if(S._avaPick){ profEdit=true; S._avaPick=null; save(); } }catch(e){}
   try{ if(S.avaBig){ delete S.avaBig; save(); } }catch(e){}   // strip the legacy persisted viewer flag
   try{ adRepairStalls(); }catch(e){ oops('adRepairStalls',e); }   // before the first paint, so the restored numbers are what the athlete sees
