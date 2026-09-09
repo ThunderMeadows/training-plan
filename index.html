@@ -7613,6 +7613,13 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.08c', date:'2026-09-08', title:'An exercise you remove now leaves the day', items:[
+    'Taking an exercise out used to leave a greyed SKIPPED row sitting in your session. It is your plan \u2014 if you took it out, it should not still be on the sheet.',
+    'Removed exercises now disappear from the day. Stepping through your session skips past them, and they no longer count toward the day\u2019s exercise or set totals.',
+    'They are not deleted. Every one is listed under Removed today at the bottom of the session \u2014 one tap puts it back where it was.',
+    'Swapping is different: swap an exercise for another and it still shows, under the new name, because you are still doing the work.'
+  ], bulk:'Small thing that was bugging you and should have bugged me. When you took an exercise out of a day, I kept it on the sheet in grey with SKIPPED next to it, like you had let me down. You did not \u2014 you changed your plan. Removed exercises now leave the day, and stepping through your session goes straight past them. They are not gone for good: they are sitting under Removed today at the bottom, one tap from coming back to exactly where they were. Swapping still shows, of course, because you are still doing the work, just a different way.'},
+
   {build:'2026.09.08b', date:'2026-09-08', title:'Six movements a day \u2014 the starter program was over-prescribing', items:[
     'Four of the six starter days were built with eight movements. That is more than a session should carry: the research points to about 4\u20138 hard sets per muscle per session and roughly 20 in total, and six movements at 3\u20134 sets is where that lands.',
     'Pull days lose Straight-Arm Pulldown and Incline DB Curl \u2014 three curl movements after four rowing movements was the overage. Leg days lose their second and third core movements. Push days were already right.',
@@ -11044,6 +11051,10 @@ function weekSheetHTML(w){
   return h;
 }
 function printWeek(w){
+  // AUDIT 2026-09-08: a call without a week rendered "Week undefined of 6 · undefined NaN"
+  // into the sheet host, and the host outlived "Back to the card" (only the printing class was
+  // removed), so the text sat in the page invisibly. Default the week, and empty the host on close.
+  if(!isFinite(+w) || +w<1) w=S.week||1;
   var host=document.getElementById('printSheet');
   if(!host){ host=document.createElement('div'); host.id='printSheet'; document.body.appendChild(host); }
   host.innerHTML='<div class="sh-toolbar noprint">'
@@ -11505,7 +11516,9 @@ function remapData(code, oldNames, newNames, dropMissing){
         if(!dropMissing) dparkPut(pre, oldNames[+oi], stash[oi]);
         return;
       }
-      S.data[pre+'|'+ni]=stash[oi]; moved++;
+      var rec=stash[oi];
+      try{ if(rec && newNames[ni]) rec.n=newNames[ni]; }catch(e){}   // v222: the stamp moves with it
+      S.data[pre+'|'+ni]=rec; moved++;
     });
     // a movement coming back gets its own sets back with it
     newNames.forEach(function(nm, ni){
@@ -12664,6 +12677,15 @@ function libAdd(name, code){
       est={val:Math.max(step,Math.round(an.f*S.maxes[an.base]/step)*step)}; } }
   // through dayReshape as well: a custom lands at the end of the base list, but S.order can
   // place it anywhere, and anything it lands in front of has to take its sets with it.
+  // Noticed during the v220 dose work: the library would add a movement a day already had,
+  // leaving two identical rows whose set state is told apart only by position - and a
+  // duplicate is never what an athlete means by "add".
+  try{
+    if(dayOrderNames(code).indexOf(name)>-1){
+      alertToast(name+' is already in day '+code);
+      return;
+    }
+  }catch(e){}
   var hadCore=false; try{ hadCore=dayOrderNames(code).some(isCoreGrip); }catch(e){}
   dayReshape(code, function(){
     custList(code).push({b:cyc(), w:S.week, cid:Date.now()+Math.floor(Math.random()*999), name:name,
@@ -13796,7 +13818,10 @@ function trainsFor(n){ var r=libRow(n); return (r&&r[7])||TRAINS[n]||''; }
 function howtoFor(n){ return HOWTO[n]||''; }
 
 // ---- focus state ----
-function focusMax(){ try{ return dayObj().exercises.length; }catch(e){ return 1; } }
+// v221: a removed movement is out of the day, so it is out of the focus walk too - otherwise
+// stepping through the session lands on a row that only says OUT.
+function dayLive(){ try{ return dayObj().exercises.filter(function(e){ return !isOut(e.name); }); }catch(e){ return []; } }
+function focusMax(){ try{ var n=dayLive().length; return n||1; }catch(e){ return 1; } }
 function firstOpenFocus(){
   try{
     var d=dayObj(), m=focusMax();
@@ -13899,6 +13924,13 @@ function deckHTML(){
     var st=null; try{ st=S.data[exKey(i)]; }catch(e){}
     var done=exDone(i), started=exStarted(i), out=false;
     try{ out=isOut(ex.name); }catch(e){}
+    // His rule, 2026-09-08: "if your removing a prescribed exercise and replacing it... it
+    // hides or doesnt show on the days training because it shows as skipped but its
+    // distracting and doesnt actually have to be there if the athlete is deciding to change
+    // their plan." A movement the athlete took out is not a skipped set of work - it is a
+    // decision. It leaves the day. It is not deleted: it is listed under Removed today at the
+    // bottom of the day, one tap from coming back, and the report and the record are unchanged.
+    if(out) return;
     var w=null; try{ w=out?null:baseLoad(ex); }catch(e){}
     var pills='';
     if(out) pills='<span class="pill sk">SKIPPED</span>';
@@ -13976,7 +14008,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v220';
+const BUILD = 'v223';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -14747,12 +14779,38 @@ function cyc(){ return S.cycle||1; }
 function exKey(i){
   try{ var ref=docRef(); if(ref) return 'doc|'+ref.key+'|'+i; }catch(e){}
   return cyc()+'c|'+S.week+'|'+S.day+'|'+i; }
+// ===== SET STATE KNOWS ITS OWN MOVEMENT =====
+// The open job from 2026-09-06 was to re-key live set state by exercise identity instead of
+// position. Measured on 2026-09-08: 33 exKey() call sites, five hand-built keys, three prefix
+// scans and two migrations would have to move together - a large refactor of the one path a
+// session cannot afford to have broken, at a moment when every KNOWN way for a position to
+// drift is already closed (v210 remaps by name on every edit, v211/v217 make banked sessions
+// documents, v220 migrates template changes by name).
+//
+// So: keep the key, add the identity. Every record stamps the movement it belongs to (st.n).
+// On read, a record whose stamp does not match the movement at that position did not come
+// from this movement - it is parked under its own name and the movement starts clean, rather
+// than an athlete being shown somebody else's sets. That closes the whole class, including
+// causes nobody has thought of yet, in the one place set state is read.
+function stateName(ex){ try{ return String((ex&&ex.name)||''); }catch(e){ return ''; } }
 function exState(i, ex){
   const n = (ex && ex.doc)? ex.sets : (isDeload()? 2 : exSets(ex));
-  if(!S.data[exKey(i)]){
-    S.data[exKey(i)] = { sets:Array.from({length:n},()=>({st:'pend',reps:null,rir:null})), w:null, feel:null, open:-1, wopen:false, sub:null };
+  var key=exKey(i), nm=stateName(ex);
+  var prior=S.data[key];
+  if(prior && nm && prior.n && prior.n!==nm){
+    // this record belongs to a different movement. Park it under ITS name and start fresh.
+    try{
+      var pre=key.slice(0, key.lastIndexOf('|'));
+      if(typeof dparkPut==='function') dparkPut(pre, prior.n, prior);
+    }catch(e){}
+    try{ delete S.data[key]; }catch(e){}
+    prior=null;
   }
-  const st=S.data[exKey(i)];
+  if(!prior){
+    S.data[key] = { sets:Array.from({length:n},()=>({st:'pend',reps:null,rir:null})), w:null, feel:null, open:-1, wopen:false, sub:null, n:nm };
+  }
+  const st=S.data[key];
+  if(nm && !st.n) st.n=nm;   // records written before the stamp existed adopt their movement
   // FOUND BY THE STATE FUZZER 2026-09-02: a set list that is not an array, or a null entry
   // inside one, threw on every render - the day screen would never draw again. Heal the
   // shape here, the single place set state is read, rather than guard every reader.
@@ -16612,9 +16670,15 @@ function renderInner(){
   try{ h=rosterBanner()+h; }catch(e){}
   h+=deckHeadHTML();
   if(S.view==='deck'){ h+=deckHTML(); h+=dayUtilHTML(); app.innerHTML=h; wire(); wireFocus(); return; }
+  var removedBlk=''; try{ removedBlk=removedHTML(); }catch(e){}
+  // v221: index the focus against the LIVE movements, so a removal never leaves a gap in the
+  // walk and a removed movement never draws a row of its own. Restore lives at the bottom of
+  // the day now, in Removed today.
+  var liveIdx=-1;
   d.exercises.forEach((ex,i)=>{
-    if(i!==focusIdx()) return;
-    if(isOut(ex.name)){ h+='<div class="ex" style="opacity:.55"><div class="ex-head"><div class="ex-name">'+esc(ex.name)+' <span class="subtag">OUT</span> <span class="toggle" data-restore="'+esc(ex.name)+'" style="padding:0 10px;font-size:11px;margin-left:8px">Restore</span></div></div></div>'; return; }
+    if(isOut(ex.name)) return;
+    liveIdx++;
+    if(liveIdx!==focusIdx()) return;
     const st=exState(i,ex);
     const subbed = !!st.sub;
     const w = subbed ? subLoad(ex,st) : curLoad(ex,st);
@@ -17023,8 +17087,25 @@ function avatarFromFile(file){
     rd.readAsDataURL(file);
   }catch(e){ alertToast('Could not read that photo'); }
 }
+// The one place a removed movement appears: quiet, at the bottom, with the way back.
+// v213's lesson - a control that cannot be reached is worse than no control - so removing a
+// movement must never be a one-way door.
+function removedHTML(){
+  try{
+    var d=dayObj(), outs=d.exercises.filter(function(e){ return isOut(e.name); });
+    if(!outs.length) return '';
+    return '<div class="block lockfree" style="margin-top:10px">'
+      +'<div class="sleeve-label">REMOVED TODAY</div>'
+      +'<div class="cue" style="padding:4px 0">Not part of this session. Tap to put one back.</div>'
+      +outs.map(function(e){
+        return '<span class="toggle lockfree" data-restore="'+esc(e.name)+'" style="display:inline-block;margin:4px 6px 0 0;padding:0 12px;font-size:12px">'+esc(e.name)+'</span>';
+      }).join('')
+      +'</div>';
+  }catch(e){ return ''; }
+}
 function dayUtilHTML(){
-  var CAL=''; try{ CAL=calStripHTML(); }catch(e){}
+  var CAL=''; try{ CAL=removedHTML(); }catch(e){}
+  try{ CAL+=calStripHTML(); }catch(e){}
   // Session utilities live at the BOTTOM of the training day only - quiet text, out of the
   // way, present exactly where "reset this day" and "something looks wrong" can occur.
   var bk=''; try{ bk=backupBarHTML(); }catch(e){}
