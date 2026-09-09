@@ -7613,6 +7613,13 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  {build:'2026.09.09a', date:'2026-09-09', title:'Your code is now tied to your phone', items:[
+    'A code now works on one phone \u2014 the first one it is entered on. Entering it on a second phone is refused, so a code you were given is yours alone.',
+    'On iPhone, add the card to your Home Screen BEFORE entering your code. The Home Screen copy is a separate copy from Safari, and your code should live in the one you train on. The card will walk you through it.',
+    'Training never needs a connection. The card checks in about once a week to keep your code active, and if it cannot reach the internet it keeps going for two weeks and tells you before anything changes.',
+    'What the check-in sends: your code, a random id for this phone, and a count of sessions. Never your lifts, weights, name or notes. Settings says the same.'
+  ], bulk:'One change and it is about your code, not your training. Your code is now tied to the first phone it goes into \u2014 enter it on a second and that one is refused, so nobody can pass yours around. If you are on an iPhone, put me on your Home Screen FIRST and enter the code there; the Home Screen copy is a separate copy from Safari and I want your code in the one you actually open. I check in about once a week to keep it active. If I cannot reach the internet I carry on for two weeks and I will warn you before anything changes. And I send counts, not your training \u2014 how many sessions, never what was in them.'},
+
   {build:'2026.09.08c', date:'2026-09-08', title:'An exercise you remove now leaves the day', items:[
     'Taking an exercise out used to leave a greyed SKIPPED row sitting in your session. It is your plan \u2014 if you took it out, it should not still be on the sheet.',
     'Removed exercises now disappear from the day. Stepping through your session skips past them, and they no longer count toward the day\u2019s exercise or set totals.',
@@ -9528,259 +9535,259 @@ var ACCESS_SALT='deadstop-access-v1', ACCESS_DAYS=90;
 // administrator can issue from the encrypted pool below. The admin key lives a year, by his
 // decision on 2026-09-07 ("admin key should have 1 year expiration").
 var ACCESS_CODES=[
-  {h:'68e6fe86d657339613bde915da9f9278e06e105bb9845e65c3a6dffe08b1ec2e', role:'athlete', days:90, v:1},
-  {h:'5c1139b4c46386e92c0c572f7920130e78b5fb0f07b9c4ba2684b316ee2d2aef', role:'coach', days:90, v:1},
-  {h:'b17cb67fa70e310101c3bb6346ded2aa3c9f893c27c312042390ef17c3844508', role:'admin', days:365, v:1},
-  {h:'94778787ec5b7f5898ac1784927f2c2354d9e78f9132c7e097b33bdb818d68a5', role:'athlete', days:90, v:1, p:1},
-  {h:'c08d51584dcd26d7b35b4eacbeca619410964cbae55881e2fba974e7596c8fcb', role:'athlete', days:90, v:1, p:1},
-  {h:'c3a6fe018ffa85f10c961595f7ae004937d06a6b50f5797ea13cbded6cc14a89', role:'athlete', days:90, v:1, p:1},
-  {h:'5c6cac51abdb08163ccf8258e579b45e52619ac866aa59f88c5d40a8fc0c6f07', role:'athlete', days:90, v:1, p:1},
-  {h:'03fc441b130578dfb058df6d17d5b488bb5bad0bc9cea59484f996c36912427a', role:'athlete', days:90, v:1, p:1},
-  {h:'8fe7a060fbb60dc6f7112bd40377cb74b6d0d1e32e0d90df6ed75cc0fd85e024', role:'athlete', days:90, v:1, p:1},
-  {h:'cea315a45840caff5d87806ac8a30405ce6d4488d43bbbc0d47a85084426fb9a', role:'athlete', days:90, v:1, p:1},
-  {h:'3fce3063eb2c2a29380bedb101d55196f3d0348a93be42e54ecde7648163ddb1', role:'athlete', days:90, v:1, p:1},
-  {h:'b82833bd9050ed2c9ca0484e7bab9c0a874318051b26b145e8b612e45a213c9a', role:'athlete', days:90, v:1, p:1},
-  {h:'a01f8be7fbe11e35a474ef59cf45c3fe05970e970e64aad5692d06e1e1871f19', role:'athlete', days:90, v:1, p:1},
-  {h:'e34c43e4f91f153469cc4d4166f63b7f007cfbfd2a035603027f5272307f099d', role:'athlete', days:90, v:1, p:1},
-  {h:'fc1fd64f0785e1811240f2aa921209138a49033d5179df63ff5bde343d0427fe', role:'athlete', days:90, v:1, p:1},
-  {h:'33a4cde0cd61f38fb9062a26626242794d2dde3ddeea8b6b64693f62915ae380', role:'athlete', days:90, v:1, p:1},
-  {h:'cf61e768fbf870fe9bff468934c0df2e5c02d672070f557401fcc6328c63ce36', role:'athlete', days:90, v:1, p:1},
-  {h:'92c6fa9db752a76e358d589ade5cb89818ef6cc7e59b53b31ad191fb30940bcb', role:'athlete', days:90, v:1, p:1},
-  {h:'29c2584e5832b2fee0ae565f5a6509d6d9ec4cf361f6b7642b9b424b5dc7b9ed', role:'athlete', days:90, v:1, p:1},
-  {h:'e5afd40c5b0c7e83ee1c1958526d7f4bd27cdb8b5280f4113f9fa5e69f43c665', role:'athlete', days:90, v:1, p:1},
-  {h:'e6b999901ddd01ae63b3cc3da0961d8e4525b8f5ed001254968becfb20aca016', role:'athlete', days:90, v:1, p:1},
-  {h:'a412218c0a07d97bc0ed9727e087f8915bba2c3633f6d822ca212c92ca26d07a', role:'athlete', days:90, v:1, p:1},
-  {h:'0ed54d373ca556c3c9ca052dbbd80e1f4b1e149d9bf0c6f4eb1ef6bdd901f2e3', role:'athlete', days:90, v:1, p:1},
-  {h:'9a859869011bfcad4d8bf2c9a6aabb4bdfd8c991f21edc4614e3637c71f52c22', role:'athlete', days:90, v:1, p:1},
-  {h:'636c51a673c586f560ebbe90c0cc6d1506bb5a3be4f42088972b75860dc3feb3', role:'athlete', days:90, v:1, p:1},
-  {h:'a630c7e124f61112b376645afb02d8fd92c50c27f58207e37160eda07940766c', role:'athlete', days:90, v:1, p:1},
-  {h:'b6713b222df6f4e84681cfa49e977c99d9c053cb7cbf92064222dabb2570075a', role:'athlete', days:90, v:1, p:1},
-  {h:'947a30e9b97dff546f3b67e1bae08b17ccc4e0967d890e5df5cdcb8860930b12', role:'athlete', days:90, v:1, p:1},
-  {h:'032f3dea3fea1bdcc65e1db594f6318042ca6cb39d7d63f6642c98e7a6137c0f', role:'athlete', days:90, v:1, p:1},
-  {h:'8b5a99b8403f82f67512d3d9825b6a042583e5eaae2e8c16f2f648f025075c06', role:'athlete', days:90, v:1, p:1},
-  {h:'86aa2d7492aa286cc17cd060709b2dc5f3ab418a47e53f42af0202fe817aaf93', role:'athlete', days:90, v:1, p:1},
-  {h:'cedc629df10d0d9db8a206743fe3bae7b3d8113c473946279b1a110b9f86a814', role:'athlete', days:90, v:1, p:1},
-  {h:'dffa2c778992dd3abba4bbcdacd05b45fa7dc6e48a4b90fd760ad37103039ebb', role:'athlete', days:90, v:1, p:1},
-  {h:'148b7f95b3e4f73b285573a5b358452a40f67a155d60514eb2cb2f989d3fe0e4', role:'athlete', days:90, v:1, p:1},
-  {h:'f6f1f06609b37311c65c52251a920c6f3f3f2baa97e0ccc025a569730398c3a9', role:'athlete', days:90, v:1, p:1},
-  {h:'96023a467e0cf5d9bbd70a31038370a13b1f3adeef3e54143d20490f7c3c65b2', role:'athlete', days:90, v:1, p:1},
-  {h:'384cfbc8ba6d3871b186a9e58e90505a1c38a5bd82630413c689436faedb4723', role:'athlete', days:90, v:1, p:1},
-  {h:'7e48ea21013ecc591315f45ff67f182df6fe2e563adc4625010370a642e8810f', role:'athlete', days:90, v:1, p:1},
-  {h:'60551fbdfeaff39403268994084820dd2a7d4011bf9ed3a0d3b436be11c9111f', role:'athlete', days:90, v:1, p:1},
-  {h:'ca097d1fd32de630656c5dd00730917fb6b18badc87ec8fd9ee205b36e3ba883', role:'athlete', days:90, v:1, p:1},
-  {h:'9b1705a311a62dbe49938993e397db11589e894bf9201ef78c67a727b60245cd', role:'athlete', days:90, v:1, p:1},
-  {h:'a73ce10451751a5317c51cee92821626e9d8dd52acf2d8212674a865f9ebc72b', role:'athlete', days:90, v:1, p:1},
-  {h:'59f3d33bff4b029147941cfbb7d0f90ac0f658190c37d423b0ba2dc2459e4bac', role:'athlete', days:90, v:1, p:1},
-  {h:'9a7df8e1e5d5fcf69648a435ae3bfe8eeb9ca36bf0194b1ee3c3ca49b7cd5c3b', role:'athlete', days:90, v:1, p:1},
-  {h:'9744b4edc45328f2ec052297f757f39c0db76ea432e0c5e6f2987fa8d282fe77', role:'athlete', days:90, v:1, p:1},
-  {h:'978e71bdd28a2f34cd752dca1abf51cc9fbdd6d5d9b72fe442d865fb31ef5a9a', role:'athlete', days:90, v:1, p:1},
-  {h:'bd12c40c0b2b1549d2dac79d64b3f35fcd63af4da84f917bbabf5a17293973b3', role:'athlete', days:90, v:1, p:1},
-  {h:'d30c73df7351bd25570f121b3f83333b102487f14f46829d6259158427311b3e', role:'athlete', days:90, v:1, p:1},
-  {h:'1b6bb9a6ef79fc0c6e2c2383f0a8b0612eb0d4ce358e1b80f1b774be51da7234', role:'athlete', days:90, v:1, p:1},
-  {h:'d7ceb5738e9cc619ef337d4bb283729fc1fdbb463cc67f02c4d9a24e3a383144', role:'athlete', days:90, v:1, p:1},
-  {h:'104b5c347dfc33b27b2a698047c2626bbd103b9a3b5d91ff651e65ab1872027b', role:'athlete', days:90, v:1, p:1},
-  {h:'0579a614754b55409bb4aa50d13ad862d966d04fb51fb078ff8f34d258060d6f', role:'athlete', days:90, v:1, p:1},
-  {h:'a21789e5bb82324af5a088af2d80ea0378d23e80f0294b8480958c9906bfcd48', role:'athlete', days:90, v:1, p:1},
-  {h:'5418989202b108df0db57431ecced643451a546bcd66927c134bc059b48770c9', role:'athlete', days:90, v:1, p:1},
-  {h:'8886021bca691ab045ecff584fb1b5b738a73ef28dabc2ac87e40c247a27f48a', role:'athlete', days:90, v:1, p:1},
-  {h:'a39ab7a2327709222d09c531985dd2389e995cb86fbd715b6715f533ec66c40d', role:'athlete', days:90, v:1, p:1},
-  {h:'4cdcbffced15c96e89354977dda0fc8484001f3d1ea4614d1e5a11765ad155a7', role:'athlete', days:90, v:1, p:1},
-  {h:'905f6c705ff87b6bf1f94db5914c5ab8398fe440371a7a39e7861d54ddef8c26', role:'athlete', days:90, v:1, p:1},
-  {h:'cd596665be08d2d0bb395ec37056acb005a170aca7c69e9b1cf42e0a1ec077b1', role:'athlete', days:90, v:1, p:1},
-  {h:'9cfc705fc7301890375a8d91c62f4f3078c47e8407402159a150fba28ebe2b04', role:'athlete', days:90, v:1, p:1},
-  {h:'6e199693fa3283a720e976d1f5405a0b18e9e9834b7047d0834b18be682dd1a7', role:'athlete', days:90, v:1, p:1},
-  {h:'1763ab1d0e4eaee4616c34ddc608ba869fe368843973ad4591b6d375f81d735d', role:'athlete', days:90, v:1, p:1},
-  {h:'115bdc8e0f9d5be7f11e281fb3ee4bdd953c36ac28ce212436e072d14005c20d', role:'athlete', days:90, v:1, p:1},
-  {h:'bf1bc94d4c6d97f621e5d257e75f1c26ba516f9d0eef3eff827e212873841f9c', role:'athlete', days:90, v:1, p:1},
-  {h:'94527add97f73db6bb925c2c79d53dd9d0cd955a04d1582c105ae513140de016', role:'athlete', days:90, v:1, p:1},
-  {h:'40ef52d5eca5527dbbc82607271a971f7c6f7e87caa93cd658dbc54a5910d266', role:'athlete', days:90, v:1, p:1},
-  {h:'aa65a65a9c19ea60d5b750f76af73a290820b36cb6cdfa263959a01133aacea1', role:'athlete', days:90, v:1, p:1},
-  {h:'b46d9bd12fd92a85b5ac1e97371701595956728428b94c4a537ae2b87ba8e74c', role:'athlete', days:90, v:1, p:1},
-  {h:'2d8bbd9e6a53e10c6457213bd9e0a070b7c2dd08ea56505a7f4b8dca6ea1652e', role:'athlete', days:90, v:1, p:1},
-  {h:'1d2fb710db24494787e3120a519a362dfcf811c7ac1120216423c20bc3b59a6f', role:'athlete', days:90, v:1, p:1},
-  {h:'373c7ce2813e6fa38ffca92241b26fdd71f647d72d5acf6e776ee064faab6e1a', role:'athlete', days:90, v:1, p:1},
-  {h:'c884744eb6a06df741373c4432fe4e8f2ebc5138cab802e9d54a9439e417207b', role:'athlete', days:90, v:1, p:1},
-  {h:'5bfd40d2a7eb65fb4ee2aab3c36d55a30dfdde9f9ce2025abf342997766d5521', role:'athlete', days:90, v:1, p:1},
-  {h:'ef98be52baf4e96bad365a6267235926b1e8dedbc518e8dc797632eb23a0db89', role:'athlete', days:90, v:1, p:1},
-  {h:'46a2864525bd2a60ea0e997fc1f00d3e8b147b2cca4c27f273f6ffc7022d13c5', role:'athlete', days:90, v:1, p:1},
-  {h:'62231df7e0da086488b0f1edecfd127f58e0350374d14b5b0e3eca0f5532b894', role:'athlete', days:90, v:1, p:1},
-  {h:'e531262e20013859b378495e8bd56d3cddd5f6de764a12fae49aef3c46b43c54', role:'athlete', days:90, v:1, p:1},
-  {h:'dab0cfd67d2b447fa060bdaf34a40cc6097b2a7419912dfbbd2a7558259544cc', role:'athlete', days:90, v:1, p:1},
-  {h:'0468c6e265ba5cb382d6311b25ff52eebc82574ed2f68e90252c38ac23457f21', role:'athlete', days:90, v:1, p:1},
-  {h:'5df20daf28f1dd2246377aff7e541da67a1c130f5c66bd074aae0749b074739e', role:'athlete', days:90, v:1, p:1},
-  {h:'7bbf531a69d60da5d6d114f9f1092ea34e858ea1aeff9e926ea47430384030c8', role:'athlete', days:90, v:1, p:1},
-  {h:'2b8343bfdf6deb12f2dff071982d1da01060da740eab986144ca63dead765255', role:'athlete', days:90, v:1, p:1},
-  {h:'bf2128c6c0d94747f2a9d614e2cda082b3df15163990ae3dbb97313dbc79df19', role:'athlete', days:90, v:1, p:1},
-  {h:'063a2c85af656929bb0af380a8f4ade6134b58ff0f92b4d0b2685d2e089c6aaa', role:'athlete', days:90, v:1, p:1},
-  {h:'f48833e0a65c2bfc335b69a4d9bcad495bdf23d7b396dc294ce7ac92eaf54f07', role:'athlete', days:90, v:1, p:1},
-  {h:'e0caad84a0b92ee0eefe3e75f131e8c1fb2d5fd77b08752ac9306ea97c57a046', role:'athlete', days:90, v:1, p:1},
-  {h:'fca1d79b13a3b628b353f52ad0326a3353aa48f5ad65a87be141a9e9e15f2c6c', role:'athlete', days:90, v:1, p:1},
-  {h:'09f831d5953d0b88cf525a353b13db0cb2969faae5fd0add5d1111d60c466fca', role:'athlete', days:90, v:1, p:1},
-  {h:'87a5f7c661ac98dee47d45b5bd89921545532a4793a207f728c63f42cff8a2af', role:'athlete', days:90, v:1, p:1},
-  {h:'dc96be3c0440cc566c2995d489670719d728e023ac4e3959341fe901fd7a535d', role:'athlete', days:90, v:1, p:1},
-  {h:'9db205e4035211665fbbea84d7e4edf8064f73d789fcf1fb759e016c12a125d5', role:'athlete', days:90, v:1, p:1},
-  {h:'48b1cba865a9cd0017c4b7bc070ea3c4710bebd6613b714c5048056c3263e641', role:'athlete', days:90, v:1, p:1},
-  {h:'510afd99b331f5015545cfa2bc33c804b53467011e9654c63d003bde5d1b7aac', role:'athlete', days:90, v:1, p:1},
-  {h:'2c3602314d4afd991f25a37b1330d26d82ffefc3f5c92b9b54a001e685f99c3c', role:'athlete', days:90, v:1, p:1},
-  {h:'6f031511752fd90eec397fc4fabfeff5509f764c8704406e015d068b1a733cea', role:'athlete', days:90, v:1, p:1},
-  {h:'879cc30bfdd6793e8b28904245cf32f35653c1014a34bbfdfbe3bb2ea8de2e49', role:'athlete', days:90, v:1, p:1},
-  {h:'7e52b9ce4faa7e80cbd5044a416ed7e7b61ed1a6b33ff0748dd90190761101cb', role:'athlete', days:90, v:1, p:1},
-  {h:'6d8006b2238084799b4e9bbfe4625cbae04286d6eb6953e6af23164dcb91d7d8', role:'athlete', days:90, v:1, p:1},
-  {h:'f0612d1a70ac4d9165534dad515ebcf14bdc00870840e9cb183ed750077210f7', role:'athlete', days:90, v:1, p:1},
-  {h:'ebe429e1e7b27cd817002e3a094f9dd1e3d2b1e1c1bb8fe14752f55a8fd33d69', role:'athlete', days:90, v:1, p:1},
-  {h:'1a7743dbd5c4148425b418c55b9e31b055d6f257ceef4e94e1c3820cb7b36c88', role:'athlete', days:90, v:1, p:1},
-  {h:'62d345166e49934feb076b9214bb6faab6a9df9d19ab8b705871d75067e4bc3a', role:'athlete', days:90, v:1, p:1},
-  {h:'fcedd12845d8911afac0ff37f621d186644abb64f9c4c13fd1c655165a42ccce', role:'athlete', days:90, v:1, p:1},
-  {h:'dfb0f8e04ff4e872a650cf6bb0a65c3ab6844ed6bb59c26b322ea6c6aad053b2', role:'athlete', days:90, v:1, p:1},
-  {h:'63cadf2ab13751a784ee484fdbc2e26b516a0317037bddf0c32da410e56f0c7e', role:'athlete', days:90, v:1, p:1},
-  {h:'f9cfd7e264f12857edd11e4590fa4465ccc273b661a96d444f22b124554c2ae1', role:'athlete', days:90, v:1, p:1},
-  {h:'909e42218d2e83ec2a3cfa879739dda345e0f89a4d5ce6aa1245e1a9def2d7d2', role:'athlete', days:90, v:1, p:1},
-  {h:'3c1be88c583cc722d3492b841b74e81bc9bc341c76698202824293bc9f44138c', role:'athlete', days:90, v:1, p:1},
-  {h:'424e0b61ba20240e84f70d027decfacfc53832325be8507aeb51de3aac1a804f', role:'athlete', days:90, v:1, p:1},
-  {h:'26d67c37b2abf5f4d8edde5d04c6d6fa99fbe375f4332f13cf7ce781ecffb68f', role:'athlete', days:90, v:1, p:1},
-  {h:'8d416b072b13958c0f35c6c4de22478e0487c43df52731a5244eccf12821e8fe', role:'athlete', days:90, v:1, p:1},
-  {h:'2059e9450d5f3eb2fcf16521b4c23d7cd193184fcb353cbb4119e8229bb2fa9b', role:'athlete', days:90, v:1, p:1},
-  {h:'5ddaf3603f79eb7d80e37d4fa8ef4aa94262b3ad1faab5528e0072076ac79a62', role:'athlete', days:90, v:1, p:1},
-  {h:'d8080be82911269d8112876a75d27ffb2ce69cb6258a01777369aad8fbb5eb0a', role:'athlete', days:90, v:1, p:1},
-  {h:'1ba368bcff8db8f866e04240a9ccd7e6a9c445610ad49b0956104313294055bd', role:'athlete', days:90, v:1, p:1},
-  {h:'0add921e0102710b11cb16de0e2f1ebd1053f87f078d0827275e4fa82d4352e3', role:'athlete', days:90, v:1, p:1},
-  {h:'3ed4acf7a35b752ca69beeff301b06562ffafa5c28f639b89ff5276513feead9', role:'athlete', days:90, v:1, p:1},
-  {h:'40840fb0c87b78fb7ecdf649ca92e495ab186d90fabb7efaaeb9417fb24016b5', role:'athlete', days:90, v:1, p:1},
-  {h:'a50d8c8b6a5cfb2775e6c89beb5fd9b5e7b50f3d9bf81085e103d4b3fb8c96f8', role:'athlete', days:90, v:1, p:1},
-  {h:'ecd816ac501c04285e3e7a24bba9e1fb00238c22d1f0493606f4e293f970b091', role:'athlete', days:90, v:1, p:1},
-  {h:'6ea3fd0988c4eab3679991d84fe9d7eda4e87cfeafab9318bc26468510f38cd2', role:'athlete', days:90, v:1, p:1},
-  {h:'b9c24d75414b009f8454696772a20217f1b9ef2b22981bcf057f9f939f2ce06b', role:'athlete', days:90, v:1, p:1},
-  {h:'4990871bf7812dcb2e44efab2cf161ffd6c6bf7bd169f160a6a0051cec0853af', role:'athlete', days:90, v:1, p:1},
-  {h:'adca05113d023125d0986434adbd109725cc9b2a395a078438a1b4bf1e45c18e', role:'athlete', days:90, v:1, p:1},
-  {h:'9405b9e4a66c3dd03f968d42d81110cd7ff8a088b2e12de7f3c9024e5eced71a', role:'athlete', days:90, v:1, p:1},
-  {h:'63b8e627c5f814e8e6e1f043b9a2313bff6a62b3114e623a81dafdd897b97fd8', role:'athlete', days:90, v:1, p:1},
-  {h:'6b8c11aa5967e93e7eab982de0ddc29344462d944453900b239e5b9a4491439a', role:'athlete', days:90, v:1, p:1},
-  {h:'25789d4e7deaf54017a45f5ac3b5b5e4789ce2bd8923edaae39acc62875f406d', role:'athlete', days:90, v:1, p:1},
-  {h:'420c6b662fa1b89d7571b010eaf28bf8f65fc258851eb153940de623adcec18a', role:'athlete', days:90, v:1, p:1},
-  {h:'53250b6309407fb6ca0e330ee27023ba0244cf7b6aa3488c2197e29c5e1d67a8', role:'athlete', days:90, v:1, p:1},
-  {h:'f86c857a157e1ca86c483d4f2b8ab0bc9f8b6b9f73491a511853903e8ff3163f', role:'athlete', days:90, v:1, p:1},
-  {h:'5d4453dc2ec37258d081fa213e61f3071a0e4dd24af8a9bee64c7d0c24f29cdd', role:'athlete', days:90, v:1, p:1},
-  {h:'e952b49954c1623fe81b8d2694b8589dde9da7f8e78c503bb84d31f8da5dbc7b', role:'athlete', days:90, v:1, p:1},
-  {h:'87ba3d72cc19241bff804bb1f024183e16221745a6f31872f8f789a57337b9ff', role:'athlete', days:90, v:1, p:1},
-  {h:'e432bfc5ea501c5607a027184a05a61d68bb1870fc97e41d5c76f58325bf8992', role:'athlete', days:90, v:1, p:1},
-  {h:'ff68903a6f03fd8b98325e15fc19c7171a08f4623a610f102c9d821bd251233d', role:'athlete', days:90, v:1, p:1},
-  {h:'5e0848686eae94dab25da561e141cf42aad333ff5c1327637162c70c407a237e', role:'athlete', days:90, v:1, p:1},
-  {h:'a45b120de8f96a7281db9f95616c40407cedffb31361b35fa21b87fad9af8e07', role:'athlete', days:90, v:1, p:1},
-  {h:'673286c7b132c09268fe19d87b44eca384812b16a7473c8b93e0c89ade466b47', role:'athlete', days:90, v:1, p:1},
-  {h:'1c9afb70f1fb89c09bcfb7afb8defd962ac891b502be3fe4acf24683069e290c', role:'athlete', days:90, v:1, p:1},
-  {h:'6575f74faab503a9c0cdb26fb9a270ef3e8d927ae833b63e984f37558b18c19c', role:'athlete', days:90, v:1, p:1},
-  {h:'42a25c3efcc6c6b5ed3be367c4350b237a7a33b19b608c3c71c901b51a4af6af', role:'athlete', days:90, v:1, p:1},
-  {h:'8c95aedb0f6ff48375a346b6b7001d2b84ea816ab3d6e3ed62284fee132fcddb', role:'athlete', days:90, v:1, p:1},
-  {h:'fa0d17f81269872da43017e26ebd9fec694c36319a2cf3c6fc8acbdac7a5c7b7', role:'athlete', days:90, v:1, p:1},
-  {h:'417ed3414bffdf8f005b8bb64929934bed37c5f6be4cb55cb89a971d3fc09442', role:'athlete', days:90, v:1, p:1},
-  {h:'77da3aa452d592ce0836030dc2f57e25fe84d3a3144d80fc8250918d86fab143', role:'athlete', days:90, v:1, p:1},
-  {h:'f3cf70461e49e330ec7a13bba1f6eba100a801ab03b7076874545a216ea3e503', role:'athlete', days:90, v:1, p:1},
-  {h:'4b896b04fddb34ad4f07aa5cfa5df0fb1c5fe1e97bd64348276db2c2c5f13e79', role:'athlete', days:90, v:1, p:1},
-  {h:'326cf0cf35c6b96e55e1afab1d4c9326b7da254c17f449de52bd4f3035115370', role:'athlete', days:90, v:1, p:1},
-  {h:'674447b71423eb913b67686c6f3589c82e8e4fc1165cc9c18c0ba064da678378', role:'athlete', days:90, v:1, p:1},
-  {h:'14c7bf112d7fab3404086c55a41cf9f779fe11ee59924b5b813e3060b873a272', role:'athlete', days:90, v:1, p:1},
-  {h:'5aa22b7b27fbdc01bf5f6687fc47852d6173dd1d4104847665ee40efc07a53e5', role:'athlete', days:90, v:1, p:1},
-  {h:'8d9a99704103bab70b6538b00fbe522795bcea2883aa9fbb905d51f3188b8003', role:'athlete', days:90, v:1, p:1},
-  {h:'b822f826d47164b2bdaada53b132d4c1cc520fd2b2f76c4cc92b7fbf2d74ebbe', role:'athlete', days:90, v:1, p:1},
-  {h:'168ffc22343dd13da9991989a80a43c7c07bdc212f2dc442b4f98081a124aca9', role:'athlete', days:90, v:1, p:1},
-  {h:'854467653217370a647858a7308a86c76c7f99b3d63dcb43cbe16a7e78b39a4c', role:'athlete', days:90, v:1, p:1},
-  {h:'3b8987e91423a9a67ff038e787d289dba19812a4454baf4c166b1cbd9ea0a0e2', role:'athlete', days:90, v:1, p:1},
-  {h:'47ac5b1deef61611f0e3b2b979e40f1b5045b8ec6dfcfb549ad085bac1d6eced', role:'athlete', days:90, v:1, p:1},
-  {h:'dbf31242b151df37fc224d31714a312243339b4e95f2f585b35c1931354d31c5', role:'athlete', days:90, v:1, p:1},
-  {h:'644e1aef60013adae163c982e702221bfc3180cfb36b0b7b0bc12a6ce0b14018', role:'athlete', days:90, v:1, p:1},
-  {h:'8b04667a41a70e72b25b96b6673db3a1d085e7c2ed42c68d8e041b37860ffbb5', role:'athlete', days:90, v:1, p:1},
-  {h:'69f68ca538b169c0699dce44a3a5e6136cc3fcd40449c3e20df9d4ef605ba700', role:'athlete', days:90, v:1, p:1},
-  {h:'59e42f97269c28d8c2ff60050e8598f92d74e0a5ae8af954cef4c42494a7c5d2', role:'athlete', days:90, v:1, p:1},
-  {h:'9471fc20745cff1072523c6a8c1c441b0a4fcc3cb0f0f11669c59746a0ccb859', role:'athlete', days:90, v:1, p:1},
-  {h:'b97693cbf276582227f619787188e59a18d932c6e6fc7c0e9d4222e529fdc23f', role:'athlete', days:90, v:1, p:1},
-  {h:'39a47922eb452f2adaddb1a9f2d033b4ecf82464a9f2e18ba5af0da38d771110', role:'athlete', days:90, v:1, p:1},
-  {h:'0d0f2ee540ccbd9717346aad94d25e5cf28ab6d78cefe70700d2e32e2df7de68', role:'athlete', days:90, v:1, p:1},
-  {h:'02cdf3d02601b474d49ccdfbc260b115548067327d54e12f6e2d404ac89f4cca', role:'athlete', days:90, v:1, p:1},
-  {h:'ec7539b532d0418ac9109f0be11c9d781ffecd10e4f6ff3f476659eef091fe70', role:'athlete', days:90, v:1, p:1},
-  {h:'a967c9f33cc4441c31d12af073ee1316bcb6617763db3ae78ee86a553e67b895', role:'athlete', days:90, v:1, p:1},
-  {h:'50486ef0ed07d08de8094c5af5573bba80d2124462211814b5d85ca02d046484', role:'athlete', days:90, v:1, p:1},
-  {h:'a11e561d7246017eef58f130efae8195c7c7cdec4035629d8cdbc23a2bd8b6e4', role:'athlete', days:90, v:1, p:1},
-  {h:'99705bfa3229d5e5762e3010476f8a0f0c6c0ac20e3c7ebf995bac3dbec5e5ff', role:'athlete', days:90, v:1, p:1},
-  {h:'c1390922a5a405c00c99816a23e243ebe9bdebfd522f90916094fc8e98bc3aa2', role:'athlete', days:90, v:1, p:1},
-  {h:'ef4539cbfe04c1a4c064c21570f2fbee64c71b9fa06bbdc9bb8f464c1717d270', role:'athlete', days:90, v:1, p:1},
-  {h:'2d01ed4b9cadb861a12e1317562a56a9ee3655a3b77bd93191a25f098d86d234', role:'athlete', days:90, v:1, p:1},
-  {h:'ec6708ddd301fc02088f3f6b39d3e6ab80da1b8a309fa7a9d0080a8d69e43d00', role:'athlete', days:90, v:1, p:1},
-  {h:'0b789cb571936788a4c3a0e87252a4d3acee80787d2b0fa93214ac46eff42f8f', role:'athlete', days:90, v:1, p:1},
-  {h:'f836139a66a06ee186299d0565d35db669746591003f9b564a342c59bc53c42a', role:'athlete', days:90, v:1, p:1},
-  {h:'21976b4132e280c7ddac3c357ea8d5e6ab731155074db327307bd7d9a17c6abe', role:'athlete', days:90, v:1, p:1},
-  {h:'080892ed065d9508727a4f2710e7fea6802070a5fb6b5d8bbcfbf48adf4b1632', role:'athlete', days:90, v:1, p:1},
-  {h:'a3d153ba9cd4e2f97a52d029f0fa3cabdcf11cc132d53f45fad7ce706e03ca7d', role:'athlete', days:90, v:1, p:1},
-  {h:'f6c1eea7285b031f05efbd45d721d773eca3dcd2e1cfd3b7ccc429d292d440a6', role:'athlete', days:90, v:1, p:1},
-  {h:'ad4e08318dd7ba2d85252e7121db4c9dd3660535178149e7bf8c59950b096014', role:'athlete', days:90, v:1, p:1},
-  {h:'ff19e2872c6e94d1b7bbad7073b329fbc7b6635c351af8b0610b01c962030d48', role:'athlete', days:90, v:1, p:1},
-  {h:'e883afe4489d232b5dd686aa5ec9b32ad4d71e94177f66a71d4d133220290a9d', role:'athlete', days:90, v:1, p:1},
-  {h:'e99fbbdc9697a03ee92af120436b31b7f7dbcf72f63ee194ee37e7ae96ce0abc', role:'athlete', days:90, v:1, p:1},
-  {h:'9d0bd0e751c579300b3cd5634e8e47dbd3ec74c8e0be9e76bddb1ef263739c55', role:'athlete', days:90, v:1, p:1},
-  {h:'7767427d333c696e98153772ab8d9bfd460c4e3cba94d74aa7e6fab52ee54a53', role:'athlete', days:90, v:1, p:1},
-  {h:'374802db1af658e0aa8e0f4da9c5bdb83f775d4b1b5f6554684a86e56f07d8c0', role:'athlete', days:90, v:1, p:1},
-  {h:'8b5c9d18b4653a76f6bcdc4dd26269787ebab882a1ca31c570c487c5f64aadbc', role:'athlete', days:90, v:1, p:1},
-  {h:'4a11534746691139084603cc0c327e3398d464bc2487661b7888ad1b6a8f1553', role:'athlete', days:90, v:1, p:1},
-  {h:'930d26b28bced750ab16812d4e3558c4968a724f1c4761f5a2c8a5bb68ae8337', role:'athlete', days:90, v:1, p:1},
-  {h:'47f721f255adcab609d9727f55d9c3708c0842c4bbd3c97f52d03b152a5e48d5', role:'athlete', days:90, v:1, p:1},
-  {h:'2c85633d0ddf63d9fccdadb385fed11ce3e18f616ab5a2368a20e69438d14fb8', role:'athlete', days:90, v:1, p:1},
-  {h:'4777daa4950b34efbcbbd3881fcc0f978b4846aabca2987a4351edbbbf9d1b55', role:'athlete', days:90, v:1, p:1},
-  {h:'06b8bf8ea842ae53298471f581c4dbf4ddf9ceadf97e51ccf02d6a7493c1eb09', role:'athlete', days:90, v:1, p:1},
-  {h:'cf3f22c0d662e0a32c0ad4d937cc843daf09bff56dd85460d9321421dbe0e643', role:'athlete', days:90, v:1, p:1},
-  {h:'40c83fc3b19827d30b9707cf1fc56b79099b97cacd6605752036f53de7b46432', role:'athlete', days:90, v:1, p:1},
-  {h:'4198a64e188e1877dd50b4049274518f2cee7d29a83aa48ac38ac072220db4b8', role:'athlete', days:90, v:1, p:1},
-  {h:'caf69f71a28701bcba1a02346ca53742a15444639e3dd096ac7ea1b20c18d994', role:'athlete', days:90, v:1, p:1},
-  {h:'ee399248e6bd6ef06a1105d97e96e39cecf394a62ec532ab1f51073a59a8feee', role:'athlete', days:90, v:1, p:1},
-  {h:'29e6748b77002082d72866f2037b528fb7f530d3a4e3485824db7c291f451abc', role:'athlete', days:90, v:1, p:1},
-  {h:'99cd48fbebd20cdcbe7a030136acb7c1982009da681005a4f3cef9bc9fd8ed60', role:'coach', days:90, v:1, p:1},
-  {h:'e1bc243290d999cfc415d44540eb5a6c594d15daabd9a12318e52a3e8297b909', role:'coach', days:90, v:1, p:1},
-  {h:'13d66d284585dc7e35a64dcf14c96c982f5cbd50f95e1569a4f1bcdf784f58c7', role:'coach', days:90, v:1, p:1},
-  {h:'77efaeb5d045023056fe4bc7c5e197b53e3b12a603bc2612bbb6e58f1df47162', role:'coach', days:90, v:1, p:1},
-  {h:'4c66def92fae4cb44212cb2c37426af170823779df26a9cb4d308f4d7cd8a932', role:'coach', days:90, v:1, p:1},
-  {h:'f97fc222ebd63b02b8c24aabf56950752262ec8d2dded7a16b7a647b6290a361', role:'coach', days:90, v:1, p:1},
-  {h:'887b64352ea7cf14d2a43863de352a6f75274a0167d2cfbe1eb799433422d039', role:'coach', days:90, v:1, p:1},
-  {h:'2edec4a1942ede942776e95c79b8f77ad99b68ca38dbded24a22f7623e148cb3', role:'coach', days:90, v:1, p:1},
-  {h:'03c16606391540bd57027c223ef57d64f2d8894ae7c001ed499d34c95023fd10', role:'coach', days:90, v:1, p:1},
-  {h:'6f8058a9f8b4606d2429d17a740d8d4798b0631922922c46db30662950a20c46', role:'coach', days:90, v:1, p:1},
-  {h:'ec908a3afea63427f9400c91e69e2ce63d77f609f4b1b6b31156e2c329e8c19c', role:'coach', days:90, v:1, p:1},
-  {h:'6c92d33f3d57da3269e569655756bc4454be2a186075213b1672a786c107c39f', role:'coach', days:90, v:1, p:1},
-  {h:'4f4c178d00123ceb279dd16697ad90efcbf18d8ab193188e481462ffea492da0', role:'coach', days:90, v:1, p:1},
-  {h:'72a64b1d51b050e38a892abe425e1536a5385da25d7aa31197a92d4c1078ca3c', role:'coach', days:90, v:1, p:1},
-  {h:'9c95918fe2b24ccd63cdcb0494b6337f3347f4bd1ecf1908fb1dd86a095ea731', role:'coach', days:90, v:1, p:1},
-  {h:'1e0be4b9e65147c5f64de5cb045cfbb23796a23cbf49458b9d6085de5ddf2146', role:'coach', days:90, v:1, p:1},
-  {h:'7ac188618ee35127e451a5d38f190edac23a5a4b71539559c0e6df085d6aab0c', role:'coach', days:90, v:1, p:1},
-  {h:'b017fcaf8257e8abffbfb74ac8e41b60421fe5c9ee7b72d1ba88ee5449ce2dd4', role:'coach', days:90, v:1, p:1},
-  {h:'60044a67a16e403ef8d748570fd79cd59d2c0461caba1580c329da25590b8d9a', role:'coach', days:90, v:1, p:1},
-  {h:'d111f8f3c5a2d6937a5d30d695acb024c63f5851f13cab780f0a5149bb997124', role:'coach', days:90, v:1, p:1},
-  {h:'f7669e1f15e9f4c36d89c848e9bf445159683e3b106158099a9f70376eaac014', role:'coach', days:90, v:1, p:1},
-  {h:'e341904c8db471c1e50fb44a22c685ee2374fce42be084d9d33db6786d5bb462', role:'coach', days:90, v:1, p:1},
-  {h:'069a13a9ea759bd19b194dd7d07f99d5758483d470a94b287fe67b04095176bb', role:'coach', days:90, v:1, p:1},
-  {h:'f048908025082bc0a3233cdef94a7bcacafe1fa9aa6ff4fb00082f0f55fe1e75', role:'coach', days:90, v:1, p:1},
-  {h:'070f3b0ce9ac92770da2f9f13243fad05720f5b37ab39397efd0e7b8ac3d3251', role:'coach', days:90, v:1, p:1},
-  {h:'f61c64320717544439673d0d0c959934770e5ec2d4a9d4e8a9c5233d12c9fc42', role:'coach', days:90, v:1, p:1},
-  {h:'4255ee3ba5007a6ab727a0bc884bcf4a034bf940341d5c64cf77edf5241d074c', role:'coach', days:90, v:1, p:1},
-  {h:'cc8f10328c2c41c73a3594effb3876acc99d4719d3c28468f7e9d586743ee01b', role:'coach', days:90, v:1, p:1},
-  {h:'8e7831b16467edd3c8b2098d3cc3cdc05a0f82c2f0d0cfe037c85c6a61f5a27e', role:'coach', days:90, v:1, p:1},
-  {h:'6ceee1db2985650dad0b78a56e8df3f0e55da0e5cc2ecb5486ebb8a4bba1f5f9', role:'coach', days:90, v:1, p:1},
-  {h:'cf6629332f902b4cdcaa746c8ab0aed1a4f6b577f473b40647ab97ef04cb8fdd', role:'coach', days:90, v:1, p:1},
-  {h:'da2e6fde50934b7fa522bd11ff6080e080a6a923a878f587477661810d956b51', role:'coach', days:90, v:1, p:1},
-  {h:'8712db172d6768c80416223bfa01370c7241310fecfd9d75b67d45a6713772d5', role:'coach', days:90, v:1, p:1},
-  {h:'ae581f803e7f79012957c38020cfa8c3a15dcf491891d489be4d0977351b27f4', role:'coach', days:90, v:1, p:1},
-  {h:'5760c238caa5027c77abe26bf7496deb5376cc3f6597e820f188a13f1c437b3d', role:'coach', days:90, v:1, p:1},
-  {h:'bde6b23e1844df8feed58b2437e39cf0e424ecf2f9d5e15688fb13db33f68f2d', role:'coach', days:90, v:1, p:1},
-  {h:'c49e6c92106047723d76f163e70a094b95fc976cc82828ce87cf63e44b8cf879', role:'coach', days:90, v:1, p:1},
-  {h:'84426fbaf4f9319568f2b2071cef9f4cd49fd0dbb8ba63cec840450611c207fd', role:'coach', days:90, v:1, p:1},
-  {h:'659d83eed138080abd300b7b79a6691bd5dc94fbbf28580db820a172617062af', role:'coach', days:90, v:1, p:1},
-  {h:'fe20bc84f3e80d4affcebac13cf9deac344286656190219c597f1e6935772c0b', role:'coach', days:90, v:1, p:1},
-  {h:'8620d90bf527f0abe1b92fd0e0e3a4d9da1623079dffa66829b2e082490ac85f', role:'coach', days:90, v:1, p:1},
-  {h:'8dee90428fa4c3b5d21402ac3e5229558f456b0487ff1ff769ce07dee574612e', role:'coach', days:90, v:1, p:1},
-  {h:'0c8197d0b206bd42040fd25c536e6614980cdc33261a6b977ccb7abb3a349c06', role:'coach', days:90, v:1, p:1},
-  {h:'bcbbfe7eb33f6fec28fc6ad5efedf34f7ee37f0a328d03b481d85544b54d7329', role:'coach', days:90, v:1, p:1},
-  {h:'0734c2b2acf94994ce051c30fcb8eea37fbb1f2c166b5e7d42017e6eaccaa0b0', role:'coach', days:90, v:1, p:1},
-  {h:'bb32624ae687f6f0b72a1b464d235b23bcd3cd5fd26133787fdaa77c85158988', role:'coach', days:90, v:1, p:1},
-  {h:'e125d96efd193f5a4b56d3b1ead4a2940512209ad02845d548c0d3b228b59e91', role:'coach', days:90, v:1, p:1},
-  {h:'f89c7a2da40f0534d7ccdedce18f2c9884f9ff851db2d171b5b55ee935572414', role:'coach', days:90, v:1, p:1},
-  {h:'ca9b02ec3d001ed60373ccf776eb881a7644ee44a228d2907b9f984be20c4aa1', role:'coach', days:90, v:1, p:1},
-  {h:'44c7b510294b51f38172042a4ed25ccef15bc82c27db42bd9089a3824d81df4a', role:'coach', days:90, v:1, p:1}
+  {h:'68e6fe86d657339613bde915da9f9278e06e105bb9845e65c3a6dffe08b1ec2e', role:'athlete', days:90, v:1, exp:'2026-12-31'},
+  {h:'5c1139b4c46386e92c0c572f7920130e78b5fb0f07b9c4ba2684b316ee2d2aef', role:'coach', days:90, v:1, exp:'2026-12-31'},
+  {h:'b17cb67fa70e310101c3bb6346ded2aa3c9f893c27c312042390ef17c3844508', role:'admin', days:365, v:1, exp:'2027-09-08'},
+  {h:'d0ee177993eb998fc04a464da7bda1649680fb8e5d186f4e685d05ad1b8125dd', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'c31bb657df8dee4c8f8fcdf1955fd8ed20b50abcaee5a4228bcaa91fc12889e4', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'521f796c10e0e1ded283c49a4f0950d836c94b34edbeb0ab543c1b741c6e66e6', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'06519dacc3cefc135121d886ef1342e991c701398501afcf3a556951540bce95', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'39842fa04588642a6478c6771f82ba644be514bf5275f6338112f186b920f31a', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'6bb32521d22134f62bc4aa2cc06ca998018a7c03040eb97d300939c186461f18', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'e0b3543a42cc9168e07b64b8c24cecf958533910656189989cd0379051e70103', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'812e8625878573227e71bd601b7f7ceea36101d9d027f3ba4ac603c57fce994e', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'51f866c89866aab241aa8336eaeb6444c2328f922c10eae8b73d0191051fd19c', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'4f745f196798ca53b5bfeb0429fd90666a7bc4516a5a22a632fcb6ca074034d0', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'1a666919656e88201432d0f1dacd681fc2d0bb78d1c2e98a816a31e89d6bf4cc', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'7d1b55f18e4d101389f5a05ab8e7b850bf6b265dd1de968bd550c3697a871663', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'6f963f72c77686231c26deda92d7fbcd3829c95169812105dc09f382faed7eea', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'3948fec5e3a38a45fa1cb5666dba4123851dc35a607064839f0e72bc229c90cb', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'bf716094855421e82a13069831d70148bdb3fc578633572829a7d3d2ef9b1015', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'c84f2fee61829d69f109ec66641cac788a9c609639e5c2d04fab144a738c0499', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'018837694e6c47f1225049dc0d6562dff31e2591a6b6ebcd00466eb901cbe296', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'e4f915ccb7a5c78b3fecfda74a4125dd0e80872f8268113f5644bad0baed505c', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'0ff22ba6d63a92f6b315ea0e930f0b17f6403a8b1dc2d58b02f5857444473261', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'27682730aef6329120de55e68593b525de6027e19d3c38101fe07d9082077550', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'4a7b414d6c5635fc20a614993861b6eec50907793ea692542f75f82a9ed4d4ca', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'cca1dc3fbad4c3ebcb86d4729e7bb8add022b461f7dcf4e64c17681f67fc2088', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'fe323bf7c2996bb8eb4f1ea2863e319a2d5907e573e17908f73bb1d7781b1f53', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'115d3607b705cf509256c1814508c1f8b622e8868d3ee36f0b7751d184145c19', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'29cab964d0d2133f4304e61bca248f74ec089911d1499e6342cec9d3d5ce20c7', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'fce4f22ed13484e5d445c3891b64df14f8729ef25b2f62c853b7d2901cb15360', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'208e736cd3b7663a20e0111d2ab9dc292260429cd48a4155b60c3e70a0c09f46', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'95b8236d95ead51a2d8420c95670e165b60ea975d8891e55b983e9b7e4d52e59', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'b9127ac8fc6a028cb22cb5645b0942d4d3fa263c4d888b33486b60d0290699ae', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'ebf1e8550835277b0cfee5cdcd5c0ea08498a8024e712387aa0318c09186f30a', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'6553cf1d46d50be6458956ab6173bfca3d2367d47c19a7940392a9dc342a76ea', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'24364667b51ccf922bbfd475627e536836920836ace814393bdc6dfee8c04b9f', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'037b4310ba301ec2edcdf4bc95a380b1516e3327bd2c9084040e81599b0bd595', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'700cffd860115249b0742a9b470e8a5724d27219018c0550e19d782fa6aedb8b', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'996503ed3c9d5d1132cf4f4c319359a735f4609898aa88f4e7deb143d2f8ec09', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'b08412d3a6e14692eee49b6fb6e16924fd5989368fd0f812c62fe3e9859d4682', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'a9c2c9074e0b1414fb10ed09f8a39877265e4be56eb596b00b4bae19eee9eb56', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'0c8d0933ae90bf22ff09f4128d61854ccae60d30ee34c58bc327e4084ae1eb72', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'279936bf42f98e45ab1be1a0c9dad8180df876e248fd0817440502c0a9d5ab7f', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'c1656effa1f99c343f20fdab2bcbcc9a9f2254b7e02be84bc4bec4b69b2b179a', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'3a7bd55ec97752d1e415bf81f7a2437713774bdab61bd1ec620eef9da7414298', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'073fca9d8ddd0879110845a120b98ab3397f01d10609f9ce0c88ebf98c5dcabc', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'a399720f6498f702a06e322cf7855730d098fb9b9b2a745ac32a656373dff465', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'70b963b72598eeffd43821b2affa81e5c7eb4c58fce08c9a5bdff9e718e546f2', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'129432352fb96188b5a90394e047b374718ea6816b1b62912b49613e899bba07', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'dae5654da89a2abaaf21f42e14219182ff61abaa4abe1964427eae15e457a424', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'f306460440f675e8692c9d262637af284ae4c09e786cf62b32969d87ddab126b', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'60b526d28f25584eee2b9f30a64d8eb07f6985b2541e1aa64f74cf80eaeeed3f', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'5623a31fa802cf0b60694ff5293159835b491033c6ce1b6a39e5ca9bd1e2c648', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'f715e5c0a45beeb5bc2319557a9d35fd4abcaca3b8ff03989bf044ef1f446a19', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'0f44a6edfb40fa304f9f615f58ae1f87430fcef59dfe8ae0cf69ae1ce685b2b1', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'1d31307274519a564af4f46c80d6816fea0391867d6fb432c5232b2791508566', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'532082d7d20ee2f71c0b659011f003eadd65c4d4865c40854f16cbffbd084e6b', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'c59dabc98eb716b1862214f76ba9b8695de92d64c2c0e7df941ac9958a0cb8aa', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'683290b8d3bfba8f365a04fcfd1de3b206fd159c0aa118e3b1d80422e03b0766', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'67b0112e3c4f613d5372d2f09e376c4fc1da2271c75018fc73c038e9987d57e6', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'b5c23c9920310e16a5f2ac1f8ae9905aa85fcf0ade7529147f81c305c0054622', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'c042e170de8c038786366098225a82436abf01bac517d8330107ec59bd7fe4e7', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'21299d10805c482ff57f5829de89695cf435732b447b3a0a29cb55e931f7c422', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'c1d1e0243a773e4f5c81eae40c2bd3f508e27816ae9e3f0d1805bf22f597ddb1', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'b48a0cbca827add5eaaa613fdefc2f37ee73baf936e4a853b2eb7cd141cf9c45', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'d56fece18d5edd81fd7084428ef4f8e0d538273c6d8f905966205aaeefb52caf', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'0da37d9a93f7109ec96a4fc8b79e8a88afcc22a5ad293abc5b6f7312272bc2f8', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
+  {h:'000e2960fcc4734e84a6683e4f611dc545a4352298f37ac6eb4bc3e857838a65', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'5966c6cfab78c8bb710a98124b139161f5b8e4bb617cc3a7791211f2ff87498d', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'0276d04f9bc8269160b7c6341566aae163cae40a1b5d832b6e3604fe323aea3e', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'8355302b3a9d9cb4d8f714446e73467a6d11d0825e17e1092492a370730f4ff2', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'e996db151abf00317033f292a23e58fc1dd37a43f031932b9f38b5716b43311b', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'dfb05f3accb708e8f5d91c64e671bca05f702377029402e3ebfde55a6ce0413a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'f435024ac0edf8c82dcf2adc133405ffb31fa1b8e40c11f42033596ef6c4e345', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'c015605faeb4e9e67604a480f2da848afc43f2c05eb39a599f43edd132bdab14', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'212ddbed634f44c56a073a699d7d3c618179b8cc69dee1287d8ff9cbf8b72f99', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'14b738343880b486687fe4540aabd189ebeb63c3d295b810ef8d3f868122c122', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'4b082858a6577d494f6fee955762c7ca3273c08cf1dbc60788cd8d66f2ddcdad', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'a483c08a7f6123d2c44154e1f81721bb02e8ce54231ed2f9826a7b0e06d1edc7', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'e1d09d5a89aca3aaa9ea08ab9abeeccd4aa87e08461e68f281b93ba7806db8c2', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'c63b82e2e45c32243004527213cd2a30d1b71d12da4a27f643940f819063f92a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'b3cd1553b71822dcce73be8eb77ddee5796eb555ff30f175d253b93a0c0111cb', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'aacd11031b463b4f3ef5836a8770a2c1c20e1d2bc4a0d4d4ecc7876d12c0b329', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'b23e7f6736ecdbd7d156cfb96e20c0cfa7ef9adc6c501d3a78466c81983ef0bb', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'f7284ef3e290138ec496d1789063eeca3c69942e5a247a7233be7741e06ac498', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'d6ca756eff4cceddaf51f4aeb132820aa41121afbbf5d56b3fe9b7fdf68dbcd6', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'0683282dcb4a125a1d0f5879db8b22ef212ae82a362aebc94debaa5a56aad006', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'38318a6da5ae032a50e7efe5ff9f42c8009f931d1b2ba7761d794e4ae3c3c501', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'c721552995a12bc5617774bbf0935cf8dca8dc21924ccf007b16f5dd9f77d9de', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'3a718af42e20eb7e12dba392db773178d9dabc7e5a837c90bf76e78dcb7275bf', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'9bb93453cbeb6ec9a44e925b9d992d09daa0732f7d46e2bf35facbb250ef4ef9', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'62dbc3eb66ffe63474ad07280c9cc92df52ca716ab5d91d8cf483712f30ca75b', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'9700a36faff519494a2d0cccc7e0b758138a0d1d63a3ad835c666e75750416ff', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'1461293decb23320ba8b2e931ca578232b7f421b089ea8fa004d274e142e0d09', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'6a6c57e45865436e88fc7343cb4646412b7d6e05f914b42df7956177ca853539', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'b6823142083a3f7a3b1c47d50381a3053a7570b799ee13c3fffc96c5b06449bc', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'4b4880bb4b5dd06b1ea9f8f3958d9fd5452c070beaf69d2ce64b0c2601a9e44d', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'7185fcc4766bad6bd08112fc7947094cabda572d0021e50d53e323c777abca94', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'55775a8a22bd168d0cf32e55cb4a0ad7f12fc196975e9de8e7987ef1771e6592', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'b6b6671900a561ee98a0466095b1f2c8cc7cd30c71dc314a95d5f03237fbc06a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'b16670ddf3500d52af54731f93f3b9f4db64e51b1199079a2f4db93b2bdf74d9', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'e2f4e18503ba705f6e57ea81f1297bb496eea6dca7cb3ada665f9bb5109e9f82', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'5856620c11c0dc476da86aca3a017e47c2ca42e9728deaf9c81c8e46fa4b8d67', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'4f62e97adc103d0fe52418a436562fff8cb11312f8ce90e2319858b4c310808a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'8ddf04029abe39377ecbca346a2722d7579ce7167f24d2f7173836d7d515ae74', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'cd915d5cbacb160cb88b6e09057b6759234d4310413587080a96efbb859ad46e', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'937e34f2dfef8285a3fc3b892e69e092212a422b454277e135a191a7acf1157e', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'afbaea35b215ecc163a8ccfd3e4ab9f12bdfb3d451189ecb779c62a3652893d5', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'444fdff2382fd1c39aedc3c3b578f13cd29cfd97575159a4e1ee27f408c641d7', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'5df24cf71a77aa9791d53ec5a1fa2abc856fbfda5240fa785e0080b1e36eeafa', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'83d1ea67f95e2c23ba1b52cc533e095d6488b79bf46e0703b5bf6ef8b9471e03', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'56348ebd6fa9d133d629c1a6742475a3893d34a01b4163d7d5eff8a1ca4a3ed2', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'bf0d0ca95321ec76fe674a6bc8fd8e7a5d95c4150bc2fb3e6a153bb51d836c0e', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'e4dd10d27939163794276bb8c2fedfea75e5943730a65c71ed7b6a2db2257a23', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'08f728f0074ed3fd499794ffe34b1c6e6d02c1f45e2a598b7166a90686f727d9', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'c39fa5770d7b218e629806589ebee56f6790c6d756785b451e43623d58b29ca9', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'b26f3ac28d6a398811065c5290424b58d5e03f97b9ae4e39e40c83dc42e039c7', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'ef152d6f45e8422e6dc6897ee7db25bdd4314a9fdeca3c041341e88401976472', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'acc9c6bb5e7ea0acc9a762e9fb48a14eafb19092c6da700709fb0d78f42be85f', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'09ec076c34008e797c4eba7e202ee72c6a1686cc2b7bcb6ca00d93cb97273a76', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'4f1545b54c4ccaa806f9ac759a444181d30fefc476dd040cf9c22df2978595e3', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'d5392a51ca7f6f09918d91ce98a160f1864a2a0964b288a7dab04bb519925153', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'36b99076a161200164cba8f67e00f43dc5bae8968c024f215f2be55177972980', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'19233fd074bdef552f0105cdae659c8da23942236f8603de2dfe85afa8eac5d7', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'4c40ac82374a19a2dfd20a59dd590003a4c343194b51b48a4e63c5eacde0f586', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'164f6936ec2e1ab47c61701d87b58fde3bf24eccb7f7f543573bd24f8a52f03e', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'fc7d6b72a72d8d187e21de59d43c3202089a26298d526997e4a56e62289cfc07', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'cb2a11bbd19ebab6958123c4d37f9b06f99ce174a8d4dc3a4209e7ddbb36ca95', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'e483a3f2d8e7bfbd6f8852674e3f718d85008fc73f308ca203fbfb1f478f7543', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'1b17034940fb2b296f1c04255256fbdb4050cdf032de861a56b53b8883b71b94', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
+  {h:'ca73cf4fe3e2691e6ab87920ceaba42889b1a507ea273e057289db4f1f577c11', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'195b364493d81dccb64667725fb3f1b97f8f9cea5db69a8b95a998257dfb7766', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'cc08c8b227d4086fd664f046ad507e0a3f0408bfba6bdbc16083a2cede6c2f4b', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'1dd8d7618b665ed911115e143eda2e361b1a01a2c5c551c7d7f9229d3f65b938', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'f2cbd9e7c4d73143716282852c5c2fd346981e834bacae6cb51dac44965fd5e4', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'4768dbe47bf4ee8648864a7ca010d3022bc65e431b0bec002b2eda8ee11c37cb', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'135136123473bf9179d9ad0d66f18f832814e8e69065f7027df599ee7f9bd1ba', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'1c47e8e860b32a4c5081d89c2f78823d58fc943b6e99877dd29e6715fb33dc5f', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'47c064656afee8bc4ae88f741cedde658a7d40ed8a446525584a6a7fe842ff90', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'cd455472941dd15a237dfccb1d9a9b53bb8db79368acb7f4bb7d3c734d6643d6', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'7d379b2639da6ed933ae03e830bd0bac2474be2bca467b3b4cb7bd24d651e797', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'698913e5a828308fad5921f23ea6f5b10b8629263163a7bd4d4b90580c244bc0', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'7ed8328531265c689c9099ad0d3960fd2cb171642fb5bf22b3dab7c32fb7b34c', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'618a915e176864df7adc121951d1776fd4ef485fd0ac970afa23a7fb3ccbaee8', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'aa1668f35ff41d3abb65a4b1e059b9f0cdc59c5f95080805ec67c5814b16f912', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'6ceb9056ec116e1c2974de4485e3156995bc16e0d2d29d6bdd695ec20dc065a5', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'c111aad1638430ebf595fd0b7283cd756b9ff136f31c48a559478164c794e09b', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'c6eb0937ec18d6fafc1be13185f09f3b934c72b1f00ed54e4f4b67bb2b50c860', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'c9bcfee95a76fcc653819e6a70c4a23dd11c956d8e7143ef64cb857aa3231b25', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'6636a35aac7d2c93ae80a47bdcfd2cea91da50b6819d2618f0df252c028a890f', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'92bd70c5d38867774e08bff2ab3bd4c2ec9e9800255531eebdad8dd3a064f379', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'7b307a85f08af23c7b83fb156e015a976e4e1c92b7b0eec4a7fe0013fa39b527', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'9a0df417b9f00838012d2a6a63119bd43659a8b82e1998e30c3e254db7317c1f', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'bd9bcd8f524b220b4a74f3a21f326196d649ffa5f7ef45af72352a8a300bf667', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'a129c0c7b2a9e63f9b1ea312c3147e0ec53496337a6a67344a9b401b9dd8215a', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'031eff276a7aa98142cd20a14979be12af728d9932a255f40e9632ae59616592', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'d1dcc1959a7d4f7bf31889e54478afc295ae2bbf826c651d608fc2523e7806bc', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'853770d4290931fdee544d26bcfc31758e48b31aa6bc436bc33080433822b4cf', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'de52b17ffd3bb0a737373a92691d6990b8bd2f9a65bc33dbadf76550f29254dc', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'002725e0e769e443fa9d9704ae449a4d0c06ac7a4a10ecb51744b78408189756', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'d6b9576219925eefdfd33ed9e920f2ac48261352374f44af49b99ea2ad1d846c', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'422e9cd3cc000536874fb311511c94a04b32453b338d0c621d0f7fc8734ff53b', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'3747b6b0e1c29774069ef718d636c7cc7ccc05d6dd1603ac09a9504f4054ebb8', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'0f36c641b20dcb70f458a86fd6bacf6f40a352a5ca4527366a0d761fc55d7070', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'7149d8edf90d3ead11d08e59b46e44df0f90dcc90ea63fcb56254dc8e3d124ac', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'9bd889b5a2999f466c185e889be540c9ffcf58e79bca57d441853ffc0dcc0623', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'08db9a7b39014fbbb93a98e8efbb554966f280a7e76afad695148263b1d8dd45', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'b3660e8c6db980a98f0878e62e2f22cc14764021cce12fd1d1791f4af873f30c', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'68f52ccbd2c50d431b3c20e592122979648da6f358c9254d40f864ae7ee8a32e', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'c499e7bccda3b0404d1f04b5b57acd10534c354148184a7d6986c5e730f87965', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'30543b6e33962d7d670f0a06aa0c3d8eda97b54250acd108fdbb8bf94c143e2e', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'713794918ca7db15aa86d47d26102bd4d2d70589930da3b1233d822ddddb6e95', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'adc477d78e48b4ccb2a04a6339a14fe384a1922d70446d1144545a5581fd5755', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'d2c48f05f782b79c768a96c79a580dec89f9c8c487e0c56bc3b11c38ab3d2317', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'94d60f03cf479170509154f979242be810653a746fa621d97fb3dbe51ec562c5', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'fc7178ee17dbe5174aa3675ecf41601bb0af373bf0dd2baa30b570b23de0d181', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'a8c94a1fb833193b418cca1c6226f069c4c0efc014a8c16701c8c61e65cc7b29', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'a32190023fe02589e20d39abf2fb463e0c51ea5883508f4fc1ed570d49dee5a6', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'01dec5393648ef6efc7b579c1ef4228ab0d9c2c27950ba9cdf2f78e39a09108c', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'f5b3b21e00bfb682b555835d03be735f04acc95bc58e4aac21d59ad6c37c65c9', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'5503e51566a1d38865154d2afb9a9cc611080e924d380aae69b7afbcdaa90550', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'3e67afea4191081c2c0104df1edfa95d9a1484163d25526fbe163652649e6c2c', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'5378d9b3c7b8ed699b6a7a013b7a7ee501fa87037f25b14dc5d45b43b3e7fd63', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'14f7eb738072a0f5f4513525c90f97c38afb6bdfb57999bf4154e486cea58047', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'72ab65d15aaa3ab10ba575702a7db74ede4b2951fe87cc8a2a144d1a9336848b', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'3dff1ea5d1261e27e3890bcd90d3a7210621ea2182b3f2ac0c8f552b6dbb0ab9', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'7d3519d6a51d97e924aa24233d440ffbbf457bb9bb87244fe316b63a7cb11865', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'beb38515171034294afa2a3f69822cdb6dd4b6fe488714507d1792542ce7a707', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'6a728cda7fe3437c4d731f1d9820c31e3cfc075bc647f117fc3da6e32a52b0c1', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'2013ed33ba783921827f59dcd601947d3a1f20b6f7dfa56130fe82e291be1925', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'7f57b21dcb94e0d1b6eb539d32d9db42ee0cbb102322c32f176a0bd7c4d580c3', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'0f8be5b9819e0a27dcb02d9c5f4db969c885d2388710338c0f13a93b598826db', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
+  {h:'1cea012a286908d8b79b204ec7243475f4117f410a9f0ce34a13c5ae4ff3601b', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'c3b81e63a96bd091982df91bf5e1178f86ce8e6cc3419cd606fa903a97c60e98', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'e533aadabab5b9b4000cb592e4fbe2e36b24ae9c2de741d404436f3dba940564', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'6d7d6e66442ebd38f75eca7fa490c4a6f623ccadbf56e87b3d10ecb6fa698225', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'fbeace8d40dd5c54215ef38b7bbd16bde8de0d016310e9084391607417a4714d', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'6a37f0779cc12ba0bf74c04dfd791a68e349a8571cb5c742f71c4764618f9e5f', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'a3b78a4a6654f7b150bd09c03b5bcfd9e6a56196fe2641e3d171c41fdf5b6976', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'305e9d4e80b26c2e2b94875f5b7077687a714a34222a177024b58fa5c912750b', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'2ae9a7fb5e4b679ec68ab3a9c30150805b896074a40d2ef5beca83c525e1ca0f', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'ebf9b977fa60583efa074bdf476ab41b71923930361d9427a8b5e2945da6002d', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'42dc9807d745908cd03623f819e548745e29460f0e877fa1b858d80c0d7b0a44', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'c64edd75fc90f717226c86f2e6896c9925b612a3761d8e00ab7dd97fe47ea17f', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'d1bd4b4d60f326aae833dee58698a33b1f10d8d8b2e22157b181bbb9cf97a631', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'f5f633901345e3ea67719e1c57734668a839a5cea6b88b829754e8432868d421', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'1dc007340074ca7934c04ecdde72ea4849a9d35a1b679c4f8255dcaab6ca1bd5', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'0ccdc9bc5735f5860ee14029ffe60b830d52359802da93800369c47da15aabd4', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'db364f3449f5ba10087e9f4fb416769d0e46ebd10bf9d4c72f699040e58b0241', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'38d89b2b012f21aef93b5f958de8c34eeb623a4b31ba3575657f166102ad9463', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'57f3c89e4cca15e78f54f4e9082009f9e8599034d8c39f7f5bb66186cf671833', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'2011183fa4f3a9aaf1c957fdfc5af6f41ad420ebe2f0e3719c536f0e13a410db', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'1a6ec76cb65dd6b979b78fe6a62aed55b5b65aee59256e7f49154d734e50ec8e', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'6da0011a87d6ad908a027f53981bfbcc1421d6ef1ab34dd977645a4bea0f4fa7', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'becab6866f18f0f95e9346e67561c50a243c5ea6351b1bcc615edabb21ccd49c', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'82cb93504eaa92d781a70f2ac615881df856f66b3cfa878f7acd68b56196487b', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'34449f76ef87eb38409c16d4ff9eb294504b99e34e260ea30dad3225c1228e19', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'827404d515fe79541d9022437937fe0064b7817fbbfa9a6cdab5278e00471cb8', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'ef769024ef50cc375d04642839b97565697824b3e828d16426d534340f7cd453', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'2076370236156371375fe9dcf53fe6af534a1c9d7a2fd2cc1355991afe906317', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'43b0f877f4e4d32d1c2a095fb0d82743d6807f6f2e94b9dccd62c10672c4f8d2', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'a1aa4674c1e0964dfc0e18ced7e0f2f2c7c68ae64a5fa245c4e72bc3024e6e0f', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'7fa5634aeaca43224a78fc0a3b0c74880ccb09ae1f6c9188b976a31529e3932a', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'3619188893e87f989215c3f4337c99b0d87fede013b8ba0361df06f68d584e37', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'4e350804471e6a6e8a8b083ac03376d71131a43a590b335a37c3c562871644eb', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'fd84b99ad60d439f5f765520399184cbb165f12373a8784b3aca3e8d3df05dd6', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'8643222583c7c0cb2d5bccf45b57161d8545dd1e36a2781090ccebab445e682f', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'f537d9accd60a0d3ae95497e7da765ea867b8121ae8137507854d93028a69bf5', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'c8f2ae9fd7ba367ed548e4cf4482c0ad0a6991ec7b772391724b53c4d154ebe4', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'50a4b7a48a103e5b79b517b785060d84e10d38cc3068a168cd7a98ba6905a8c3', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'d9bf7b66f2023833d04997840fbd3720c517f2a262f95f419d4649967561f592', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'248f89ddeae9960619d51ffad6aeae8252262630496266ea61bb6fb9c99eb4dc', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'42c9c1c337dd8601206d49baa7a8436c282aede9fdd198309a69cd91785622a6', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'ce1c9bba64cc51b4f1a28458778450c7e2517b238460d20fbda77d03edcb9936', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'1a043d7acf6a06164523c963d737254273d563527fdaef4ea832118b07ea3500', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'c0333006b1fd79b263d89faa686dcf2a70834d4d5f7fbc8252e940662d03327f', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'bff38efa65d192cb764f5e74142f4c872fddfe0ff824c529c431465b7a02672d', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'67eaa2a79a754e6f162f9868fa11a71eb4793555d656b561e2359a5fad1a5a75', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'2aa975261beb64fe556475910e952e4c22539119e267e7bc3a0363268fdf7a5f', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'be7e367de5fafb6caabc5cb599cbcbd87063bd5edad9f2b56d5afddf525b714a', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'a70699104d2868c6294ed8315854f9c1594b7391f286b5eb7594f450d1f0bbad', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'045a49b42e7ca78ce354c06fee8b6fcd8dd3dc035abb47a37374fe0bb9cb3d1c', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'a7e09708695d7acdd5452dbf5ae44495cf9d37f61c632f5fc09a6dab0fe5c317', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'f244d0b8e6624b1647bdc8a34b6ba8ad2ec473495d36bceea36a512a7df99051', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'b10e5218497380cddd3cefb0f9880da7f850e29c295b32477510b363623c02f5', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'28cab40cc23789b84a47cd3a0511c265357080b0b5760ff9906c08a19e90efae', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'386237d8ce96e702e376efc29ba7992dea07cacf568da1d85cbad9326022f4de', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'75071896f8bdcf9d231ca0994f71e9cf5a17963cd11dd478ffca645632bcb1df', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'561dd956e368599402350fbffd3349cd55720fc2aaab99c4223c465c0c8eae7b', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'5d5c2944fcc664a381f6f6dd94072016e96b45c0003a15d79b86dfcc2350be48', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'945a3a81ef0ead2d5e2a01df1dea30a20f78b9761caf7246d2c140eeafec9e01', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'11c9a03658549ec6f72a4c03093ac73efe5de955977a9e58c46b7fdc3fe75494', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'7aa20e9049410e2f4228eb5e1e054d75ab0e76700b968366ba41b76f5027894d', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
+  {h:'fbafc4de4c0fb6d4c596c68a20697cbc4ba870fc3d6629a1516cc8721e9f7892', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'}
 ];
 // ---- THE POOL ----
 // 200 athlete and 50 coach codes, generated at build time and stored here encrypted under a key
@@ -9790,7 +9797,7 @@ var ACCESS_CODES=[
 // This is the design chosen over an algorithmic generator, whose secret would have sat in every
 // copy of the file and turned any reader into a key factory. Adding or replacing codes is a
 // build.
-var ACCESS_POOL_ENC='d2f433980eb06ec6f95c95b45d414dbd4992e1a67c66e7bb00948396379ea200e3d31eb0ac17c9c3941ff87617b73382a39285f1f7b9ea221968b06d7144580e9e2e5c950d7d452e228675b4b288efffc85e99c4f4bf4e537d78b4800033d503fabff9001c5819de1e8ee05f1a79ab90775a42ce86a8a35fce9788270cbd8d6958ac10f205e7f61a0406a1bb3fc9648435dd0f51b87f41914fa41ebedec3d35ea1a8026b30b64937cc0a2c69fdfb230d71032b0c405474560e2d2de23439e209fc43348ed7511783a3d11af5044dbdc8888bccf1b239f0461f3292a5cd7f352ada7cfa6a6661524da157668c2867e4c614c4e58bbaab0369c6e47bd8347fb1616f49fb7118d3f664fe648bf5c483860d9d377762c68f9ccd61e081cdcbc5aea57ed722335a358c7576e75367da21fcc28a44b16154940a9f42c687afdb5a2d768ecdff2e51c63a7d1f69edd942cbbdb5ef5382039c90c4c4d1ab33398ae69b5ba3aed1d9fcfe51d843c3524ebe3c19a330514f01a60bc4716b26d098739cad5824c59644e96eda2e295ad764e97fc511efe3813545053afba5acfefeba583033d4fdf6ddce445be493e13b2b08e178e5892352aa7ceef2b8a9785fcab010a7720c4a57d3349738b5478ef16deec3b61079b1d29355e6f917e4e07ec6b8246c98e76a934e7e4aa96906dc194305ec7393cf24d9d24c5bfd5d0593d54d003a254eb7f00c1926047ad2764e6a54359ffd2ffff24ac1943856580fc67edce8f423c546db0701a5851ee93870b7076fb92f1cb6438989e96300c04c8410a5026e688cdb8d0afb067d1e6b230a33a5e05c463b54867818ad8d78dfe453cbe29842da242635e9afbedb9c3230ef20b538a977f82e8eaa7d25a926c925bbabc6a5ecadb22936f5a964e6fce2a8c06fd7b510380ecf93919141a47855cea47a7876c944470f13ec66c354ba662566967cc76a30c2295f0311569ca156d05c7e5bfa6b99dfabd0687779fbb7c3f5557b44def491f260abfee41a9f47ca96e19037cefe1a929be401dab6287913d42e638e85f49fbbfc27711b040636f86829e1a03af731505d02daf9693a55e6d5469e7de80e90027015b4244f3c1bf9d1661aea6df85431910d5cbac65a8731f157b13a9ddb6600bbc38b0b2652357c64c1ba59c50061dd6e22a912dfb8038ef36545c80005db62bce31cca34f684cc95f64b801df430940e743b25226a8be438a9fa7d6518dbfe9b523774e4678491ae6d99efcd6b95b6252fda0779ca9b53a67f57efa6557999e66d0c76f50b160f3dc3f13f921e4ab19e7d2bce4fb87a2a9f9c1b51b3142d156ed67f6f4fb686b827371fbbb6ca10ef1c8563b0f915d7c24c5e1cd7ee38a91c36caf3d08f109ce80ff5f502440762502bde798d27c6bd53622c07889ade037f0080a699ca9f954aba6f16991103bf1f6de31f2e7cf8d0736096f79c0c55f9539ab3a6d9c99e68112553441659ba0b34cf8c7a3129c48819fc4f972ae9f0c9baace2fa7eb894ef535907e92529d96d4e921ca0de7ef1eab874f13df4395d01709472f69c281a4011aa7b042f9a3e2e8ad335f662b1e90a41913330d62f32b578e2671fa01febe67b7d75f19af30177d614e7907af1b872433c4082d010f6b9b41382d9dca796f5d5ae9b142d2955859643c7c00f121992564f4bcde597b113763db376ae05d701fc1e32203b7823dd0d4812dda0befdd4b8763c40defbd03a5a9503b4f8a092674c46d39bcff237d67d8dc3b4b374b0fcfefb536f1ba1b2ee09f0563d49db0f04959cfe191a67e5f5cb65fb53fae74676cd7b0f13868a0ccbf1a5d861fe95be6e2ef08e10d3f037b9d0a640f1111fba0c46cb187a33d78b4b3d93131966afba368c6d7ca8c0727eeb33e2a4caa223733b8554d20e0d735e3f8139829ba0b0581a72eea4661c050606a5d10fc96cb98888d6e2a04893660de22c5c8bee97f851f12bfa3b78571bc00b4f8b7fe3e8657b27729fe349c075078d06bd78f562c458ea229f7cc374939f263cfbd6ad697263a26cdc4be459b91d84252aa212d54d44c2fac4b481c91ec76fef50b68f362325805e9e99e62690a3f12c25bb7bba1df5324fb90958a02777bbde763ef5e45a66dcd7aaa98d459052ff59126d880acffa9d742a749dcb3398c631e39bcc7caeef375daeed048adeed6b1a92884144f32249cf45961c0e1863443c4ce82a370080073e4feabccc0d917d361a62d60965b7b16067e784e134ef17ecfd5f54e3edbbe11701c865eebe28eb79efbf680e983278ac6af65543d339fe1925a304a7896e884365bfa57673742eb0e3eb3f44c6b347d04c5d30cffeee64860a4e513da750b7362824eedb205c8dcf9e297cee8ea86988e117790bac5122bbb307fbfce1fc20ec0734ab190dc60ae26e9a1633116e63774863fcc0a665498ac3b7fd9cb9e1b642007cda4b3c949531b6e8faf717c4f29277a02907e06d38ae132b6fea922c30a3b0de3bd757be757e2b5673eb4b33b84cdcc63615977bf1fe6b1a080d1bad3b756fea7e2f43fb6dc42a019cfeb42cfda53610f2a4e3fa689bd64861e972d4c7704120565f85e7eac6b79fa11fdea37b712fc37cc0ad871b70f6f76782babe5d75630b5416b28c8546c01ed1dd8da2fbcde08365ffd4969e238b05229dfa216d0312b824fd123c7aab7fc4507fe865192b41f44ffb45bf2fc1cbf29e1b948e12d375e3d3c64623c913b9c69bf175abb8a2c855887876cbbf2b82d8782cfbf4fe7a7a84ece14e8e06d417163517009dc509d7f89f83cefefb659e31ceb0814b6247608aa81a337971d8e4b9cd1729b9b73d51fd8be2ca0fe60994dc5975b219bd930e70b82d274596b67f5a403acebf4d3b41c831faf967243239e24cda4e7a7bec9e147881a5d6a7d2d08d5dce8a98dacf3c020cabb53178a597760b7ee0ac63dc904268872743af360ecc99ba0e109e843eb709a28ce638c895844a62a4982e05c33d2b0764e57b72cd82fb3dc68e9e065f94abee3b50f3878adeced5faacd10554a80b45669ec6d50e72e54c7aa0ef1e89e4ecd07815366e2e15fb69fb9664428871439cd41eee3b832020263520c31059e2b55112e4d0cc2d5af9ead1f0c78399ac0e0e418bce442fa3c345509d8242c09fb1f2d9b37a7d1495e2450ddf15c22396279f36b9da11d096f3fd8ea5bf8f97d6f01ffdfbb7826a88946a1ebcf4e415769bf5996af60ef1078ed1f1deceefb92d2db0dcc2a3ba525b83e265b216f4c4626a5da6eaf1f687508c4960c4f4376c52bc680aa5eacf9e6b1a9a0696cdb16a4eb4606d3f768f496ed466a99383ef4995ca4f2693f41bc43f73f5794f27a4b87278f1a3ab92714f3bfe66978a76faaa56e44b92aba952551c691ee096b6fc7ee54b0f400dd334e803d53eb91ddb63192682af6af12b548bebc6bb00c59b76fff1a2db43b261cfb5500c55658fe27009f40be104f13b5f30b3d8ef7dd64083990ca73285f770158e7e095c845aa05c41d8aa060a798512ced6a6d50eb3f10288448761ada5660a4cfb7902f75aae623600314b3ae11d3520fd0c4d0610415cb17505d8041e2c50e2d2b9ad1f92df81f79f4aa0758a713e3352169d733e7254a19c22374eb2251f9bce309f0bbdfc5c7ea818c692d756b77ab8ed15d924fc1ef3ce956f5ed046ec807d0808034278e40920904c4c39112db8c41f4d00fa9fb3a729b1acd708a5e89e059affece33dbd5baa7c7a61a9f4ff700805a0c2844414dc07ffe5099c249ae599fe916624cb07f419815c4fb762eeab9e20137313ba1e514cb39610e6e5bc979c4ed0dcb16cf930d5bef6da5821fc0611bc0712c6674676f1d35f0361d97607613c0b2ad02dc23df2f9148d96f2b77015df372309f5ffcd17307408c49b24061c808506a59f67092fff833cb43457253bc8af4d880907639ad2a72e79a75256e08cdc9fc4969b6403637c76aab026a4898c25ddb4eed62d851caf37dd6d022def145eb2857a4dc1963c8ff3fd52163d3ab4f43f13e6f6204e2658dd50a230711f6a25d7ecf92e04ee1cd003171f328ba97dcd3a0a6128b9cf89bdd487f377ea67e7b04f10e5149dd9b01a74717f5ce57b72891e7ae324a2f1afdb4bb3763ceccad8c97700d29df1999e2bd1231a30b22e16df781d7a2ddfe2066a12d59c53b93f2a78bb4f69f70c3f15ddf590a68be77ca5851d34748a569725c3d0a1ffa8f717c3b1a323d3ee8271f96efe766c0204b82b67b3c3d66cdcdc1c4cea23bcf502b9776f30908337b51a0fd187c66ab025d117e1bc785a299a7db45e5329f15492b06dc9c12f4503f471e87ffebf2222e043ede81d22f8eba518b3f81b150121ec4d18e34b935c4bd548b3ea8a8e8a1e10939e090c24ab49b40a48f45017d9ff483e5c66714d65531791c887da8cafa01733f920ef29e8fc97b9918f5d3d3be80b11b200732295fc6e91276d14ce89c01eff1a7629aa4d4454e3f393227f21ef4edebcce644397faf32fa187f046b1154d64c6646c396592dce5203fb10d1cce85d6a9e5d3da5fcd731dbd6c56cfce67a08f4e8202245c80d4737d7a428ca046511ac3f5d0a49438851e8d7316ca282f72538d6e8617b6bc9a7d82b4c63d40ebde7af3a208a40c8ff27b881da39433966a6802b347143cddfc5decd5c985e33e36399ac28f8bf9e27d147ddfeb9b3b6ed80df456a1baddd4d3cc4260296aa9e90eec5279f9b51b9b136ca632c24bc151c1d116b62db28e58fb0e86767b262cb3e8b753c9dfb19c44558fae438fe4fc1536ec9bc8c3eb82a33856b63bd4f7a580242d4af8e422d7a67885fb7a42d43b5a266c3d2463ba389374378e87dccca78f80669ca0be39b41ce8338c760e3a93b149fb8b7a596b4a23e5e90d68ce4863097760d54292ffa5509d881cca0f1bba892704199c5075d334fb391ceaad87810bbee4b3fe60e75eb73d04f6154622aed1b192c65ed8ddbe1fb83e7ff0c6145504d97afb53b82e046c264f7634da9c5660213bb938510167e95618c7e5a4096fcc45419af7e3fda2174beb3a2d28f292ae783d1e988027d8df4459874cc11e1e8fe4f7784b9387462e6fe8acd5253792e86073d8fcc7ee6902802a82932fc1a4d6f9b879e324085927249268449e41bf9d0c0bb3c72d0524875458f5a206f2b854007c12294da2e38371efcff60ef5f944d5d56d1e460db54b312130835c269a81c2d98dc582dae8c073c79968746084eda65c20dc3bf209424404bc6908e49d62fdc4d98934a62164bde4c8d7f84c8b8d61ba6344544d082fa806a89261f1e00ba7b1b27188163740f2cfa347f01c5e17eaa8d54f8257e91ab503318352c372c72c85cbe2c290c77fe3c297025f1bd36c779b0da4fb821fed7242d108fd7408d741f027fd9bd28d6beed695e35d5113e8c1d14b5d6ca7873b9b381c79f4bc3b7cbed62c8f3eae22d532dd1c48fbbd05ddac641d064c82ca2471ec5cb714e256bfe128d1df9fedc5f7968049f5deea8881c248bb2b137243a576175f66fd0bd403c03721edb94e33ec4f942ccb3a5436cfb991c5c8196cc37fde5aa8e61d5a7d2977364aa423494c6c1a3fe4c4f1ab26dc327bb6c4f580e628c8339019ca3303f77b8a717d22fb7aacf090b534dcc830fc3b8cd565b6e792d706e8ec819abb7ad6ccbf573649d56d858450fc80cb3da8bab17ad30e6b30f81a35d16e1d4dd7575728ae8761d2b9b88876e9e9c1150c9d296686a9f0cd6f8c56ba526ca8b46261144df9186e96171c51c5eb14c4722f7c6d6ea22712e73541820b70fb1e5ecb4a6fce4b8ccb51ec528c24a202d022abf1173e9e50f4bbe743a84596f1995ad77bf5b51f49c430dd46a57ad7c4506dab0a7dda57f0da6399a1ec8f27c4733b459a38015c511b146ef20b31ccede5798a6ef771ffa735052dcfd1650450cff89d99e8ec2b8be55ab289f97e285fefed77737e2c403e5a65d3ef8b91f089d8e849d521ac0e6f9f9415699932d48d8d68381f38e641b4b3b90ae2f2ddcbd398f39221402ee06e32ca8425';
+var ACCESS_POOL_ENC='d2f433980eb36ec6fa4989bb50505bbd4992b8b3464e8fac6ce3e1e62c89ae7695d357eaef01bdd78b6c9c1668aa43fad69b85f1f78eda064320fd301b362e799a212ae60c05464327ec01b0bbea97febd56e0c484be2d21686fac9e7e2fb013fbc4f86f142e18b20c90eb4a617cabf0145b27c18ca4c75eb58ffb276bd1986e23bd11e31be98262056aa3c136a61e842dbb6950ce6329e129a508a8c5cea647b1d47c1d31a2552bae1e2d79f9e33570166f220236556443615f43e32120e710855c3feda42016f5afcc1c90052cd2c980f0d9e5c02d93477b48eab3ba7e4125d70490097e7b5d3aa0387aef2776e5a575cb81f7ddb31c0ab1e51bb14e18a7600a58f66a73bbe468fa038a91ce8d86799c456012b9e382c86efbf1ccd0c6b9dd16d65453374ce00d6d954d09db44e5c59e51b01043eb16e128dcfdc3cf5b36178ec2962f40a05a01781d8acf48ddbcddfb31ed609df0a4bba2b55239eef68b5acdc9d3c48eff39af30dd3226c62d0dd0313b4507c81ec50b7e5dbbfb12f2a14e42c4ee39e260a92f5d21a20b9d1ca16beb8b80213b153994a4d8e4e3b6212e53be9183dcab5438f1f7e05b5072ea17999d422fba7df481ceb61f5ea6b614a70c6b3257b82e9659d5558f996c81b2c31d01d4ce9d498ff860f0ed7aaab95166f58b01e440784cd96860c7795272ed1debaa34cca74246872c04f4b93e1e4d242fbbff6f6c321311d3614f0a5939e38f2e97ee5bbcfe50284d06b07fae8eed22d347cc7401c4907192247fcd060ad82404d042ee90fd7f77de569506d4030d74e2c7990b9c087d711f37114fde975d565b568b1719df8e6dd9832cb2818326db4d584cf9debfa99e383f8739b432bb19f94a98bb0131a856c15dc4ced2b6f9aba42859ebbf008ffd8bbba364b7db0a3508a69286884ec31c54bdad686e0bb0475e606bed7db254ce0c2416e415a7114ad95e24671031e6ae30ca5d1f3f856f81a2aec112167898b5c0fa207a25a29f8ae67ab9ea82799e3cb192848a36bc936a8efb8d11c4a64d787bce5f68ea8497e3a3ee4f69041a7d27f9134f96dc49f645252961ad807d562ff0d42fe87e8b669118146bd55c273c0a93b8670e8e70f23430e3125dbed935f45b8f22b04a8cd37c7abad5930038272c7806c5ab58d3126da81f23b30bbeb068f9956549a00177ce6aa9861da9288cffd781ea34f609f5588d116b2f244e10ff9851d49f63186ada9a96524960e5719c8cad77e789ac14e1b75d22c6001ecbe048de1b3ff4a75671ef96001652cb4859454fbfe22f890939bbe50059c12cad004cec8d6b3cdc724f6b13ac19785ca2edae435667c1d6a469ea1ce504c7f166abd8343a7fcb9847cd672ade97bfe015f1e211938074541d033147b70de933b2ab2967426b97edc079056c99b094bce6e15ec27768e80972c56e7597682e60f1ba0f0f86ebf3773b934cfad1dea1c198676d5d55587530dc1125d3e61d5546cae36e9a51e02ee893a0d2d69c901cc8ebe427281e92582fd90528ef74d3bf11869daa658024e13d4a7e10fe14959f416c2170bb62194f8e4957eab255ef15b48e6535892056c23045b96efb7867c277e7f1723774b8fbdc3478de719dfa6aeacb0d372454caf23880c8bb12e7d8a8a88ae1cfa9e5712c5162a6c9029ae33f6301e5565538cdf097a1166129b319d91bd601fc1e23594f6223c2132f7dddbea39adcb8763c43dde8b03a55927aaff8a6e16e4846d39baee455c47d93c8c6cc74b4faf4fa536f1badc1980ef021435ec30f1d91e5fe191a6782e5b70ffb5af1f54476d911050f868a0cd095b1a061e8e2ac6f2eecec1ec1f037b9a8b820e3110ac37126cb01032db38b4b3d9f6f1e1aafbc2795607cbec1607deb33e2b4bbaf2c7320862ba50e1b014a3081398288b5c15b1a6c89d1111c6b140fa2d10fc970c382f7d6f4a03bf76674fe5d438bee97fd56eb27fa39123809c007588a7ce3e86503557ce7e323d06a718d7ba009fb62c4588c389f1cc376eaf5223ce7d8df187263a266c355fe59c3139b4e2ad613ae2144c2fac0c38dc01ed41c845cb6e9383537805e9ee2ec3a97a3e54e20bf7bae1c87594fb9092cac2e7abbce715b96e45179dfd4aaa98d56f051ff591b7d9913cf81e47729749dcb4199d82be387ce64bfef4a3fb8ed048adeef716de5883332912849b92991080e18633d3943f32a291ffd023e52fca0a40d917d3b0b61b60912abcb70679b81fe36ef17ecee224c83eda0877606c80688ad22eb79efd96868933268dd0bed5542d32d811925a36eac836a88316cb8af76070420b1e3eb3f2bd8a036d0533e36c4fef31c94764e513dbe31cf3e282099cb355c88ca932e7cee8ea86288e6177a0bca3722c8a0029afce1fc24e27437ab1c01a10ce208856347116e6370417cfac0d0012089c3bffffda8e1b6421b76da513cf09b4cbfe8fdfd01aaf29277ba2e77fd6d39b41e3d6fecf9294ca3b0de46cb3cba750155570beb5543a741dcc63664990895fe6405106d1bcb5f1b69ea7e2f29f379c42a00e7f0c52c82bb3d7ef2a4e3f90e83a54878ea10a0c76c3d50425f85e795a4ca9fa11ad0a678712dce7cd3ad871b7c8ee70882a7cd4d70637a4e18db8c8546a302c8b98dd2e4c8ef831fe8b8e69e238b0156eeec216c120ba0248a035b1aab7fc45c65920319564ee35cfb46a522c7cbf29e6f868d19d318e3acc14626d00ddac69bf115dac8a6c85c956066cbd92bf5ba782cfbfdff6f02848be041f206aa161f5817009dc505dc8f9f9fcef9e365ee30ccb0814b62467f8fa81a40746bcde4bdda6e29b9b73d4c999885ca0be11697dc5000d80fbd930e01cb3433459cbb6421404bd0c4493b30c626d2a4336a0d43ed41d5547c70fa91730de5a0abc7bbba9c34db859cb5cd5d0d19beb3316cd4fe75000598a307d2824367e0472aaa4119b78dca1e65919532b11fadf8f154bde9863565a9e9570aca3b31116b93097fa1e7fa29d4e0ee6b50f1a0f9345f93f6e5aba5a39bcdc8124aa7084d07f9c9b47e1c99331adf9313e89ce3d46b75316152629e6995ff1b2888113f93c764ef568c5a45305059c0794481d12f1de8d9de5b5597ffaff1afe1ffac0c672c84d03227bdcc234699ec3db285cae4b8c6756e17f4854a17cf1ede4c9f4cfc3aa3a61ed9f985ed81cbd0e6f7cc95609c98ac8f3a9ca27144fafafc0010e391830d8f768e08d8f3d5a5d6e1a94b2cb3bfdfcdda38298c80118128be84255a62d18a879ffb51865600c7f0321953ca7369b0fcceeb64199865f5b0af763bb517722170eb4874db14d98c9afe3984b14e4c80861eb13e178b6d3932ddb9730d84a2dee0714f48ff1392806a8ec546ff46f3aac7232804061f83f4c8f412f02a09587dd2219200a44ab86ad67f1441ecdf6be04d559fecc7c57bc48b66f7f5dda622d16dd4b4347e550aece306689618961c8b44425ab2b99962b550828e1bbc39fb8e797280170829ed56b54740bec3101410fa18d9cac0d461bbf416e645f572b5d91a114ef96663f64bd2162d1130303ae5605b47ea715962112649c30b6cd96104315996bba9cd1de9de97e29755d774f0725e47480ee8074d1455c18b314224b34615e5cb4ff46fcffc487fb218a781a757d478aae76acc2984199bcf85774ec62cedec116904603d6b847d5b913436307b4ab9a86d46128ee1c3ba31c3adbf09a58afe04fcf2e0e55dd558d27c1d60de9dfd6d1304c5d5823763a20fe5877c9d3f899c9197901335da659a76f8384ec56386a9e03c047273b1135724dc900f8b90bd868c37abbdb00bf320aaa19cc45c2b8f0770b17208af663077f9c3416600ae05686050762cd259c3538de56598f8f5d66301de4c31168e8ecc7e336402b1812d0975958416b0ff6c132e9ee635b22a372626aad44ceb080e7ce0d3d05879d335429a90bcfcc5f6ea6a0e157d61b4bf24dcfc9a5fc0cfefb538f014ca36b7091f37917f46b49f164ca8942d9492fc26784d3fafea370e948021545842b335a34679086a5baff0995b67ef6eae1b7e68339cdb6ed32f6c183fc6a788caba999516eb77e8bd467c8d64efc8a01b18611e40847a69881468843fb0e7b7b84aa51d3794a0d9bd7f72d0828d9c9b32c0220037c43d78de03747d2da4f7051106c49d25c33d3d12ba5a1cef6d4460abe49cbd8a9070de9e653515f930803fd6d2a6e0c6f663cca3b04cd29ff874ff149876681c6ab94769d0beba6da9d57837943cc3f50ed0767b2d81fa45b40e78bb81d809bb45a667e0a6643f2ce97cc7503757924b8baf6eaac0472a6eeb64e96a87b8455b8a3be98b69238aeebe08c8f97d706d46973361e447e05d23b32ccbfa8bfa816b01eff7036a3adb48a50731972b16bd9b4956430c715179421685cceed4faaed50a51f13e834a86f986b8fff04c285de96461ad020459e9ed04e1267904db85b36e976a4c75e61c60249a8a9d4a0a20e330b9accc0125fef4f72fd489fe30b90c411ede6e68500689b0f1245bbf030cd681b8c680d0a620b61b6fba083ac1c001c2f944e57e442592af6c19083ae2ae482b0ac0efaecf8f2a8d78ed7913b03e217c218c6ffd08d6dc9c7cf8cea021588cd07487c26edd66968f1e9763c5f7448a1f660cd5516d3ac5e52f9cd3a0e9e64d344194ccecef85e6627c63cbec824571d81d8458afadb7dbd3d55b062405d2fc6c8d516df7bb7cf5080abd46b23da224a7de79a738bc8032fd09f41f6e4a20ce95cc33c2bfa7e3155bb6b46fbaebff0041eb84afab8a92ad36118207a58caa855a2a35f8e244b9c16bfafb7a40cf32552b3a625d7ba64c94675b94eeadc9bef2e81d82cac839dd73822ff3006730fdd1589e817843064a5985e70e01c75c721d1e6cb53cf184bb50e99c78cc1a63df95521a63f0340bc85dfb5670e3c29c811fa3fda9ed0aeb26c526048d614925cdb3a490c726d1c6a869de517f8ba766517adb008d51d12d676c39340234c0ea52743848de422e686afc586bdd84a47c7fac4d558bed8ffcdf763f8d34564ff2f2dd6e4f0b89e652c1a342479c47a9661ee0fe9f032a82eb5949128ec9a8324df6e80905c7e6bce9710f995d93e84ea3b5bcf9ac16fb3e645b384495713c875aafe8740bd5ab3b6630fe3556e3c2039eb3496f1c12332ca29ce513fab78b1097974bddc0161e3e78d94a5e425ce05c45ebeaa9acf5a782c08bac66b38b116368f381cd4f54b65bf210214100dd0b70eae476e6adde9250db217ddbf6d2b8f426f9e307cb773b442c672fcf72d58507f49901cbc5a21a801c4759f2a4c449e867480398a5b65be83b9d76aa034aec4ecc07ba51edb79ca9ffbb7092a3971d2a1bc71107e20bd19e860afe0934af08956176a65af548ef9bca9f1783d78f995d356889a1b227250bafe238fd4d7311efbc400cdaa2499d42be29bc52c71f2892d705b7dd15676a37ebab390c8729b20bf92abf8342ded080e2bee887fe458ec088e9fcc234cb3f6e1249df7d07241de30cb97bdb374cfbb23329f8298c32b6392e58b2d3f9c5ac0363d51cdd26b8fd74281220732621a449283d607f5ef1d0f9b056a84172c0daf59f8034af5b8772a54f60800e88640836fb60bae0f0a021b4d73b9629eba111a6f992cd77e0e9e187cc7dadd7b0303f2cb00385ea21e481d150c3becc16d97a6123ec7a35ca1c7546b4463646affb75a8aabfee68e989ab0504fb5803f8b39cd8129f4faf296cb2c11b6e725ee16c198e6b0631d18770c40657757b0fcd3e73e850479a7c0b89735ebd3200cb3198bc32954b984bb210b139ab9b07329f2af0c2f449d32b8ff29a2caf7b83c7075dae3eb35fa106c6b15b6fc3717dcf3feec91e8adfeafd52a46d20588a2c0128386e0e71f66030c0f2f41ffc0d960affcc4d6842d0c11d0042dbe2e48b9488468b812ad2e3e17c572be38d6267613130205a01c7ee8d8b8beecdec34aa5ec17e15e7946803f039a090977a3400229b25caa5ad0a9ee8c2cdac8486fe33343dfa7a23ba8e7a77005b0a7159df59a627189ee55a5ec60fef409f0ad9abc2849a941697bdc0ba70e82d6d6e23f50c75acab77f6b08a0234f963184f8ee05bee21437f27fa2dc7a150951c49fddb22276c0a46d9bf828c291edc46dd5fdb444ac4f84c9a94b510dc0ccda742dcb3a5da34a13e1d5888f82dfad4a0258d319298601b598082e87cec662418f0033e1a6fe439ac6c08b217287368fd0468f1a45af78b27edd702d4ca6205bc19d09be21bfc6bdd149aea4919c8eb4f2d39f32b6aabf1ba6a4d465776714c11f8e5ab8c3d94df50ec0100ff6ab37bab658340cb51c6';
 function poolKeyFor(adminCode){ return sha256hex('deadstop-pool-v1|'+accessNorm(adminCode)); }
 function hexBytes(h){ var out=[]; for(var i=0;i<h.length;i+=2) out.push(parseInt(h.substr(i,2),16)); return out; }
 function poolOpen(K){
@@ -9802,7 +9809,7 @@ function poolOpen(K){
     }
     var txt=decodeURIComponent(out.map(function(b){ return '%'+('0'+b.toString(16)).slice(-2); }).join(''));
     var obj=JSON.parse(txt);
-    if(!obj || !Array.isArray(obj.athlete) || !Array.isArray(obj.coach)) return null;
+    if(!obj || !Array.isArray(obj.batches)) return null;
     return obj;
   }catch(e){ return null; }   // a wrong key is garbage, and garbage does not parse
 }
@@ -9847,21 +9854,153 @@ function accessOK(){ try{ var a=accessRec(); return !!(a && a.role && a.until &&
 function accessRole(){ return accessOK()? accessRec().role : null; }
 function coachAllowed(){ var r=accessRole(); return r==='coach' || r==='admin'; }
 function adminAllowed(){ return accessRole()==='admin'; }
-function accessGrant(role, via, days){
+function accessGrant(role, via, days, exp){
   var t=shiftDate(), u=new Date(t+'T12:00:00'); u.setDate(u.getDate()+(days||ACCESS_DAYS));
-  var rec={role:role, since:t, until:u.toISOString().slice(0,10), via:via||'code'};
+  var until=u.toISOString().slice(0,10);
+  if(exp && exp<until) until=exp;           // a grant never outlives its key
+  var rec={role:role, since:t, until:until, via:via||'code'};
   if(!inDrawer()){ S.access=rec; save(); }
   try{ if(ROSTER){ ROSTER.access=rec; rosterSave(); } }catch(e){}
   // AUDIT 2026-09-08: an admin who later entered a lesser code kept S.poolKey, so a forged
   // role reopened the pool. Any grant below admin drops the key.
   if(role!=='admin'){ try{ delete S.poolKey; save(); }catch(e){} }
 }
+// v224. His finding, 2026-09-09: "When their access expires, the key expires with it correct?"
+// It did not - the GRANT expired, the KEY did not, so an athlete met the gate, typed the same
+// code again, and got another 90 days. Renewal was honour-system. Two rules now:
+//   - every key carries a hard expiry baked into the build (exp). Past it the code is refused
+//     on every phone, and a grant never outlives its key: until = min(entry+days, exp).
+//   - a key that has already been granted on THIS card is refused once that grant has lapsed
+//     (S.usedKeys). Renewal on the same phone needs a code this phone has not seen.
+// Neither is a lock - a static file cannot revoke - but together they make "three months,
+// then renew" mean what it says: the only way past is a current code from him.
+// ===== THE SERVER =====
+// v225. The last thing a static file could not do. v224 gave every key a hard life and stopped
+// a lapsed key renewing itself on the same phone, but one code still worked on any number of
+// phones, because nothing on a phone can count how many phones have used it. Now something can:
+// a Worker that remembers which device claimed which key. One code, one phone. And with it, two
+// things he has never had - real revocation (kill a key, they are out at their next check) and
+// seats or dates changed without a build.
+//
+// The rules this layer holds to, because an athlete in a gym does not care whose fault a network
+// is: training NEVER touches the network. Only entering a code, and a check about once a week.
+// If the check cannot get through, the card carries on for SRV_GRACE days on its last good
+// answer and keeps trying. Nobody is stopped mid-session by a bad signal, and a phone that never
+// reaches the internet again stops after the grace, not before.
+//
+// What is sent: the key's fingerprint, this device's random id, the build, and small named
+// counters. Never a lift, a weight, a max, a bodyweight, a name, a note or a session report.
+var SRV_BASE='https://deadstop-access.manuel-g-grajeda.workers.dev';
+var SRV_GRACE=14, SRV_EVERY=7, SRV_TIMEOUT=7000;
+function srvOn(){ return !!SRV_BASE; }
+function srvDev(){
+  try{
+    if(!S.devId){
+      var a='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-', s='';
+      try{ var r=new Uint8Array(22); (crypto.getRandomValues||function(){})(r); for(var i=0;i<22;i++) s+=a[(r[i]||Math.floor(Math.random()*256))%a.length]; }
+      catch(e){ for(var j=0;j<22;j++) s+=a[Math.floor(Math.random()*a.length)]; }
+      S.devId=s; save();
+    }
+    return S.devId;
+  }catch(e){ return 'nodevice'; }
+}
+async function srvPost(path, body){
+  if(!srvOn()) return null;
+  var ctl=null, t=null;
+  try{ ctl=new AbortController(); t=setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, SRV_TIMEOUT); }catch(e){}
+  try{
+    var r=await fetch(SRV_BASE.replace(/\/+$/,'')+path, {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body||{}), signal:ctl? ctl.signal : undefined});
+    if(t) clearTimeout(t);
+    return await r.json();
+  }catch(e){ if(t) clearTimeout(t); return null; }   // null means "could not ask", never "no"
+}
+// counters the card keeps between checks. Names only, numbers only.
+function srvCount(name, by){
+  try{ if(!S.useCt || typeof S.useCt!=='object') S.useCt={};
+    if(!/^[a-z][a-z0-9_]{0,20}$/.test(name)) return;
+    S.useCt[name]=(S.useCt[name]||0)+(by||1); save();
+  }catch(e){}
+}
+function srvGraceLeft(){
+  try{ var a=accessRec(); if(!a) return SRV_GRACE;
+    // v226: a card that has NEVER reached the server counts its grace from the day it was let
+    // in, not from nothing. Otherwise an athlete who activated offline would keep its full
+    // grace forever and never be checked at all.
+    var from=a.ck || a.since;
+    if(!from) return SRV_GRACE;
+    // v227: a phone clock set forward and back leaves a stamp in the future; that is not credit
+    return SRV_GRACE - Math.max(0, adDays(from, shiftDate()));
+  }catch(e){ return SRV_GRACE; }
+}
+// The weekly re-verify. Runs at boot, never during a session, and never blocks anything.
+// v227 AUDIT. Two things that would have locked out every existing athlete on first open, and
+// three that would have locked everyone out at a weekly check after a bad deploy:
+//   - a grant from BEFORE the server (v214 codes, legacy athletes, his own coach card) has no
+//     fingerprint. The check sent fp:null, the Worker said "unknown", and the card cleared the
+//     grant. Nothing to verify means nothing to check: such a grant is left to run to its own
+//     date, after which a code is entered and the server sees it then.
+//   - only a DEFINITIVE refusal clears access - revoked, inuse, expired, or unknown WITH a
+//     fingerprint. A 500, an empty body, a 404 from a wrong URL, anything else the server
+//     might say on a bad day, is "could not ask", exactly like no network at all.
+var SRV_DEFINITE={revoked:1, inuse:1, expired:1, unknown:1};
+function srvVerdict(r, fp){
+  if(!r || typeof r!=='object') return 'unreachable';
+  if(r.ok===true) return 'ok';
+  if(r.ok===false && SRV_DEFINITE[r.reason] && (r.reason!=='unknown' || fp)) return 'refused';
+  return 'unreachable';
+}
+async function srvCheck(force){
+  try{
+    if(!srvOn() || !accessOK()) return null;
+    if(inDrawer()) return null;      // v226: a drawer is not a device. The holder's card checks.
+    var a=accessRec(); if(!a) return null;
+    if(!a.fp) return null;           // v227: nothing to verify - a pre-server grant runs to its date
+    if(!force && a.ck && adDays(a.ck, shiftDate())<SRV_EVERY) return null;
+    var body={fp:a.fp||null, dev:srvDev(), build:BUILD};
+    if(S.useCt && Object.keys(S.useCt).length) body.use=S.useCt;
+    var r=await srvPost('/v1/check', body);
+    var vd=srvVerdict(r, a.fp);
+    if(vd==='unreachable') r=null;
+    if(r===null){
+      // could not reach it. Carry on until the grace runs out, then ask for a code.
+      var left=srvGraceLeft();
+      if(left<=0){ ACCESS_LAST='offline'; accessClear(); try{ bootAccess(); }catch(e){} }
+      else if(left<=5){ try{ mailPush('srvoff-'+shiftDate(),
+        'I have not been able to check in for a while. Get this phone online in the next '+left+' day'+(left===1?'':'s')+' and nothing changes \u2014 everything you have logged stays either way.',
+        'focused'); }catch(e){} }
+      return null;
+    }
+    S.useCt={};
+    if(vd==='ok'){ accessStamp(); }
+    else { ACCESS_LAST=r.reason||'revoked'; accessClear(); try{ accessEnforce(); }catch(e){} try{ bootAccess(); }catch(e){} }
+    save();
+    return r;
+  }catch(e){ return null; }
+}
+function accessStamp(){ try{ var a=accessRec(); if(a){ a.ck=shiftDate(); if(!inDrawer()) S.access=a; if(ROSTER) { ROSTER.access=a; rosterSave(); } save(); } }catch(e){} }
+function accessClear(){ try{ if(!inDrawer()) delete S.access; if(ROSTER && ROSTER.access){ delete ROSTER.access; rosterSave(); } save(); }catch(e){} }
+
+var ACCESS_LAST=null;   // why the last attempt was refused: 'unknown'|'expired'|'used'|'inuse'|'revoked'|'offline'
 function accessTry(code){
-  if(accessNorm(code).length<6) return null;
+  ACCESS_LAST=null;
+  if(accessNorm(code).length<6){ ACCESS_LAST='unknown'; return null; }
   var fp=accessFp(code), hit=null;
   ACCESS_CODES.forEach(function(x){ if(x.h===fp) hit=x; });
-  if(!hit) return null;
-  accessGrant(hit.role,'code',hit.days);
+  if(!hit){ ACCESS_LAST='unknown'; return null; }
+  var today=shiftDate();
+  if(hit.exp && today>hit.exp){ ACCESS_LAST='expired'; return null; }
+  try{
+    if(!Array.isArray(S.usedKeys)) S.usedKeys=[];
+    var cur=accessRec();
+    var lapsed=!(cur && cur.until && today<=cur.until);
+    // v226: the same-phone reuse rule is the FALLBACK for a card with no server. Once a server
+    // is configured it holds the key's expiry and its one-device claim, and it should give the
+    // reason (expired vs inuse) - so defer to it rather than refusing locally first.
+    if(!srvOn() && S.usedKeys.indexOf(fp)>-1 && lapsed){ ACCESS_LAST='used'; return null; }
+    if(S.usedKeys.indexOf(fp)<0) S.usedKeys.push(fp);
+  }catch(e){}
+  accessGrant(hit.role,'code',hit.days,hit.exp);
   // an administrator's card keeps the pool key so the Admin tab can open the pool. It is the
   // admin's own phone and the admin's own backup; the pool never leaves it in plain text.
   if(hit.role==='admin'){ try{ S.poolKey=poolKeyFor(code); save(); }catch(e){} }
@@ -9907,12 +10046,71 @@ function bootAccess(force){
       +(force? '<div class="disc-more" id="accessCancel">Keep what I have</div>' : '')
       +'</div>';
     document.body.appendChild(v);
+    // v226, his catch: "when they open the card on the web before download, they have to enter
+    // the code, then when they download it, they have to enter it again a second time."
+    // On iOS a Home Screen web app gets its OWN storage container, separate from Safari. Same
+    // phone, two sealed boxes - so the installed copy makes a NEW device id, the Worker sees a
+    // second device on a claimed key, and refuses it. The athlete is locked out of the copy they
+    // actually train on. So on an uninstalled iPhone the gate does not take a code at all: it
+    // sends them to install first. One entry, in the copy that keeps it.
+    // (Android shares storage between the browser and the installed app, so nothing changes there.)
+    var mustInstall=false;
+    try{ mustInstall = srvOn() && isIOS() && !isInstalled() && !accessOK(); }catch(e){}
+    if(mustInstall){
+      v.querySelector('.disc-inner').innerHTML=
+         '<h2>Add the card to your Home Screen first</h2>'
+        +'<p>Your code ties itself to one copy of the card. On iPhone the Home Screen version is a '
+        +'separate copy from Safari, so entering your code here would use it up in the wrong place '
+        +'and lock you out of the one you train on.</p>'
+        +'<p><b>1.</b> Tap the Share button at the bottom of Safari &mdash; the square with the arrow.<br>'
+        +'<b>2.</b> Scroll and tap <b>Add to Home Screen</b>.<br>'
+        +'<b>3.</b> Open the card from your Home Screen, and enter your code there.</p>'
+        +'<button type="button" class="daybtn" id="accessHow" style="margin-top:12px;width:100%">Show me how</button>'
+        +'<div class="disc-more" id="accessAnyway">Enter it here anyway</div>';
+      v.querySelector('#accessHow').onclick=function(){ try{ a2hsShow(); }catch(e){} };
+      v.querySelector('#accessAnyway').onclick=function(){ try{ v.remove(); }catch(e){} bootAccess(true); };
+      document.body.appendChild(v);
+      return;
+    }
     var input=v.querySelector('#accessIn'), msg=v.querySelector('#accessMsg');
-    var go=function(){
+    var go=async function(){
       try{
         if(v.__done) return;
         var role=accessTry(input.value);
-        if(!role){ msg.textContent='That code is not recognised. Check it and try again.'; input.focus(); return; }
+        // v225: the local checks passed. Now the only question a phone cannot answer alone -
+        // has this key already been claimed by somebody else's phone?
+        if(role && srvOn()){
+          v.__done=true;                                  // no double-submits while we ask
+          msg.textContent='Checking\u2026';
+          var fpv=accessFp(input.value);
+          var r=await srvPost('/v1/activate', {fp:fpv, dev:srvDev(), build:BUILD});
+          var vda=srvVerdict(r, fpv);
+          if(vda==='unreachable') r=null;   // v227: a 500 or a malformed answer is not a refusal
+          if(r && r.ok===false){
+            accessClear();
+            try{ var ui=(S.usedKeys||[]).indexOf(fpv); if(ui>-1) S.usedKeys.splice(ui,1); save(); }catch(e){}
+            v.__done=false;
+            msg.textContent = r.reason==='inuse'? (isIOS()
+                                ? 'That code is already set up. If that was you in Safari, open the card from your Home Screen instead \u2014 or ask for it to be reset.'
+                                : 'That code is already set up on another phone. Ask for your own.')
+                            : r.reason==='revoked'? 'That code has been turned off. Ask for a new one.'
+                            : r.reason==='expired'? 'That code has expired. Ask for a current one.'
+                            : 'That code was not accepted.';
+            input.focus(); return;
+          }
+          // r===null: the server could not be reached. Let them in and check again later - a new
+          // athlete standing in a gym with no signal should not be locked out of their own card.
+          // The key is NOT marked used-on-this-phone until the server has confirmed it, so a
+          // failed claim can be retried later without the local rule refusing it first.
+          try{ if(!r){ var uk=(S.usedKeys||[]).indexOf(fpv); if(uk>-1){ S.usedKeys.splice(uk,1); save(); } } }catch(e){}
+          try{ var ar=accessRec(); if(ar){ ar.fp=fpv; ar.ck=r? shiftDate() : null; if(!inDrawer()) S.access=ar; if(ROSTER){ ROSTER.access=ar; rosterSave(); } save(); } }catch(e){}
+          v.__done=false;
+        }
+        if(!role){
+          msg.textContent= ACCESS_LAST==='expired'? 'That code has expired. Ask for a current one.'
+                         : ACCESS_LAST==='used'? 'That code has already been used on this phone. Renewing needs a new one.'
+                         : 'That code is not recognised. Check it and try again.';
+          input.focus(); return; }
         v.__done=true;
         accessAfterGrant(role);
         // say it before leaving: the sheet behind this gate may look exactly as it did
@@ -10013,20 +10211,23 @@ function renewCopy(){
 // as the issuing. Issued keys are recorded on the admin's own card (S.adminIssued).
 function adminPool(){ try{ if(inDrawer() || !S.poolKey) return null; return poolOpen(S.poolKey); }catch(e){ return null; } }
 function adminIssued(){ if(!Array.isArray(S.adminIssued)) S.adminIssued=[]; return S.adminIssued; }
+// the current batch: the earliest one that has not expired. A key issued from it is good to
+// that batch's date, so a key handed out on the last day of a quarter still gives ~90 days.
+function adminBatches(){ var p=adminPool(); if(!p) return []; var t=shiftDate(); return p.batches.filter(function(b){ return b.exp>=t; }); }
+function adminLeft(b, role){ var used={}; adminIssued().forEach(function(x){ used[x.code]=1; }); return (b[role]||[]).filter(function(c){ return !used[c]; }); }
 function adminNext(role){
-  var pool=adminPool(); if(!pool) return null;
-  var used={}; adminIssued().forEach(function(x){ used[x.code]=1; });
-  var list=pool[role]||[];
-  for(var i=0;i<list.length;i++){ if(!used[list[i]]) return list[i]; }
+  var bs=adminBatches();
+  for(var i=0;i<bs.length;i++){ var left=adminLeft(bs[i], role); if(left.length) return {code:left[0], b:bs[i].id, exp:bs[i].exp}; }
   return null;
 }
 function adminIssue(role, to){
-  var c=adminNext(role); if(!c) return null;
-  adminIssued().push({code:c, role:role, to:String(to||'').trim(), d:shiftDate()});
-  save(); return c;
+  var n=adminNext(role); if(!n) return null;
+  adminIssued().push({code:n.code, role:role, to:String(to||'').trim(), d:shiftDate(), b:n.b, exp:n.exp});
+  save(); return n.code;
 }
 function adminShareHref(kind, code, role){
-  var body='Your Deadstop Training Card '+role+' code: '+code+'. Open the card, enter it once, and it is good for 90 days from that day.';
+  var rec=null; try{ adminIssued().forEach(function(x){ if(x.code===code) rec=x; }); }catch(e){}
+  var body='Your Deadstop Training Card '+role+' code: '+code+'. Open the card, enter it once, and it is good for 90 days from that day'+(rec&&rec.exp? ' (the code itself is valid until '+rec.exp+')':'')+'.';
   if(kind==='sms') return 'sms:?&body='+encodeURIComponent(body);
   return 'mailto:?subject='+encodeURIComponent('Your Training Card code')+'&body='+encodeURIComponent(body);
 }
@@ -10037,10 +10238,12 @@ function adminHTML(){
     return h+'<div class="block"><h3>Key pool</h3><div class="cue">The pool is locked. Enter the admin code again under Settings \u2192 Access to open it.</div>'
       +'<div class="toggle lockfree" data-accesscode="1" style="margin-top:8px">Enter a code</div></div>';
   }
-  var iss=adminIssued(), used={}; iss.forEach(function(x){ used[x.code]=1; });
-  var left={athlete:pool.athlete.filter(function(c){ return !used[c]; }).length, coach:pool.coach.filter(function(c){ return !used[c]; }).length};
+  var iss=adminIssued(), bs=adminBatches();
+  var cur=bs[0]||null;
+  var left={athlete:0, coach:0}; bs.forEach(function(b){ left.athlete+=adminLeft(b,'athlete').length; left.coach+=adminLeft(b,'coach').length; });
+  var curTxt=cur? ('Issuing from batch <b>'+esc(cur.id)+'</b> \u2014 '+adminLeft(cur,'athlete').length+' athlete, '+adminLeft(cur,'coach').length+' coach left, keys good till <b>'+esc(cur.exp)+'</b>. ') : 'No current batch \u2014 every key has expired; adding keys is a build. ';
   h+='<div class="block" id="adminIssue"><h3>Issue a key</h3>'
-    +'<div class="cue">'+left.athlete+' athlete and '+left.coach+' coach keys left in the pool. A key is good for 90 days from the day it is entered, not from today.</div>'
+    +'<div class="cue">'+curTxt+'A key gives 90 days from the day it is entered, never past its batch date, and cannot be re-entered on the same phone once it lapses. '+left.athlete+' athlete and '+left.coach+' coach keys left across all batches.</div>'
     +'<input type="text" id="adminTo" class="dtin" placeholder="Who is this for? (name)" style="width:100%;box-sizing:border-box;margin-top:8px">'
     +'<div style="display:flex;gap:8px;margin-top:8px">'
     +'<div class="toggle" data-adminissue="athlete" style="flex:1;text-align:center'+(left.athlete? '':';opacity:.4')+'">Athlete key</div>'
@@ -10059,7 +10262,7 @@ function adminHTML(){
   else h+=iss.slice().reverse().map(function(x,i){
     var idx=iss.length-1-i;
     return '<div class="ex" style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
-      +'<div><b>'+esc(x.to||'\u2014')+'</b> <span class="cue">\u00b7 '+esc(x.role)+' \u00b7 issued '+esc(x.d)+'</span>'
+      +'<div><b>'+esc(x.to||'\u2014')+'</b> <span class="cue">\u00b7 '+esc(x.role)+' \u00b7 issued '+esc(x.d)+(x.exp? ' \u00b7 key good till '+esc(x.exp):'')+'</span>'
       +'<div class="mono" style="font-size:13px;letter-spacing:.08em">'+esc(x.code)+'</div></div>'
       +'<div style="display:flex;gap:6px"><span class="toggle lockfree" data-admincopy="'+esc(x.code)+'" style="padding:0 10px;font-size:11px">Copy</span>'
       +'<span class="toggle lockfree" data-adminforget="'+idx+'" style="padding:0 10px;font-size:11px" title="Return this key to the pool">Unissue</span></div>'
@@ -10084,7 +10287,7 @@ function adminWire(){
     document.querySelectorAll('[data-adminforget]').forEach(function(b){ b.onclick=function(){
       var i=+b.getAttribute('data-adminforget'); var iss=adminIssued(); if(!iss[i]) return;
       var gone=iss.splice(i,1)[0]; if(S.adminLast && S.adminLast.code===gone.code) delete S.adminLast;
-      save(); render(); alertToast('Returned to the pool');
+      save(); render(); alertToast('Returned to the pool \u2014 this does not remove access from anyone who already entered it');
     }; });
   }catch(e){}
 }
@@ -10097,6 +10300,7 @@ function accessHTML(){
         : 'No current access.')+'</div>'
     +'<div class="toggle" data-accesscode="1" style="margin-top:8px">Enter a code</div>'
     +renewButtonsHTML()
+    +(srvOn()? '<div class="cue" style="margin-top:10px;font-size:11px;opacity:.8">Your code is tied to this phone. The card checks in about once a week to keep it active \u2014 it sends only your code and a count of sessions, never your training. Training itself never needs a connection.</div>' : '')
     +'</div>';
 }
 
@@ -11051,6 +11255,7 @@ function weekSheetHTML(w){
   return h;
 }
 function printWeek(w){
+  try{ srvCount('prints'); }catch(e){}
   // AUDIT 2026-09-08: a call without a week rendered "Week undefined of 6 · undefined NaN"
   // into the sheet host, and the host outlived "Back to the card" (only the printing class was
   // removed), so the text sat in the page invisibly. Default the week, and empty the host on close.
@@ -12687,6 +12892,7 @@ function libAdd(name, code){
     }
   }catch(e){}
   var hadCore=false; try{ hadCore=dayOrderNames(code).some(isCoreGrip); }catch(e){}
+  try{ srvCount('adds'); }catch(e){}
   dayReshape(code, function(){
     custList(code).push({b:cyc(), w:S.week, cid:Date.now()+Math.floor(Math.random()*999), name:name,
       load:(r[5]==='bw'?'BW':(est&&est.val!=null? est.val : 25)),
@@ -14008,7 +14214,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v223';
+const BUILD = 'v227';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -16072,6 +16278,7 @@ async function saveSessionLog(quiet){
   // the shape goes in beside the report: the report is for people, the shape is what the card
   // itself renders this session from, forever, whatever the program becomes
   var shape0=[]; try{ shape0=sessionShape(); }catch(e){ shape0=[]; }
+  try{ srvCount('sessions'); }catch(e){}
   const snap={date:S.when.date, time:S.when.time, day:S.day, week:S.week, report:report(), shape:shape0};
   try{
     // stSet returns FALSE when the write fails - a full device, most often - and this line
@@ -19665,6 +19872,10 @@ load().then(async()=>{
   if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs(); try{ landOnTraining(); }catch(e){ try{ syncToNext(); }catch(e2){} }
   // v217: pre-shape sessions get a shape from their own report - AFTER refreshLogs, or there is
   // nothing to read. The first cut ran it earlier, saw an empty list, and marked itself done.
+  // v226: never mid-session. If the athlete has work on the board that is not banked, the check
+  // waits for the next open - being asked for a code with four sets logged and nowhere to put
+  // them is the worst thing this layer could do to somebody.
+  try{ if(!sessionHasWork()) srvCheck(); }catch(e){ try{ srvCheck(); }catch(e2){} }
   try{ docBackfill(); }catch(e){}
   try{ tplMigrate(); }catch(e){}   // v220: the template changed shape - logged sets follow their movement
   try{ if(S._avaPick){ profEdit=true; S._avaPick=null; save(); } }catch(e){}
