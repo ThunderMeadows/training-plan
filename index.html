@@ -9891,7 +9891,12 @@ function accessGrant(role, via, days, exp){
 // What is sent: the key's fingerprint, this device's random id, the build, and small named
 // counters. Never a lift, a weight, a max, a bodyweight, a name, a note or a session report.
 var SRV_BASE='https://deadstop-access.manuel-g-grajeda.workers.dev';
-var SRV_GRACE=14, SRV_EVERY=7, SRV_TIMEOUT=7000;
+// v229: SRV_EVERY 7 -> 1. His ask: "see who is currently running the application". A weekly
+// check could only ever say "sometime this week". One check on the first open of a day - never
+// during a session, never awaited - gives "opened today / yesterday / six days ago" per person,
+// and a revoke now lands within a day. Cost: ~2 storage writes per device per day; the free
+// tier's 1,000/day covers roughly 400 daily athletes before the $5 plan is needed.
+var SRV_GRACE=14, SRV_EVERY=1, SRV_TIMEOUT=7000;
 function srvOn(){ return !!SRV_BASE; }
 function srvDev(){
   try{
@@ -10231,9 +10236,107 @@ function adminShareHref(kind, code, role){
   if(kind==='sms') return 'sms:?&body='+encodeURIComponent(body);
   return 'mailto:?subject='+encodeURIComponent('Your Training Card code')+'&body='+encodeURIComponent(body);
 }
+// ===== THE BRIDGE (v228) =====
+// His ask: "Build the bridge please. Its easier for me to run things through the admin in my
+// card." Until now the card's Admin tab and the Worker did not talk: the tab kept its own list
+// on his phone, and Unissue silently returned a key to the pool that the server still had
+// claimed by somebody's phone. Now the Worker is the truth and the tab is a view of it. His
+// admin token lives on his card (S.adminTok - it is his phone, same trust as the pool key),
+// and every action on the tab is a request to the server first, the ledger second.
+async function srvAdmin(path, body, method){
+  if(!srvOn() || !S.adminTok) return null;
+  var ctl=null, t=null;
+  try{ ctl=new AbortController(); t=setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, SRV_TIMEOUT); }catch(e){}
+  try{
+    var r=await fetch(SRV_BASE.replace(/\/+$/,'')+path, {method:method||'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.adminTok},
+      body:(method==='GET')? undefined : JSON.stringify(body||{}), signal:ctl? ctl.signal : undefined});
+    if(t) clearTimeout(t);
+    if(r.status===401){ return {ok:false, reason:'auth'}; }
+    return await r.json();
+  }catch(e){ if(t) clearTimeout(t); return null; }
+}
+// pull live status for every issued key, and the numbers - then redraw
+var _adminSyncing=false;
+async function adminSync(){
+  if(_adminSyncing || !S.adminTok) return;
+  _adminSyncing=true;
+  try{
+    S.adminLive=S.adminLive||{};
+    var iss=adminIssued();
+    for(var i=0;i<iss.length;i++){
+      var fp=accessFp(iss[i].code);
+      var r=await srvAdmin('/v1/admin/key?fp='+fp, null, 'GET');
+      if(r && r.ok===false && r.reason==='auth'){ S.adminLiveErr='auth'; break; }
+      if(r && r.ok && r.key){ S.adminLive[fp]={devs:(r.key.devs||[]).length, rev:!!r.key.rev, exp:r.key.exp||null, to:r.key.to||null, at:shiftDate()}; S.adminLiveErr=null; }
+      else if(r===null){ S.adminLiveErr='offline'; break; }
+    }
+    var who=await srvAdmin('/v1/admin/devices', null, 'GET');
+    if(who && who.ok){ S.adminWho={at:shiftDate(), today:who.today, list:who.devices||[]}; }
+    var st=await srvAdmin('/v1/admin/stats?days=30', null, 'GET');
+    if(st && st.ok){ S.adminStats={at:shiftDate(), s:st.stats}; S.adminLiveErr=null; }
+    else if(st===null) S.adminLiveErr='offline';
+    else if(st && st.reason==='auth') S.adminLiveErr='auth';
+    save();
+  }catch(e){}
+  _adminSyncing=false;
+  try{ if(S.day==='ADMIN') render(); }catch(e){}
+}
+function adminLiveOf(code){ try{ return (S.adminLive||{})[accessFp(code)]||null; }catch(e){ return null; } }
+// Who's active - one line per device that has checked in, newest first. Name is whatever he
+// wrote beside the key when he issued it; a key issued without a name shows the batch instead.
+function adminWhoHTML(){
+  var W=S.adminWho; if(!W || !Array.isArray(W.list)) return '';
+  var t=W.today||shiftDate();
+  var ago=function(d){ if(!d) return 'never'; var n=adDays(d,t); return n<=0? 'today' : n===1? 'yesterday' : n+' days ago'; };
+  var rows=W.list.slice(0,60).map(function(x){
+    var stale=x.last? adDays(x.last,t) : 999;
+    return '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">'
+      +'<div><b>'+esc(x.to||('\u2014 '+(x.b||'')))+'</b> <span class="cue" style="font-size:11px">\u00b7 '+esc(x.role||'?')+' \u00b7 '+esc(x.build||'?')+'</span></div>'
+      +'<div class="cue" style="font-size:12px;white-space:nowrap;'+(stale<=1? 'color:var(--green)' : stale<=7? '' : 'opacity:.6')+'">'+esc(ago(x.last))+'</div></div>';
+  }).join('');
+  var todayN=W.list.filter(function(x){ return x.last===t; }).length, weekN=W.list.filter(function(x){ return x.last && adDays(x.last,t)<=7; }).length;
+  return '<div class="block"><h3>Who\u2019s active</h3>'
+    +'<div class="cue" style="margin-bottom:4px"><b>'+todayN+'</b> opened the card today \u00b7 <b>'+weekN+'</b> this week \u00b7 '+W.list.length+' phones in the last 90 days</div>'
+    +(rows||'<div class="cue">Nobody has checked in yet.</div>')
+    +(W.list.length>60? '<div class="cue" style="font-size:11px;opacity:.7;margin-top:4px">showing the 60 most recent</div>' : '')
+    +'</div>';
+}
+function adminStatsHTML(){
+  var st=S.adminStats&&S.adminStats.s; if(!st) return '';
+  var t=st.totals||{}, d=st.devices||{}, k=st.keys||{};
+  var ref=Object.keys(t).filter(function(x){ return x.indexOf('refuse.')===0; }).map(function(x){ return x.slice(7)+' '+t[x]; });
+  return '<div class="block"><h3>The numbers \u00b7 last 30 days</h3>'
+    +'<div class="cue" style="line-height:1.7">'
+    +'<b>'+(d.week||0)+'</b> active this week \u00b7 <b>'+(d.month||0)+'</b> this month<br>'
+    +'<b>'+(t.activate||0)+'</b> codes claimed \u00b7 <b>'+(t['use.sessions']||0)+'</b> sessions logged<br>'
+    +'<b>'+(k.claimed||0)+'</b> of '+(k.total||0)+' keys in use \u00b7 <b>'+(k.revoked||0)+'</b> revoked'
+    +(ref.length? '<br>Refused: '+esc(ref.join(', '))+' <span style="opacity:.7">\u2014 \u201cinuse\u201d is a code tried on a second phone</span>' : '<br>Nothing refused.')
+    +(d.builds? '<br>Builds: '+esc(Object.keys(d.builds).map(function(b){ return b+' ('+d.builds[b]+')'; }).join(', ')) : '')
+    +'</div><div class="cue" style="font-size:11px;opacity:.7;margin-top:4px">as of '+esc(S.adminStats.at)+'</div></div>';
+}
 function adminHTML(){
   var pool=adminPool();
   var h='<div class="sub" style="margin-top:8px">Administration</div>';
+  if(srvOn()){
+    if(!S.adminTok){
+      h+='<div class="block" style="border-color:var(--amber)"><h3>Connect to the server</h3>'
+        +'<div class="cue">Revoking a key, replacing a lost phone and the live numbers all happen on the server. Enter your admin token once \u2014 the same one you set on Cloudflare \u2014 and this tab does the rest.</div>'
+        +'<input type="password" id="adminTokIn" class="dtin" placeholder="admin token" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:8px">'
+        +'<div class="toggle lockfree" data-admintok="1" style="margin-top:8px">Connect</div></div>';
+    } else {
+      var err=S.adminLiveErr;
+      h+='<div class="block"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+        +'<div class="cue">'+(err==='auth'? '<b style="color:var(--red)">The server did not accept the token.</b> Enter it again.'
+                              : err==='offline'? '<b style="color:var(--amber)">Could not reach the server.</b> Showing what was last seen.'
+                              : 'Connected to the server.'+(S.adminStats? ' Last read '+esc(S.adminStats.at)+'.' : ''))+'</div>'
+        +'<span class="toggle lockfree" data-adminsync="1" style="padding:0 12px;font-size:11px;white-space:nowrap">Refresh</span></div>'
+        +(err==='auth'? '<input type="password" id="adminTokIn" class="dtin" placeholder="admin token" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:8px"><div class="toggle lockfree" data-admintok="1" style="margin-top:8px">Connect</div>' : '')
+        +'</div>';
+      h+=adminWhoHTML();
+      h+=adminStatsHTML();
+    }
+  }
   if(!pool){
     return h+'<div class="block"><h3>Key pool</h3><div class="cue">The pool is locked. Enter the admin code again under Settings \u2192 Access to open it.</div>'
       +'<div class="toggle lockfree" data-accesscode="1" style="margin-top:8px">Enter a code</div></div>';
@@ -10264,8 +10367,22 @@ function adminHTML(){
     return '<div class="ex" style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
       +'<div><b>'+esc(x.to||'\u2014')+'</b> <span class="cue">\u00b7 '+esc(x.role)+' \u00b7 issued '+esc(x.d)+(x.exp? ' \u00b7 key good till '+esc(x.exp):'')+'</span>'
       +'<div class="mono" style="font-size:13px;letter-spacing:.08em">'+esc(x.code)+'</div></div>'
-      +'<div style="display:flex;gap:6px"><span class="toggle lockfree" data-admincopy="'+esc(x.code)+'" style="padding:0 10px;font-size:11px">Copy</span>'
-      +'<span class="toggle lockfree" data-adminforget="'+idx+'" style="padding:0 10px;font-size:11px" title="Return this key to the pool">Unissue</span></div>'
+      +(function(){
+          // live status from the server, and the actions that are safe given it
+          var L=adminLiveOf(x.code);
+          var pill=!srvOn()? '' : !L? '<span class="cue" style="font-size:11px;opacity:.7">status unknown</span>'
+                  : L.rev? '<span class="cue" style="font-size:11px;color:var(--red)">revoked</span>'
+                  : L.devs? '<span class="cue" style="font-size:11px;color:var(--green)">on '+L.devs+' phone'+(L.devs>1?'s':'')+'</span>'
+                  : '<span class="cue" style="font-size:11px;opacity:.7">not yet entered</span>';
+          var acts='<span class="toggle lockfree" data-admincopy="'+esc(x.code)+'" style="padding:0 10px;font-size:11px">Copy</span>';
+          if(!srvOn()) acts+='<span class="toggle lockfree" data-adminforget="'+idx+'" style="padding:0 10px;font-size:11px">Unissue</span>';
+          else if(L && L.rev) acts+='<span class="toggle lockfree" data-adminrev="'+idx+'" data-on="0" style="padding:0 10px;font-size:11px">Un-revoke</span>';
+          else if(L && !L.devs) acts+='<span class="toggle lockfree" data-adminforget="'+idx+'" style="padding:0 10px;font-size:11px" title="Nobody has entered it: return it to the pool">Unissue</span>'
+                                    +'<span class="toggle lockfree" data-adminrev="'+idx+'" data-on="1" style="padding:0 10px;font-size:11px">Revoke</span>';
+          else if(L) acts+='<span class="toggle lockfree" data-adminrev="'+idx+'" data-on="1" style="padding:0 10px;font-size:11px">Revoke</span>'
+                          +'<span class="toggle lockfree" data-adminnewphone="'+idx+'" style="padding:0 10px;font-size:11px">New phone</span>';
+          return '<div>'+pill+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+acts+'</div>';
+        })()
       +'</div></div>'; }).join('');
   h+='</div>';
   h+='<div class="block"><h3>Your access</h3><div class="cue">Admin until <b>'+esc(accessUntilText())+'</b>. Adding or replacing keys in the pool is a build.</div></div>';
@@ -10278,16 +10395,40 @@ function adminWire(){
       var c=adminIssue(role, to);
       if(!c){ alertToast('No '+role+' keys left in the pool'); return; }
       S.adminLast={code:c, role:role, to:String(to).trim(), d:shiftDate()}; save(); render();
+      try{ if(srvOn() && S.adminTok && String(to).trim()) srvAdmin('/v1/admin/key', {fp:accessFp(c), to:String(to).trim()}); }catch(e){}
     }; });
     document.querySelectorAll('[data-admincopy]').forEach(function(b){ b.onclick=function(){
       var c=b.getAttribute('data-admincopy');
       try{ if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(c).catch(function(){}); }catch(e){}
       alertToast('Copied '+c);
     }; });
+    document.querySelectorAll('[data-admintok]').forEach(function(b){ b.onclick=function(){
+      var v=(document.getElementById('adminTokIn')||{}).value||''; v=String(v).trim(); if(!v) return;
+      S.adminTok=v; S.adminLiveErr=null; save(); render(); alertToast('Connecting\u2026'); adminSync();
+    }; });
+    document.querySelectorAll('[data-adminsync]').forEach(function(b){ b.onclick=function(){ alertToast('Reading the server\u2026'); adminSync(); }; });
+    document.querySelectorAll('[data-adminrev]').forEach(function(b){ b.onclick=async function(){
+      var i=+b.getAttribute('data-adminrev'), on=b.getAttribute('data-on')==='1'; var iss=adminIssued(); var x=iss[i]; if(!x) return;
+      if(on && !confirm('Revoke this key?\n\nWhoever holds it keeps training until their card next checks in \u2014 within a week \u2014 and is then asked for a code. Their sessions stay on their phone.')) return;
+      var r=await srvAdmin('/v1/admin/key', {fp:accessFp(x.code), rev:on});
+      if(r && r.ok){ x.rev=on; S.adminLive=S.adminLive||{}; S.adminLive[accessFp(x.code)]={devs:(r.key.devs||[]).length, rev:!!r.key.rev, exp:r.key.exp||null, at:shiftDate()}; save(); render(); alertToast(on? 'Revoked on the server.' : 'Restored on the server.'); }
+      else alertToast(r && r.reason==='auth'? 'The server did not accept the token.' : 'Could not reach the server \u2014 nothing changed.');
+    }; });
+    document.querySelectorAll('[data-adminnewphone]').forEach(function(b){ b.onclick=async function(){
+      var i=+b.getAttribute('data-adminnewphone'); var iss=adminIssued(); var x=iss[i]; if(!x) return;
+      if(!confirm('Let this key be claimed by a new phone?\n\nFor a lost or replaced phone. Their old phone stops at its next check.')) return;
+      var r=await srvAdmin('/v1/admin/key', {fp:accessFp(x.code), clearDevices:true});
+      if(r && r.ok){ S.adminLive=S.adminLive||{}; S.adminLive[accessFp(x.code)]={devs:0, rev:!!r.key.rev, exp:r.key.exp||null, at:shiftDate()}; save(); render(); alertToast('Cleared \u2014 they can set up on a new phone.'); }
+      else alertToast(r && r.reason==='auth'? 'The server did not accept the token.' : 'Could not reach the server \u2014 nothing changed.');
+    }; });
     document.querySelectorAll('[data-adminforget]').forEach(function(b){ b.onclick=function(){
       var i=+b.getAttribute('data-adminforget'); var iss=adminIssued(); if(!iss[i]) return;
+      // v228: with a server, Unissue is only offered for a key nobody has entered (see the list),
+      // so returning it to the pool is safe. Without a server it is bookkeeping, as before.
+      var L=srvOn()? adminLiveOf(iss[i].code) : null;
+      if(srvOn() && L && L.devs){ alertToast('Somebody has entered that key. Revoke it instead.'); return; }
       var gone=iss.splice(i,1)[0]; if(S.adminLast && S.adminLast.code===gone.code) delete S.adminLast;
-      save(); render(); alertToast('Returned to the pool \u2014 this does not remove access from anyone who already entered it');
+      save(); render(); alertToast(srvOn()? 'Returned to the pool.' : 'Returned to the pool \u2014 this does not remove access from anyone who already entered it');
     }; });
   }catch(e){}
 }
@@ -14214,7 +14355,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v227';
+const BUILD = 'v229';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -16634,7 +16775,10 @@ function renderInner(){
   }
   if(S.day==='ADMIN'){
     h+=(typeof adminAllowed==='function' && adminAllowed())? adminHTML() : '<div class="block"><div class="cue">Administrators only.</div></div>';
-    app.innerHTML=h; wire(); try{ adminWire(); }catch(e){} try{ settingsSync(); }catch(e){} return;
+    app.innerHTML=h; wire(); try{ adminWire(); }catch(e){} try{ settingsSync(); }catch(e){}
+    // v228: the tab reads the server when opened, if it has not today
+    try{ if(adminAllowed() && S.adminTok && !(S.adminStats && S.adminStats.at===shiftDate())) adminSync(); }catch(e){}
+    return;
   }
   if(S.day==='LIB'){
     h+=libraryHTML();
