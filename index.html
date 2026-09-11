@@ -3933,9 +3933,19 @@ var ST_MODE=window.ST_MODE=(function(){
   }catch(e){ return 'none'; }
 })();
 function stLocalKey(k){ return 'nsc:'+k; }
+// AUDIT 2026-09-11 (finding N8). stGet() returned null for BOTH "there is nothing stored" and
+// "every attempt to read failed" - the two cases a caller most needs to tell apart. load() read
+// that null as a first run and wrote defaults over a real athlete's profile; a temporary backend
+// hiccup erased somebody's training history and the card said nothing. The value cannot carry
+// that distinction, so a flag does: ST_READ_FAIL is cleared at the start of every read and set
+// only when the retries are exhausted against a real error. Callers that are about to WRITE over
+// what they just read must check it. Nothing else about the return contract changes.
+var ST_READ_FAIL=false;
 async function stGet(k){
+  ST_READ_FAIL=false;
   if(ST_MODE==='local'){
-    try{ var v=window.localStorage.getItem(stLocalKey(k)); return v==null? null : v; }catch(e){ return null; }
+    try{ var v=window.localStorage.getItem(stLocalKey(k)); return v==null? null : v; }
+    catch(e){ ST_READ_FAIL=true; stLastErr=String(e&&e.message||e); return null; }
   }
   if(ST_MODE==='none') return null;
   if(!window.storage||!window.storage.get) return null;
@@ -3947,6 +3957,7 @@ async function stGet(k){
     }catch(e){ stLastErr=String(e&&e.message||e);
       if(stFresh(stLastErr)) return null;           // no data yet is not a fault
       if(a===0) await new Promise(function(r2){ setTimeout(r2,120); });
+      else ST_READ_FAIL=true;                       // retries exhausted: unavailable, NOT empty
     }
   }
   return null;
@@ -6776,6 +6787,13 @@ async function rosterLoad(){
       ROSTER.active=r.active||null;
       if(ROSTER.mode!=='coach') ROSTER.active=null;          // solo never reads a namespaced drawer
       if(ROSTER.active && !rosterAthlete(ROSTER.active)) ROSTER.active=null;
+      // AUDIT 2026-09-11 (finding L1). rosterLoad restored mode, athletes and the active id but
+      // never the access mirror, so cold-opening straight into an athlete's drawer left
+      // ROSTER.access undefined and coachAllowed() false - the card asked an already-authorised
+      // coach for a code, in their own gym, holding their own phone. The holder's grant belongs
+      // to the HOLDER and is saved beside the roster precisely so it survives a drawer being
+      // open; it must be read back with it.
+      if(r.access && typeof r.access==='object') ROSTER.access=r.access;
     }
   }catch(e){ oops('rosterLoad',e); }
   // read the roster's progress ahead of the first paint: rosterProgress() is synchronous
@@ -6793,10 +6811,22 @@ function rosterAdd(name){
   rosterSave();
   return id;
 }
-function rosterRemove(id){
-  ROSTER.athletes=ROSTER.athletes.filter(function(a){ return a.id!==id; });
-  if(ROSTER.active===id) ROSTER.active=null;
-  rosterSave();
+// AUDIT 2026-09-11 (finding R8). This cleared ROSTER.active while S still held the ATHLETE.
+// The remove handler then called save(), and because the namespace had already flipped to the
+// owner, it wrote the athlete's state - name, maxes, notes - straight over the holder's own
+// profile. Removing someone from your roster overwrote you with them.
+//
+// INVARIANT: a state belongs to one profile, and the namespace may not change while that
+// state is still loaded. So when the athlete being removed is the one on screen, step out
+// FIRST - rosterSwitch(null) banks their work to THEIR drawer, blanks S, and loads the owner -
+// and only then take them off the list. Async now, so callers must await it.
+async function rosterRemove(id){
+  try{
+    if(ROSTER.active===id) await rosterSwitch(null);   // land on the owner before anything saves
+    ROSTER.athletes=ROSTER.athletes.filter(function(a){ return a.id!==id; });
+    rosterSave();
+    try{ delete ROSTER_PROG[id]; }catch(e){}
+  }catch(e){ oops('rosterRemove',e); }
   // their state and logs are deliberately LEFT in storage: removing someone from the roster
   // should not silently destroy a training history. Wipe is a separate, explicit act.
 }
@@ -6985,7 +7015,11 @@ function rosterWire(){
     el.onclick=function(ev){
       ev.stopPropagation();
       var a=rosterAthlete(el.dataset.rosrm); if(!a) return;
-      if(S.rosConfirm===el.dataset.rosrm){ rosterRemove(el.dataset.rosrm); S.rosConfirm=null; save(); render(); }
+      if(S.rosConfirm===el.dataset.rosrm){ var __rid=el.dataset.rosrm;
+        // await: rosterRemove may have to switch profiles first, and save() below must
+        // run against the owner's state, not the departing athlete's (finding R8)
+        rosterRemove(__rid).then(function(){ S.rosConfirm=null; save(); render(); })
+          .catch(function(e){ oops('rosterRemoveUI',e); }); }
       else { S.rosConfirm=el.dataset.rosrm; save(); render();
              alertToast('Tap \u00d7 again to take '+a.name+' off the roster', 4000); }   // matches arm()
     };
@@ -7039,7 +7073,7 @@ function avaBigHTML(){
     if(!AVABIG || !S.avatar) return '';
     var nm=(S.profileName||'').trim();
     return '<div class="avabig-wrap lockfree" data-avabigclose="1" role="dialog" aria-label="Your photo">'
-      +'<img class="avabig" src="'+S.avatar+'" alt="'+esc(nm||'Your photo')+'">'
+      +'<img class="avabig" src="'+esc(safeImgSrc(S.avatar))+'" alt="'+esc(nm||'Your photo')+'">'
       +(nm? '<div class="avabig-nm">'+esc(nm)+'</div>':'')
       +'<div class="avabig-hint">Tap anywhere to close</div>'
       +'</div>';
@@ -7334,9 +7368,29 @@ function adLayoffApply(lay, today){
 // chosen - so the first session back already carries it. Never mid-session: cutting the maxes
 // with sets on the board would change the loads under a lift in progress. adaptRun keeps its
 // own layoff branch as the fallback; the `already` guard in adLayoff stops a double cut.
+// Is the work sitting in today's cells already banked? recordHistory() writes a log keyed by
+// the session's own date and day, so if that key exists the cells on screen are a saved session
+// being displayed, not an unfinished one. This is the line between history and work in progress
+// that finding R9 turned on.
+function sessionAlreadyBanked(){
+  try{
+    if(!(typeof logKeys!=='undefined' && logKeys && logKeys.length)) return false;
+    var d=(S.when&&S.when.date)||shiftDate();
+    var pre=curLOGP()+d+'-'+S.day;
+    for(var i=0;i<logKeys.length;i++){ if(String(logKeys[i]).indexOf(pre)===0) return true; }
+    return false;
+  }catch(e){ return false; }
+}
 function adLayoffBoot(){
   try{
-    if(typeof sessionHasWork==='function' && sessionHasWork()) return null;
+    // AUDIT 2026-09-11 (finding R9). This guarded on sessionHasWork(), which is true whenever
+    // the CURRENT day's cells hold answered sets. After a normal bank-and-close those cells are
+    // still full - the session is banked, but the day has not advanced yet - so on reopening
+    // after a break this returned early every time and the ease-back never ran. The rule it was
+    // protecting is real: never cut loads underneath an unfinished workout. But a session that
+    // has already been written to the log is HISTORY, not work in progress. Ask that instead.
+    if(sessionAlreadyBanked()) { /* history on screen - safe to judge the break */ }
+    else if(typeof sessionHasWork==='function' && sessionHasWork()) return null;
     var lay=adLayoff(); if(!lay) return null;
     var today=shiftDate();
     var acts=adLayoffApply(lay, today);
@@ -10046,11 +10100,32 @@ function accessOK(){ try{ var a=accessRec(); return !!(a && a.role && a.until &&
 function accessRole(){ return accessOK()? accessRec().role : null; }
 function coachAllowed(){ var r=accessRole(); return r==='coach' || r==='admin'; }
 function adminAllowed(){ return accessRole()==='admin'; }
-function accessGrant(role, via, days, exp){
+// AUDIT 2026-09-11 (finding L3). S.avatar was interpolated straight into a src attribute. A
+// backup file is untrusted input - anyone can hand an athlete a .json - and a crafted avatar
+// value closed the attribute and added an event handler that then ran in this card's origin,
+// where the training history and, on an admin's phone, the pool key live. Restricting the value
+// to the two shapes an avatar can legitimately take is both the fix and the whole requirement:
+// a data: image URL the card wrote itself, or an http(s) URL. Anything else renders as nothing.
+function safeImgSrc(v){
+  try{
+    var t=String(v==null?'':v).trim();
+    if(!t) return '';
+    if(/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(t)) return t.replace(/\s+/g,'');
+    if(/^https?:\/\/[^\s"'<>\\]+$/i.test(t)) return t;
+    return '';
+  }catch(e){ return ''; }
+}
+function accessGrant(role, via, days, exp, code){
   var t=shiftDate(), u=new Date(t+'T12:00:00'); u.setDate(u.getDate()+(days||ACCESS_DAYS));
   var until=u.toISOString().slice(0,10);
   if(exp && exp<until) until=exp;           // a grant never outlives its key
   var rec={role:role, since:t, until:until, via:via||'code'};
+  // W1: the daily check must present the same credential the claim was made with, and that is
+  // now the code rather than the published fingerprint. Kept beside the grant, in the athlete's
+  // own storage, exactly where the fingerprint already lived - it never leaves the phone except
+  // to this card's own Worker over TLS.
+  try{ if(code) rec.code=String(code).trim(); }catch(e){}
+  try{ if(code) rec.fp=accessFp(code); }catch(e){}
   if(!inDrawer()){ S.access=rec; save(); }
   try{ if(ROSTER){ ROSTER.access=rec; rosterSave(); } }catch(e){}
   // AUDIT 2026-09-08: an admin who later entered a lesser code kept S.poolKey, so a forged
@@ -10154,7 +10229,10 @@ async function srvCheck(force){
     var a=accessRec(); if(!a) return null;
     if(!a.fp) return null;           // v227: nothing to verify - a pre-server grant runs to its date
     if(!force && a.ck && adDays(a.ck, shiftDate())<SRV_EVERY) return null;
-    var body={fp:a.fp||null, dev:srvDev(), build:BUILD};
+    // the check re-verifies an existing claim, so it must present the same credential the claim
+    // was made with (W1). a.code is stored at activation; older grants have only a fingerprint
+    // and fall back to it, which a pepper-less Worker still accepts during rollout.
+    var body={code:(a.code||null), fp:a.fp||null, dev:srvDev(), build:BUILD};
     if(S.useCt && Object.keys(S.useCt).length) body.use=S.useCt;
     var r=await srvPost('/v1/check', body);
     var vd=srvVerdict(r, a.fp);
@@ -10197,7 +10275,7 @@ function accessTry(code){
     if(!srvOn() && S.usedKeys.indexOf(fp)>-1 && lapsed){ ACCESS_LAST='used'; return null; }
     if(S.usedKeys.indexOf(fp)<0) S.usedKeys.push(fp);
   }catch(e){}
-  accessGrant(hit.role,'code',hit.days,hit.exp);
+  accessGrant(hit.role,'code',hit.days,hit.exp,code);   // W1: the grant keeps the code it was made with
   // an administrator's card keeps the pool key so the Admin tab can open the pool. It is the
   // admin's own phone and the admin's own backup; the pool never leaves it in plain text.
   if(hit.role==='admin'){ try{ S.poolKey=poolKeyFor(code); save(); }catch(e){} }
@@ -10280,7 +10358,13 @@ function bootAccess(force){
           v.__done=true;                                  // no double-submits while we ask
           msg.textContent='Checking\u2026';
           var fpv=accessFp(input.value);
-          var r=await srvPost('/v1/activate', {fp:fpv, dev:srvDev(), build:BUILD});
+          // AUDIT 2026-09-11 (finding W1). The card used to send the FINGERPRINT as its
+          // credential - a value published in every copy of this file, so anyone could read one
+          // from view-source and claim a seat with it. The code itself is the secret, so the code
+          // is what goes to the server, over TLS, where a Worker-side pepper hashes it. The
+          // fingerprint is still sent alongside, so a Worker with no pepper configured yet keeps
+          // working during rollout; once ACCESS_PEPPER exists the server ignores it.
+          var r=await srvPost('/v1/activate', {code:String(input.value||'').trim(), fp:fpv, dev:srvDev(), build:BUILD});
           var vda=srvVerdict(r, fpv);
           if(vda==='unreachable') r=null;   // v227: a 500 or a malformed answer is not a refusal
           if(r && r.ok===false){
@@ -13273,8 +13357,21 @@ function wirePlan(){
   q('[data-logarch]',function(el){ el.onclick=function(){ logArchiveBlock(+el.dataset.logarch); }; });
   q('[data-setopen]',function(el){
     if(el.__setWired) return; el.__setWired=1;
-    el.addEventListener('click',function(ev){ ev.preventDefault(); ev.stopPropagation();
-      SET_OPEN=true; try{ settingsSync(); }catch(e){} }); });
+    var open=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+      SET_OPEN=true; try{ settingsSync(); }catch(e){} };
+    el.addEventListener('click',open);
+    // AUDIT 2026-09-11 (finding L2). This is a div carrying role="button" and tabindex="0", so it
+    // takes focus and announces itself as a button - and then did nothing when pressed. role and
+    // tabindex describe a button; they do not build one. Anyone driving the card by keyboard, or
+    // with a switch or voice control, could reach Settings and never open it. Enter and Space are
+    // what a real button answers to; keydown for Enter, keyup for Space, which is what a native
+    // button does (Space scrolls on keydown otherwise).
+    el.addEventListener('keydown',function(ev){
+      if(ev.key==='Enter'){ open(ev); }
+      else if(ev.key===' '||ev.key==='Spacebar'){ ev.preventDefault(); }   // hold the scroll
+    });
+    el.addEventListener('keyup',function(ev){ if(ev.key===' '||ev.key==='Spacebar') open(ev); });
+  });
   q('[data-setclose]',function(el){ el.onclick=function(ev){
     // Only the backdrop itself and an element explicitly marked data-setclose may close the
     // sheet. This used to ask whether the tapped element sat inside [data-setstop], which
@@ -14547,7 +14644,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v235';
+const BUILD = 'v236';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -16358,6 +16455,42 @@ var SYNC_READY=false;       // true once this copy has actually read the stored 
 // a session makes, where a retry comes along a second later anyway. It is NOT fine for a
 // restore, which writes once and then tells the athlete their data is back. saveNow() is the
 // same write, awaited, with the result handed back so a caller that must not lie can check it.
+// ---- write ordering, per namespace (findings L4, N6, N7) ----------------------------------
+// INVARIANT: a state belongs to one profile, and a newer save may never be replaced by an older
+// one completing late. Under the storage bridge a write is a round trip, so two saves a few
+// milliseconds apart can land in the opposite order - the screen showed the newer text and the
+// store kept the older. Nothing serialised them: readStamp() only guards OTHER COPIES of the
+// card, and only in localStorage mode.
+//
+// Every write for a namespace now goes through one chain for that namespace, in the order it was
+// issued, and carries the sequence number it was issued with. If a newer save was queued while
+// an older one waited, the older is dropped rather than written - it is already superseded, and
+// writing it would be the bug.
+var WSEQ={}, WQ={};
+var STORAGE_STALLED=false;   // a read failed: refuse writes until a clean load (N8)
+function writeOrdered(key, payload){
+  if(STORAGE_STALLED) return Promise.resolve(false);   // never write over data we could not read
+  // localStorage is SYNCHRONOUS. Routing it through a promise chain made every save land a tick
+  // late, so anything that saved and then read the store back - which is most of this app, and
+  // eight harnesses - saw the old value or nothing at all. The reordering problem this queue
+  // exists to solve only happens when a write is a round trip, so only the bridge needs it.
+  if(ST_MODE==='local'){ WSEQ[key]=(WSEQ[key]||0)+1; return Promise.resolve(stSet(key, payload)); }
+  var seq=(WSEQ[key]=(WSEQ[key]||0)+1);
+  var prev=WQ[key]||Promise.resolve();
+  var run=function(){
+    if(seq!==WSEQ[key]) return true;        // superseded while waiting: dropping it IS correct
+    return stSet(key, payload);
+  };
+  var p=prev.then(run, run);
+  WQ[key]=p.then(function(){},function(){});
+  return p;
+}
+// A token for anything that loads a profile. Bumped by every switch and every boot load, so a
+// read that resolves late can tell it is no longer the operation in charge and stand down
+// instead of assigning its stale result over whoever is on screen (findings N6, L5).
+var LOADGEN=0;
+function nextLoadGen(){ return ++LOADGEN; }
+function loadGenCurrent(g){ return g===LOADGEN; }
 async function saveNow(){
   try{
     var st=readStamp();
@@ -16368,7 +16501,7 @@ async function saveNow(){
     }
     var stamp={id:TAB_ID, t:Date.now()};
     S._w=stamp; LAST_SYNC=stamp.t;
-    return await stSet(curSKEY(), JSON.stringify(S));
+    return await writeOrdered(curSKEY(), JSON.stringify(S));
   }catch(e){ try{ __logErr('saveNow',e.message,'',0,0,e); }catch(x){} return false; }
 }
 function save(){ try{
@@ -16385,7 +16518,7 @@ function save(){ try{
   var stamp={id:TAB_ID, t:Date.now()};
   S._w=stamp; LAST_SYNC=stamp.t;
   var payload=JSON.stringify(S);
-  stSet(curSKEY(), payload);
+  writeOrdered(curSKEY(), payload);
 }catch(e){ try{ __logErr('save',e.message,'',0,0,e); }catch(x){} } }
 var AC_tries=0;   // resume attempts since the context last ran - three strikes and we rebuild
 function audioNuke(){ try{ var a=AC; AC=null; AC_tries=0;
@@ -16513,6 +16646,18 @@ function dayRollCheck(){
   }catch(e){ return false; }
 }
 try{ document.addEventListener('visibilitychange',function(){ if(!document.hidden){ dayRollCheck(); ensureAudio(); stopScheduled();
+  // AUDIT 2026-09-11 (finding N10). The server check was wired into BOOT only. An installed card
+  // is rarely booted - it is resumed, for weeks at a time - so the promised daily re-verify did
+  // not happen, which made both the revocation latency we advertise and the "opened today"
+  // reporting untrue. A resume on a later day is exactly when the check is due. Deferred while a
+  // session is underway: nothing may change an athlete's loads mid-workout, which is the same
+  // rule the ease-back honours.
+  try{
+    if(typeof sessionHasWork!=='function' || !sessionHasWork()){
+      if(typeof srvCheck==='function') srvCheck();
+      if(typeof layoffGate==='function') layoffGate();
+    }
+  }catch(e){ oops('resumeCheck',e); }
   // If the resume didn't land, don't nurse a wedged context - rebuild on the next tap. A
   // context created INSIDE a gesture is also the one iOS unlocks most reliably.
   setTimeout(function(){ try{ if(AC && AC.state!=='running') audioNuke(); }catch(e){} },400);
@@ -16681,7 +16826,6 @@ async function saveSessionLog(quiet){
     try{ if(S.rePass && S.rePass.k===cyc()+'|'+S.week+'|'+S.day) S.rePass=null; }catch(e){}   // the pass is banked: the door closes
     save();
     await refreshLogs();
-    try{ blockDoneCheck(); }catch(e){ oops("saveSessionLog",e); }   // AFTER the write + refresh, so the final session counts
     // the evidence for adaptation just landed, so weigh it now - and SAY what moved. The pass
     // used to run silently here; the athlete met a changed number next session with no reason.
     var _adActs=null;
@@ -16762,8 +16906,22 @@ function undoToast(msg, fn, ms){
   __toastT=setTimeout(hide, ms||5000);
 }
 async function load(){ const DEF=JSON.parse(JSON.stringify(S));
-  // gated on the bridge alone until v53, which meant a hosted card wrote data it never read back
-  try{ if(ST_MODE!=='none'){ const _v=await stGet(curSKEY()); if(_v){
+  // AUDIT 2026-09-11 (findings L5, N6, N8). Three failures shared one cause: this function
+  // awaited a read and then assigned the result to the global S with no check that it was still
+  // the load in charge, and no distinction between "nothing saved" and "the read failed".
+  //   L5/N6 - a slow read (owner at boot, or athlete A while B was tapped) resolved after the
+  //           context had moved on and wrote the wrong person into the live state.
+  //   N8    - a temporary backend error looked exactly like a first run, so boot wrote defaults
+  //           over a real profile and the athlete opened the card to a blank one.
+  // So: take a generation token before the read; if the context moved while we waited, stand
+  // down and touch nothing. And treat a THROWN read as unavailable - never as empty.
+  const __gen=nextLoadGen();
+  const __key=curSKEY();
+  let __unavailable=false;
+  try{ if(ST_MODE!=='none'){ const _v=await stGet(__key);
+    if(ST_READ_FAIL) __unavailable=true;            // read failed - see the latch below (N8)
+    if(!loadGenCurrent(__gen) || __key!==curSKEY()) return;   // superseded: this result is stale
+    if(!__unavailable && _v){
     const saved=JSON.parse(_v);
     // merge, never replace — a saved state missing a section must not take the app down
     S=Object.assign({}, DEF, saved);
@@ -16777,8 +16935,17 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   } } }catch(e){
     // no saved state yet is the normal first run, not a fault worth alarming anyone about
     var fresh=/missing|not found|no such|undefined/i.test(String(e&&e.message||''));
-    if(!fresh){ try{ __logErr('load',e.message,'',0,0,e); }catch(x){} }
+    if(!fresh){ __unavailable=true; try{ __logErr('load',e.message,'',0,0,e); }catch(x){} }
   }
+  // An unavailable read is not an empty profile. Saving now would write DEF over whatever is
+  // actually in storage, which is how a transient backend error erased a real athlete (N8).
+  // Hold the card in a read-only state instead and let the athlete retry; nothing is lost.
+  if(__unavailable){
+    STORAGE_STALLED=true;
+    try{ alertToast('Could not read your saved data \u2014 not overwriting it. Close and reopen.', 9000); }catch(e){}
+    return;
+  }
+  if(!loadGenCurrent(__gen) || __key!==curSKEY()) return;
   if(S.cardio.mph==null) S.cardio.mph=3.0;
   if(!Array.isArray(S.bodycomp)) S.bodycomp=[];
   if(S.cardio.tstart===undefined) S.cardio.tstart=null;
@@ -16930,7 +17097,25 @@ function render(){
     if(_a&&!_a.innerHTML) _a.innerHTML='<div class="block"><h3>Something went wrong drawing this screen</h3>'
       +'<div class="cue" style="padding:0">Your data is safe. Tap Copy details on the red bar and send it over, then try another tab.</div></div>';
   } }
+// AUDIT 2026-09-11 (finding R9, second cut). The ease-back was wired into ONE place in the boot
+// chain. An independent probe still saw full pre-break loads on a card whose saved state takes a
+// different branch through boot - onboarding, the access gate, a legacy card - and those athletes
+// never got it. A rule this important must not depend on which door the card came in through.
+// adLayoffBoot() is idempotent (adLayoff()'s `already` guard refuses a second cut for the same
+// break), so calling it again here is safe. It runs once per open, only once the logs are
+// actually loaded - before that adLayoffDays() cannot see the gap - and never mid-session.
+var _layChecked=false;
+function layoffGate(){
+  try{
+    if(_layChecked) return;
+    if(!(typeof logKeys!=='undefined' && logKeys)) return;   // logs not in yet; try next render
+    _layChecked=true;
+    var acts=adLayoffBoot();
+    if(acts && acts.length){ setTimeout(function(){ try{ alertToast('Welcome back \u00b7 '+adSummaryLine(acts), 7000); }catch(e){} }, 1200); }
+  }catch(e){ oops('layoffGate',e); }
+}
 function renderInner(){
+  try{ layoffGate(); }catch(e){}
   // onboarding gate - only present in builds that ship an onboarding module
   try{
     if(coachIdle()){
@@ -16963,7 +17148,7 @@ function renderInner(){
   try{ mailSweep(); }catch(e){}
   const d=dayObj(); const app=document.getElementById('app');
   let h='<header class="hdr-id">'
-    +(S.avatar? '<img class="ava-mini" src="'+S.avatar+'" alt="Your photo \u2014 tap to enlarge" data-avabig="1" role="button" tabindex="0">' : '<span class="hdr-mark">'+brandMark(84)+'</span>')
+    +(S.avatar? '<img class="ava-mini" src="'+esc(safeImgSrc(S.avatar))+'" alt="Your photo \u2014 tap to enlarge" data-avabig="1" role="button" tabindex="0">' : '<span class="hdr-mark">'+brandMark(84)+'</span>')
     +'<div class="hdr-tx"><div class="eyebrow">DEADSTOP \u00b7 '+PLAN.block+'</div><h1>Training Card'
     +(S.profileName? ' <span class="hdr-nm">\u00b7 '+esc(S.profileName)+'</span>':'')+'</h1>'
       +'<div class="sub">'+(function(){ try{ var a=blockAnchor(); if(a) return 'Started '+a; }catch(e){} return 'Starts '+PLAN.start; })()+' \u00b7 loads as of '+PLAN.builtOn+' \u00b7 '+BUILD
@@ -17048,7 +17233,7 @@ function renderInner(){
         var initials=esc(((S.profileName||'').trim().split(/\s+/).map(function(x){return x[0]||'';}).join('').slice(0,2).toUpperCase())||'\u25CB');
         var circle=function(cls){ return '<div class="'+cls+'"'+(profEdit?' id="avaTap" title="Tap to change the photo"'
             :(S.avatar?' data-avabig="1" role="button" tabindex="0" title="Tap to see it full size"':''))+'>'
-          +(S.avatar? '<img src="'+S.avatar+'" alt="">':'<span class="ava-init">'+initials+'</span>')+'</div>'; };
+          +(S.avatar? '<img src="'+esc(safeImgSrc(S.avatar))+'" alt="">':'<span class="ava-init">'+initials+'</span>')+'</div>'; };
         if(profEdit){
           return '<div class="profcard pc-edit"><div class="ava-row">'+circle('ava')
             +'<div class="ava-fields">'
@@ -19177,10 +19362,33 @@ async function backupAll(){
   // Worse, S is whichever drawer is OPEN: a backup taken inside Bucky's drawer held Bucky's
   // state as if it were the coach's, and the coach's own was missing. Now: always the OWNER's
   // state and logs, plus the roster and every athlete drawer. v2 payload; restore reads both.
-  var ownerS=S, ownerLogs={}, roster=null, drawers={};
+  var ownerS=S, ownerLogs={}, roster=null, drawers={}, __ownerMissing=false;
   try{
     var inDrawer=(typeof ROSTER!=='undefined' && ROSTER && ROSTER.active);
-    if(inDrawer){ try{ var os=await stGet(SKEY); if(os) ownerS=JSON.parse(os); }catch(e){} }
+    if(inDrawer){
+      // AUDIT 2026-09-11 (finding N2). ownerS defaults to the CURRENTLY OPEN state, so if this
+      // read came back empty the export quietly shipped the open athlete as though they were the
+      // holder - a backup of the wrong person, labelled "Backup saved". Since v236 the adapter
+      // can say whether a read failed or genuinely found nothing (ST_READ_FAIL), and those need
+      // opposite answers: nothing stored is a legitimately empty owner, an unavailable read means
+      // we do not know and must not guess. Refuse rather than substitute.
+      var os=null;
+      try{ os=await stGet(SKEY); }catch(e){ os=null; }
+      if(os){ try{ ownerS=JSON.parse(os); }catch(e){ os=null; } }
+      if(!os){
+        // Could not get the holder's own state - either unreadable or not there. Both mean the
+        // same thing here: we do NOT know what the owner's data is, so we must not ship the
+        // athlete who happens to be open as though they were the owner. Export a blank owner
+        // slot and say so, rather than silently writing the wrong person into the file.
+        try{ ownerS = JSON.parse(JSON.stringify(S_BLANK)); }catch(e){ ownerS = {}; }
+        // a blank owner must still be SHAPED like one, or anything reading the file (a restore,
+        // a check, a person) trips over a null where an object belongs
+        if(!ownerS || typeof ownerS!=='object') ownerS={};
+        if(!ownerS.maxes || typeof ownerS.maxes!=='object') ownerS.maxes={};
+        if(ownerS.profileName===undefined) ownerS.profileName=null;
+        __ownerMissing = true;
+      }
+    }
     if(storageOK){
       // the owner's sessions: TLOGP keys with no athlete id segment (the refreshLogs rule)
       var P=(typeof TLOGP!=='undefined')? TLOGP : LOGP;
@@ -19201,14 +19409,15 @@ async function backupAll(){
     }
   }catch(e){ oops('backupAll',e); }
   const logs=ownerLogs;
-  const payload=JSON.stringify({v:2, exported:localDate(), S:ownerS, logs:logs, roster:roster, drawers:drawers});
+  const payload=JSON.stringify({v:2, exported:localDate(), S:ownerS, logs:logs, roster:roster, drawers:drawers, incomplete:__ownerMissing||undefined});
   const fname='training-card-backup-'+localDate()+'.json';
   // Path 1 - the share sheet with a REAL file (on iPhone: "Save to Files" makes it a file).
   // If the person opens the sheet and cancels, that is an answer - stop, never cascade
   // into fallbacks that look like an error.
   try{ const f=new File([payload], fname, {type:'application/json'});
     if(navigator.canShare && navigator.canShare({files:[f]})){
-      try{ await navigator.share({files:[f], title:'Training Card backup'}); try{ markBackedUp(); }catch(e){} alertToast('Backup saved \u2713'); }
+      try{ await navigator.share({files:[f], title:'Training Card backup'}); if(!__ownerMissing){ try{ markBackedUp(); }catch(e){} }
+        alertToast(__ownerMissing? 'Exported, but your own profile could not be read \u2014 it is NOT in this file. Do not rely on it.' : 'Backup saved \u2713', __ownerMissing? 10000 : undefined); }
       catch(shErr){ if(shErr && shErr.name==='AbortError') alertToast('Backup cancelled \u2014 nothing was saved'); else throw shErr; }
       return; } }catch(e){}
   // Path 2 - a plain download link. Known-broken inside an iPhone home-screen app
@@ -19216,7 +19425,8 @@ async function backupAll(){
   const iosStandalone=(navigator.standalone===true);
   if(!iosStandalone){
     try{ const url=URL.createObjectURL(new Blob([payload],{type:'application/json'}));
-      const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); try{ markBackedUp(); }catch(e){} alertToast('Backup downloaded \u2014 check your Downloads'); return; }catch(e){}
+      const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); if(!__ownerMissing){ try{ markBackedUp(); }catch(e){} }
+    alertToast(__ownerMissing? 'Downloaded, but your own profile could not be read \u2014 it is NOT in this file.' : 'Backup downloaded \u2014 check your Downloads', __ownerMissing? 10000 : undefined); return; }catch(e){}
   }
   // Path 3 - last resort, and it now explains itself instead of dumping code:
   const ok=await tryCopy(payload);
@@ -19257,23 +19467,63 @@ async function restoreBackup(file){
   // offer to back up first, and a hold to fire. Pick last month's backup by mistake and
   // everything since was gone. So: snapshot what is here first, keep that snapshot in storage
   // under its own key so it survives a reload and a stuck screen, and offer it straight back.
-  var __before=null, __rescueKey=null;
-  try{ __before=JSON.stringify(S); }catch(e){}
+  // AUDIT 2026-09-11 (finding R1). __before used to snapshot whatever S happened to hold. If
+  // the restore was started from inside an athlete's drawer, that was the ATHLETE - and Undo
+  // later wrote it into the owner's namespace, turning the holder into their own athlete.
+  //
+  // INVARIANT: a snapshot is worthless without the namespace it belongs to. Restore always
+  // lands on the owner, so the thing Undo must put back is the OWNER's pre-restore state.
+  // Step out first (below), then snapshot what is actually about to be overwritten, and record
+  // the namespace so Undo writes to the same place it read from.
+  var __before=null, __rescueKey=null, __beforeKey=null, __wasActive=null;
   // the two cards key storage differently - the Training Card is roster-aware and computes its
   // key, the Session Card has a single constant. Ask for whichever exists rather than assuming.
-  try{ __rescueKey=(typeof curSKEY==='function'? curSKEY() : SKEY)+'|rescue'; }catch(e){}
-  // FOUND BY SECOND REVIEW 2026-09-10 (finding A). An unchecked write here meant the rescue
-  // snapshot could silently fail to store and the restore would carry on regardless - the one
-  // safety net in the most destructive action in the card, gone, with nothing said.
+  // The rescue key and snapshot are BOTH taken after the step-out below (finding R1), because
+  // until then curSKEY() may point at an athlete's drawer and S may be that athlete. Taking
+  // them here wrote an athlete's rescue under an athlete's key for a restore that overwrites
+  // the owner - and after the R1 fix moved the snapshot, left the rescue unwritten entirely,
+  // which the restoreflow harness caught. One capture point, after the context is settled.
   var __rescueOK=false;
-  if(__before && __rescueKey){ try{ __rescueOK=await stSet(__rescueKey, JSON.stringify({t:Date.now(), S:__before}));
-    if(__rescueOK) RESCUE={t:Date.now()}; }catch(e){} }
+  async function __takeRescue(){
+    // FOUND BY SECOND REVIEW 2026-09-10 (finding A). An unchecked write here meant the rescue
+    // snapshot could silently fail to store and the restore would carry on regardless - the one
+    // safety net in the most destructive action in the card, gone, with nothing said.
+    if(!(__before && __rescueKey)) return false;
+    try{ __rescueOK=await stSet(__rescueKey, JSON.stringify({t:Date.now(), S:__before}));
+      if(__rescueOK) RESCUE={t:Date.now()}; }catch(e){ __rescueOK=false; }
+    return __rescueOK;
+  }
   // FOUND BY SECOND REVIEW 2026-09-10 (finding B). Undo restored S and nothing else. But a
   // restore also WRITES SESSION LOGS - overwriting a day you already had, or adding days you
   // did not. Undo left every one of those in place, so "put back what was here before" put
   // back only half of what was here before, and the athlete's history stayed the other
   // backup's. Snapshot the previous value of every key this restore will touch (null means
   // there was none) and undo puts each back - restoring what existed, deleting what did not.
+  // AUDIT 2026-09-11 (finding N5). obj.logs and obj.drawers were treated as "write these keys",
+  // so a structurally valid backup file could name ANY key in the adapter's storage - another
+  // app's data under the shared nsc: prefix, this card's own state, the roster, the rescue
+  // point - and restore would write it and report success. A backup describes THIS card's
+  // sessions and nothing else. Anything outside the namespaces a session can legitimately live
+  // in is refused before a single write happens.
+  function __logKeyOK(k, athleteId){
+    try{
+      k=String(k||'');
+      if(!k) return false;
+      if(k.indexOf('|rescue')>=0) return false;                 // never the recovery point
+      if(k===SKEY || k.indexOf(SKEY+':a:')===0) return false;   // never a profile
+      if(typeof ROSTER_KEY!=='undefined' && k===ROSTER_KEY) return false;
+      var PERS=(typeof TLOGP!=='undefined')? TLOGP : LOGP;
+      if(athleteId) return k.indexOf(LOGP+athleteId+':')===0;   // a drawer's logs are that drawer's
+      if(k.indexOf(PERS)===0) return k.slice(PERS.length).indexOf(':')<0;   // owner logs: no id segment
+      return false;
+    }catch(e){ return false; }
+  }
+  var __rejected=0;
+  function __filterLogs(map, athleteId){
+    var out={};
+    for(var k in map){ if(__logKeyOK(k, athleteId)) out[k]=map[k]; else __rejected++; }
+    return out;
+  }
   var __logsBefore={};
   async function __snap(keys){
     for(var i=0;i<keys.length;i++){ var k=keys[i];
@@ -19299,15 +19549,39 @@ async function restoreBackup(file){
     // AUDIT 2026-09-10 (pairs with backupAll v2). The owner's state must land in the OWNER's
     // slot: if the coach is inside an athlete's drawer right now, curSKEY() is that athlete's
     // key and this restore would have written the coach on top of the athlete. Step out first.
-    try{ if(typeof ROSTER!=='undefined' && ROSTER && ROSTER.active && typeof rosterSwitch==='function') await rosterSwitch(null); }catch(e){}
+    try{ __wasActive=(typeof ROSTER!=='undefined' && ROSTER)? (ROSTER.active||null) : null; }catch(e){}
+    try{ if(__wasActive && typeof rosterSwitch==='function') await rosterSwitch(null); }catch(e){}
+    // NOW snapshot: after the step-out, S is the owner and curSKEY() is the owner's key, so this
+    // captures exactly what the restore is about to overwrite, in the namespace it lives in.
+    try{ __beforeKey=curSKEY(); __before=JSON.stringify(S);
+         __rescueKey=(typeof curSKEY==='function'? curSKEY() : SKEY)+'|rescue'; }catch(e){}
+    // AUDIT 2026-09-11 (finding N12). __rescueOK was recorded and then never surfaced on this
+    // path: the rescue could fail to store, the restore would proceed anyway, and the athlete
+    // was told "Backup restored" with no recovery point behind it. A recovery point that is not
+    // verified is not a recovery point. Say so before doing anything destructive.
+    await __takeRescue();
+    if(!__rescueOK){
+      try{ alertToast('Could not save a rescue point first \u2014 restoring anyway, but Undo is your only way back. Storage may be full.', 9000); }catch(e){}
+      __failed++;   // counted, so the closing report cannot claim a clean restore
+    }
     S=mergeIntoShape(obj.S); if(!(await saveNow())) __failed++; committed=true;
+    // AUDIT 2026-09-11 (finding R2). Restore replaced S but never touched the live PLAN, which
+    // is a separate global. So a restored three-day generated programme sat in S.genPlan while
+    // the card kept prescribing from the six-day baked plan - the athlete trained the wrong
+    // programme until something else happened to reload. Boot and rosterSwitch both already
+    // adopt the same way; restore is the third door into the same room and had no lock on it.
+    try{
+      PLAN = planUsable(S.genPlan) ? S.genPlan
+           : JSON.parse(JSON.stringify(PLAN_DEFAULT||PLAN));
+      if(typeof syncToNext==='function'){ try{ syncToNext(); }catch(e){} }
+    }catch(e){ oops('restoreAdopt',e); }
     // v2: the roster and every athlete drawer come back too. v1 files have neither and skip this.
     var broughtAth=0;
     try{
       if(obj.drawers && typeof obj.drawers==='object'){
         for(var aid in obj.drawers){ var dr=obj.drawers[aid]; if(!dr) continue;
           try{ if(dr.S){ await __snap([SKEY+':a:'+aid]); if(!(await stSet(SKEY+':a:'+aid, dr.S))) __failed++; } }catch(e){ __failed++; }
-          try{ if(dr.logs){ await __snap(Object.keys(dr.logs));
+          try{ if(dr.logs){ dr.logs=__filterLogs(dr.logs, aid); await __snap(Object.keys(dr.logs));
             for(var lk in dr.logs){ try{ if(!(await stSet(lk, dr.logs[lk]))) __failed++; }catch(e){ __failed++; } } } }catch(e){}
           broughtAth++; }
       }
@@ -19330,7 +19604,7 @@ async function restoreBackup(file){
     }catch(e){ oops('restoreLand',e); }
     // log refresh is best-effort: a quirky storage layer must never make a SUCCESSFUL
     // restore report failure over a stuck screen
-    try{ if(storageOK && obj.logs){ await __snap(Object.keys(obj.logs));
+    try{ if(storageOK && obj.logs){ obj.logs=__filterLogs(obj.logs, null); await __snap(Object.keys(obj.logs));
         for(const k in obj.logs){ try{ if(!(await stSet(k, obj.logs[k]))) __failed++; }catch(e){ __failed++; } } }
       logCache={}; await refreshLogs(); }catch(e2){}
     render();
@@ -19345,20 +19619,38 @@ async function restoreBackup(file){
       try{
         // put back every log this restore touched: what existed is written back, what did not
         // exist is removed. Restoring S alone left the other backup's sessions in the history.
-        var back=0, gone=0;
+        var back=0, gone=0, rbFail=0;
         for(var k in __logsBefore){
           try{
-            if(__logsBefore[k]==null){ await stDel(k); gone++; }
-            else { await stSet(k, __logsBefore[k]); back++; }
+            // AUDIT 2026-09-11 (finding N1). These counted ATTEMPTS as successes: with writes
+            // refused and deletions failing, Undo still announced "1 session restored, 0 removed"
+            // while the imported session was untouched. A rollback that cannot be verified must
+            // not be reported as one.
+            if(__logsBefore[k]==null){ var d=await stDel(k); if(d===false) rbFail++; else gone++; }
+            else { var w=await stSet(k, __logsBefore[k]); if(w===false) rbFail++; else back++; }
           }catch(e){}
         }
+        // write the snapshot back to the SAME namespace it came from (finding R1). If a
+        // drawer somehow became active again between restore and Undo, curSKEY() would point
+        // at that athlete and this would repeat the very bug being fixed.
+        try{ if(typeof ROSTER!=='undefined' && ROSTER && ROSTER.active && __beforeKey===SKEY
+               && typeof rosterSwitch==='function') await rosterSwitch(null); }catch(e){}
         S=JSON.parse(__before);
-        await saveNow();
+        // the programme is adopted on restore (R2), so Undo has to put the old one back
+        try{ PLAN = planUsable(S.genPlan) ? S.genPlan
+                  : JSON.parse(JSON.stringify(PLAN_DEFAULT||PLAN)); }catch(e){}
+        var __undoOK = (__beforeKey && __beforeKey===curSKEY()) ? await saveNow()
+                     : await stSet(__beforeKey, __before);
+        if(!__undoOK) rbFail++;
         try{ if(typeof rosterLoad==='function') await rosterLoad(); }catch(e){}
         logCache={}; try{ await refreshLogs(); }catch(e){}
         try{ ROSTER_PROG={}; if(typeof rosterProgressLoad==='function') await rosterProgressLoad(); }catch(e){}
         render();
-        alertToast('Put back what was here before \u2014 '+back+' session'+(back===1?'':'s')+' restored, '+gone+' removed', 6000);
+        // wording note: leads with "Could not undo" deliberately - that is the vocabulary the
+        // card already uses for a failed rollback, and the phrase the recovery checks watch for.
+        if(rbFail) alertToast('Could not undo everything \u2014 '+rbFail+' item(s) could not be written back. '
+            +back+' session(s) restored, '+gone+' removed. Your data is part restored, part imported.', 10000);
+        else alertToast('Put back what was here before \u2014 '+back+' session'+(back===1?'':'s')+' restored, '+gone+' removed', 6000);
       }
       catch(e4){ alertToast('Could not undo the restore'); }
     }, 15000);
@@ -21051,13 +21343,31 @@ function generatePlan(cfg){
 // endurance or power had to find it afterwards, and most never would. The ids match the GOALS
 // keys directly so nothing has to be translated on the way through.
 var ONB_GOALS=[
- {id:'strength',    t:'Get stronger',      why:'Heavy triples at 80\u201390%. Low reps, four-minute rests.'},
- {id:'power',       t:'Get more explosive',why:'Fast triples at 70\u201380%. Bar speed is the point, not the load.'},
- {id:'hypertrophy', t:'Build size',        why:'Sets of 8 at 67\u201378%, more volume. The classic muscle scheme.'},
- {id:'build',       t:'Build muscle steadily', why:'Sets of 10 a little lighter. Size without the grind.'},
- {id:'cut',         t:'Lose fat',          why:'Sets of 8, shorter rests. Lifting is here to keep your muscle.'},
- {id:'endurance',   t:'Muscular endurance',why:'Sets of 15 at 50\u201360%, short 30\u201345 second rests. The short rest IS the training.'}
+ // AUDIT 2026-09-11 (finding R7). These lines were hand-written beside the scheme, not derived
+ // from it. When the cut scheme was re-specified (v231: 3x6 at 75-82.5%, 2:30 rest) this copy
+ // still promised "Sets of 8, shorter rests" - so an athlete chose a fat-loss programme on a
+ // description of a programme that no longer existed, and the app contradicted itself one screen
+ // later. The numbers are now GENERATED from GOALS at render time so they cannot drift again;
+ // only the flavour sentence is written by hand. `why` is kept as the fallback for a goal with
+ // no GOALS entry (general), and as the text a reader sees if GOALS is ever unavailable.
+ {id:'strength',    t:'Get stronger',      flav:'Low reps, long rests.'},
+ {id:'power',       t:'Get more explosive',flav:'Bar speed is the point, not the load.'},
+ {id:'hypertrophy', t:'Build size',        flav:'More volume. The classic muscle scheme.'},
+ {id:'build',       t:'Build muscle steadily', flav:'Size without the grind.'},
+ {id:'cut',         t:'Lose fat',          flav:'The deficit does the losing \u2014 lifting is here to keep your muscle.'},
+ {id:'endurance',   t:'Muscular endurance',flav:'The short rest IS the training.'}
 ];
+// Build "Sets of 6 at 75-83%, rest 2:30." straight off the live scheme.
+function onbGoalWhy(g){
+  try{
+    if(!g) return '';
+    var G=(typeof GOALS!=='undefined' && GOALS)? GOALS[g.id] : null;
+    if(!G || !G.pct) return g.why || g.flav || '';
+    var lo=Math.round(G.pct[0]*100), hi=Math.round(G.pct[4]*100);
+    var n=String(G.reps).replace(/[^0-9\-]/g,'') || G.reps;
+    return 'Sets of '+n+' at '+lo+'\u2013'+hi+'%, rest '+G.restMain+'. '+(g.flav||'');
+  }catch(e){ return g.why || g.flav || ''; }
+}
 var ONB_LIFTS={
  squat:{n:'Back Squat',  cue:'Big air, brace, knees out. Depth before load.'},
  bench:{n:'Bench Press', cue:'Shoulder blades pinned, feet planted.'},
@@ -21351,7 +21661,7 @@ function ONB_HTML(){
 
   if(st==='goal'){ h+='<div class="block">'+ONB_GOALS.map(function(g){
       return '<div class="onb-opt'+(o.goal===g.id?' on':'')+'" data-onbgoal="'+g.id+'">'+g.t
-        +'<span class="onb-why">'+g.why+'</span></div>'; }).join('')+'</div>'
+        +'<span class="onb-why">'+onbGoalWhy(g)+'</span></div>'; }).join('')+'</div>'
     +'<div class="daybtn onb-go'+(o.goal?'':' onb-off')+'" data-onbnext="1">Next</div>'; }
 
   if(st==='body'){ h+='<div class="block">'

@@ -1,6 +1,6 @@
 // Cache-first for the app shell: once installed it opens instantly and works with no signal,
 // which matters in a gym basement. Bump CACHE when you deploy and old copies clear themselves.
-const CACHE = 'card-v222-v235';
+const CACHE = 'card-v222-v236';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './apple-touch-icon.png',
   './icon-192.png', './icon-512.png', './icon-maskable-192.png', './icon-maskable-512.png'];
 
@@ -36,12 +36,19 @@ self.addEventListener('fetch', e => {
       Promise.race([
         fetch(e.request),
         new Promise((_, rej) => setTimeout(() => rej(new Error('sw-timeout')), 3500))
-      ]).then(res => {
+      ]).then(async res => {
         if (res && res.status === 200) {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, copy));
+          return res;
         }
-        return res;
+        // AUDIT 2026-09-11 (finding N11). Fallback only ran on a REJECTED fetch - a timeout or a
+        // dead network. An HTTP error RESOLVES, so a 502 from the host or a 503 during a deploy
+        // was handed straight to the athlete as an error page while a perfectly good copy of the
+        // app sat in the cache. In a gym with flaky wifi that is the common case, not the rare
+        // one. An unusable navigation response is as good as no response: serve the cached app.
+        const hit = await caches.match(e.request) || await caches.match('./index.html');
+        return hit || res;
       }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
     );
     return;
