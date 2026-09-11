@@ -1,15 +1,23 @@
 // Cache-first for the app shell: once installed it opens instantly and works with no signal,
 // which matters in a gym basement. Bump CACHE when you deploy and old copies clear themselves.
-const CACHE = 'card-v222-v229';
+const CACHE = 'card-v222-v234';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './apple-touch-icon.png',
   './icon-192.png', './icon-512.png', './icon-maskable-192.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
+// FOUND BY SECOND REVIEW 2026-09-10 (finding E). This deleted EVERY cache on the origin whose
+// name was not ours. thundermeadows.github.io hosts more than this card, and any other app or
+// page there had its offline storage wiped the moment a Training Card update activated. A
+// service worker owns its own caches and nothing else. Ownership is the 'card-' prefix this
+// app has always used; anything else on the origin is somebody else's and is left alone.
+const CACHE_OWNED = /^card-/;
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    .then(keys => Promise.all(keys
+      .filter(k => k !== CACHE && CACHE_OWNED.test(k))
+      .map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {

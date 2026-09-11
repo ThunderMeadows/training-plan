@@ -4296,9 +4296,39 @@ function finisherPanelHTML(){
 // adjustment produced strength outcomes at least as good as fixed percentage prescription.
 const AC_MIN_SETS=3;        // evidence required before touching a training max
 const AC_MAX_JUMP=0.15;     // never move a max more than 15% at once
+// Does the plan actually running right now take its loads from S.maxes? A generated plan always
+// does. A baked plan does whenever any exercise carries both a maxKey and a pct ladder - that is
+// exactly the pair baseLoad() multiplies. If nothing is max-driven, revising a max would change
+// nothing an athlete can see, so there is no reason to touch it.
+function planMaxDriven(){
+  try{
+    if(S.genPlan && S.genPlan.days) return true;
+    var P=(typeof PLAN!=='undefined' && PLAN) ? PLAN : null;
+    if(!P || !Array.isArray(P.days)) return false;
+    for(var i=0;i<P.days.length;i++){
+      var xs=P.days[i] && P.days[i].exercises;
+      if(!Array.isArray(xs)) continue;
+      for(var j=0;j<xs.length;j++){
+        var ex=xs[j];
+        if(ex && ex.maxKey && Array.isArray(ex.pct)) return true;
+      }
+    }
+    return false;
+  }catch(e){ return false; }
+}
 function autoCalibrate(){
   try{
-    if(!S.genPlan || !S.genPlan.days) return null;      // only for generated programs
+    // FIELD 2026-09-10. "Im ahead but i need the engine to keep up." He rowed 155x8 for weeks
+    // against a plan asking 115-125, and his Row max never moved off the 170 it was built with.
+    // Cause: this gate required S.genPlan, so calibration only ever ran for a GENERATED plan.
+    // The starter block is baked into the file - no S.genPlan - so every athlete on it banked
+    // e1rm evidence on every save (updateE1RM runs regardless) that nothing ever read. Their
+    // maxes were frozen for life. But the starter block prescribes the same way a generated one
+    // does - baseLoad reads ex.pct x S.maxes[ex.maxKey] - so a revised max drives it just as
+    // well. The real requirement was never "generated", it was "driven by S.maxes". That is
+    // what this asks now. applyMaxesToPlan() self-guards on S.genPlan, so a baked plan simply
+    // picks the new max up live on its next read.
+    if(!planMaxDriven()) return null;
     if(!S.e1rmH) return null;
     var changed=[];
     Object.keys(S.maxes||{}).forEach(function(k){
@@ -4594,10 +4624,24 @@ function blockAnchor(){
     return best;
   }catch(e){ return null; }
 }
+// FOUND BY SECOND REVIEW 2026-09-10 (finding F). This floored the millisecond gap between two
+// LOCAL noon dates. Across a spring daylight-saving change that gap is an hour short: in
+// America/New_York, an anchor of 2026-03-01 and a training date of 2026-03-08 is 167 hours, which
+// floors to 6 days and returned week 1 instead of week 2. A whole training week silently repeated
+// - wrong loads, wrong reps, for everyone in a DST time zone, twice a year.
+// These are calendar dates, so count calendar days: parse the Y-M-D parts as UTC, where every day
+// is exactly 24 hours, and no local clock shift can touch the answer.
+function dayNum(ymd){
+  try{
+    var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd||''));
+    if(!m) return NaN;
+    return Math.round(Date.UTC(+m[1], +m[2]-1, +m[3])/86400000);
+  }catch(e){ return NaN; }
+}
 function timeWeek(){
   try{
     var a=blockAnchor(); if(!a) return 1;
-    var days=Math.floor((new Date(shiftDate()+'T12:00:00') - new Date(a+'T12:00:00'))/86400000);
+    var days=dayNum(shiftDate()) - dayNum(a);
     if(!isFinite(days) || days<0) days=0;
     return Math.floor(days/7)+1;
   }catch(e){ return 1; }
@@ -6734,6 +6778,9 @@ async function rosterLoad(){
       if(ROSTER.active && !rosterAthlete(ROSTER.active)) ROSTER.active=null;
     }
   }catch(e){ oops('rosterLoad',e); }
+  // read the roster's progress ahead of the first paint: rosterProgress() is synchronous
+  // because render() is, and under the storage bridge the counts can only be fetched async.
+  try{ await rosterProgressLoad(); }catch(e){}
 }
 function rosterSave(){
   try{ stSet(ROSTER_KEY, JSON.stringify(ROSTER)); }catch(e){ oops('rosterSave',e); }
@@ -6757,6 +6804,9 @@ function rosterRemove(id){
 async function rosterSwitch(id){
   try{
     save();                                    // whoever is loaded now keeps their work
+    // the drawer being left may have banked a session or finished setup - its cached roster
+    // line is now stale, so drop it and let the refill below read the real numbers
+    try{ if(ROSTER.active) delete ROSTER_PROG[ROSTER.active]; }catch(e){}
     ROSTER.active=id||null;
     rosterSave();
     try{ S=JSON.parse(JSON.stringify(S_BLANK)); }catch(e){ oops('rosterBlank',e); }
@@ -6775,30 +6825,74 @@ async function rosterSwitch(id){
     // v219: back on the holder's own card, run the access checks that a drawer defers
     if(!id){ try{ accessLegacy(); accessEnforce(); if(!accessOK()) bootAccess(); }catch(e){} }
     render();
+    // landing back on the roster: refresh the counts, then repaint. Async, so the screen is
+    // already up - this only corrects the lines once the real numbers are in.
+    if(!id){ try{ await rosterProgressLoad(); render(); }catch(e){} }
   }catch(e){ oops('rosterSwitch',e); }
 }
-function rosterProgress(a){
-  // What a coach actually wants to see at a glance: have they been assessed, and are they training?
+// FOUND BY SECOND REVIEW 2026-09-10 (finding D). Two defects in one small function.
+//
+// 1. WRONG NAMESPACE. The session count built its prefix from curLOGP()+a.id+':'. But this runs
+//    on the OWNER's roster screen, where ROSTER.active is null and curLOGP() therefore returns
+//    TLOGP ('tc-log:'). Athlete sessions live under LOGP+id+':' ('nova-sc-log:<id>:'). So the
+//    prefix matched nothing and EVERY athlete read "0 sessions" no matter how much they had
+//    trained. A coach checking whether their soldiers were training saw a wall of zeros. The
+//    athlete's id is the namespace here, not the caller's.
+//
+// 2. BYPASSED THE STORAGE BRIDGE. Both reads went at window.localStorage directly with a
+//    hard-coded 'nsc:' prefix - that is only how ST_MODE==='local' stores things. Under the
+//    bridge, localStorage is empty and the roster showed nothing for anybody: not assessed,
+//    no sessions.
+//
+// render() is synchronous and the bridge is async, so counts are read ahead into ROSTER_PROG
+// by rosterProgressLoad() and this reads that cache. Local mode still answers directly, so the
+// first paint is correct with no round trip.
+var ROSTER_PROG={};
+async function rosterProgressLoad(){
   try{
-    var raw=window.localStorage? window.localStorage.getItem('nsc:'+SKEY+':a:'+a.id) : null;
-    if(!raw) return {assessed:false, sessions:0};
+    var ath=(typeof ROSTER!=='undefined' && ROSTER && ROSTER.athletes)||[];
+    for(var i=0;i<ath.length;i++){
+      var a=ath[i]; if(!a || !a.id) continue;
+      var st=null;
+      try{ var raw=await stGet(SKEY+':a:'+a.id); if(raw) st=JSON.parse(raw); }catch(e){}
+      var pre=LOGP+a.id+':', n=0;
+      try{ var ks=(await stList(pre))||[];
+        for(var j=0;j<ks.length;j++){ var k=String(ks[j]);
+          if(k.indexOf(pre)===0 && k!==pre+'probe') n++; } }catch(e){}
+      ROSTER_PROG[a.id]=rosterProgressFrom(st, n);
+    }
+  }catch(e){ oops('rosterProgressLoad',e); }
+}
+function rosterProgressFrom(st, n){
+  // FIELD-CAUGHT 2026-09-02: onb.done flips only when the athlete taps the final "start"
+  // button on the review screen. A coach who builds the plan and returns to the roster
+  // leaves done=false with a complete plan sitting there - and the roster said "needs the
+  // assessment". A built plan IS the assessment done; "started" is a separate fact.
+  var built=!!(st && st.genPlan && st.genPlan.days && st.genPlan.days.length);
+  return {assessed:!!(st && ((st.onb && st.onb.done) || built)),
+          started:!!(st && st.onb && st.onb.done),
+          sessions:n||0};
+}
+function rosterProgress(a){
+  try{
+    if(!a || !a.id) return {assessed:false, started:false, sessions:0};
+    if(ROSTER_PROG[a.id]) return ROSTER_PROG[a.id];
+    if(ST_MODE!=='local') return {assessed:false, started:false, sessions:0};   // the cache is on its way
+    var raw=window.localStorage? window.localStorage.getItem(stLocalKey(SKEY+':a:'+a.id)) : null;
+    if(!raw) return {assessed:false, started:false, sessions:0};
     var st=JSON.parse(raw);
-    // FIELD-CAUGHT 2026-09-02: onb.done flips only when the athlete taps the final "start"
-    // button on the review screen. A coach who builds the plan and returns to the roster
-    // leaves done=false with a complete plan sitting there - and the roster said "needs the
-    // assessment". A built plan IS the assessment done; "started" is a separate fact.
-    var built=!!(st && st.genPlan && st.genPlan.days && st.genPlan.days.length);
-    var assessed=!!(st && ((st.onb && st.onb.done) || built));
-    var started=!!(st && st.onb && st.onb.done);
     var n=0;
     try{
-      var pre='nsc:'+curLOGP()+a.id+':';
+      var pre=stLocalKey(LOGP+a.id+':');
       for(var i=0;i<window.localStorage.length;i++){
-        if(String(window.localStorage.key(i)).indexOf(pre)===0) n++;
+        var k=String(window.localStorage.key(i));
+        if(k.indexOf(pre)===0 && k!==pre+'probe') n++;
       }
     }catch(e){}
-    return {assessed:assessed, started:started, sessions:n};
-  }catch(e){ return {assessed:false, sessions:0}; }
+    var out=rosterProgressFrom(st, n);
+    ROSTER_PROG[a.id]=out;
+    return out;
+  }catch(e){ return {assessed:false, started:false, sessions:0}; }
 }
 // A coach who does not train on this card has no program of their own - and must not be dragged
 // through an athlete questionnaire to get back to their roster. This is the state they sit in
@@ -7175,11 +7269,28 @@ function adRateMove(lift){
 // says plainly that they are an estimate to train through, not a measurement.
 function adLayoffDays(){
   try{
-    var last=null;
+    // AUDIT 2026-09-10. Measured "days since the latest session". At bank time the session just
+    // saved IS the latest, so this read 0 and the layoff branch never fired - for anyone, ever.
+    // The only sequence that could trigger it was calling adaptRun by hand before banking, which
+    // is what the test did and what no athlete does. Now: if the latest session is today, the
+    // break is the gap INTO it - the distance from the one before. Otherwise, as before, the
+    // distance from the latest session to today (the boot-time read, see adLayoffBoot).
+    var ds=[];
     (logKeys||[]).forEach(function(k){
-      var c=logCache[k]; if(c && c.date && (!last || c.date>last)) last=c.date; });
-    if(!last) return 0;
-    return Math.max(0, Math.round(adDays(last, shiftDate())));
+      // The date is in the key itself (LOGP + date + '-' + day + ...). Read it from there:
+      // logCache is filled lazily as logs are opened and is EMPTY at boot, which is where this
+      // now needs to work. The cache is only a fallback for a key of some other shape.
+      var m=/(\d{4}-\d{2}-\d{2})/.exec(k);
+      if(m){ ds.push(m[1]); return; }
+      var c=logCache[k]; if(c && c.date) ds.push(c.date); });
+    if(!ds.length) return 0;
+    ds.sort();
+    var last=ds[ds.length-1], today=shiftDate();
+    if(last===today){
+      if(ds.length<2) return 0;
+      return Math.max(0, Math.round(adDays(ds[ds.length-2], today)));
+    }
+    return Math.max(0, Math.round(adDays(last, today)));
   }catch(e){ return 0; }
 }
 function adLayoffCut(days){
@@ -7197,6 +7308,45 @@ function adLayoff(){
     if(already && adDays(already.d, shiftDate())<d) return null;   // already handled this break
     return {days:d, cut:cut};
   }catch(e){ oops('adLayoff',e); return null; }
+}
+// Ease every max back for a break. One body of code for the two moments it can run - at boot,
+// so the FIRST session back is already lighter, and in adaptRun as the fallback if boot did not
+// get to it. Returns the actions it filed.
+function adLayoffApply(lay, today){
+  var acts=[];
+  if(!lay) return acts;
+  Object.keys(S.maxes||{}).forEach(function(k){
+    var cur=S.maxes[k]; if(!cur) return;
+    var to=Math.round(cur*(1-lay.cut)/5)*5;
+    if(to>=cur) return;
+    S.maxes[k]=to;
+    acts.push({kind:'layoff', lift:k, from:cur, to:to, d:today, days:lay.days,
+      why:lay.days+' days away \u2014 easing back in rather than picking up where you left off'});
+  });
+  return acts;
+}
+// AUDIT 2026-09-10. The layoff rule's own comment says a break "is judged before anything else:
+// every other signal is read against loads that are no longer true." But it only ever ran inside
+// adaptRun, which only runs AFTER a session is banked. So the athlete's first session back was
+// prescribed at full pre-break loads, and by the time the pass ran, that session was the latest
+// and the break had vanished from the measurement (adLayoffDays). The ease-back never happened.
+// Now it is judged where the comment says: at boot, once the logs are in, before the day is
+// chosen - so the first session back already carries it. Never mid-session: cutting the maxes
+// with sets on the board would change the loads under a lift in progress. adaptRun keeps its
+// own layoff branch as the fallback; the `already` guard in adLayoff stops a double cut.
+function adLayoffBoot(){
+  try{
+    if(typeof sessionHasWork==='function' && sessionHasWork()) return null;
+    var lay=adLayoff(); if(!lay) return null;
+    var today=shiftDate();
+    var acts=adLayoffApply(lay, today);
+    if(!acts.length) return null;
+    try{ if(S.genPlan) applyMaxesToPlan(); }catch(e){}
+    S.adLog=(S.adLog||[]).concat(acts).slice(-30);
+    S.adNew=(S.adNew||0)+acts.length;
+    save();
+    return acts;
+  }catch(e){ oops('adLayoffBoot',e); return null; }
 }
 // ---- 6. why a lift stalled, not just that it did ----
 // The muscles each main lift leans on. When a lift stops moving and one of its drivers is
@@ -7334,19 +7484,19 @@ function adaptRun(force){
     // loads that are no longer true.
     var lay=adLayoff();
     if(lay){
-      Object.keys(S.maxes||{}).forEach(function(k){
-        var cur=S.maxes[k]; if(!cur) return;
-        var to=Math.round(cur*(1-lay.cut)/5)*5;
-        if(to>=cur) return;
-        S.maxes[k]=to;
-        acts.push({kind:'layoff', lift:k, from:cur, to:to, d:today, days:lay.days,
-          why:lay.days+' days away \u2014 easing back in rather than picking up where you left off'});
-      });
+      acts=acts.concat(adLayoffApply(lay, today));
     }
     // Stalls next: a reset changes the loads everything else is judged against. But before cutting
     // the bar weight, ask WHY - if a driver of that lift is under-dosed, the volume is the problem.
     adStalled().forEach(function(s){
       if(pvOn(s.lift)) return;      // on probation: pvJudge owns this lift, one penalty not two
+      // AUDIT 2026-09-10. The rate path below has had this guard since 2026-09-06 - "calibration
+      // already spent this evidence." The stall path never got it. So three bad sessions were
+      // read TWICE in one bank: autoCalibrate cut the max on their estimates (up to its 15% cap),
+      // then this rule cut another 8% for the same three sessions - a 23% drop for one body of
+      // evidence. Caught by a clock-true replay; invisible on baked plans until v230 let
+      // calibration run there at all. Same window, same guard, both directions.
+      if(acMovedRecently(s.lift)) return;
       var cur=(S.maxes||{})[s.lift]; if(!cur) return;
       var weak=adWeakLink(s.lift);
       if(weak && !S.adWeakTried){
@@ -7535,6 +7685,48 @@ function adFixedHTML(){
           return '<li><b>'+esc(LN[x.lift]||x.lift)+'</b> '+WV(x.from)+' \u2192 '+WV(x.to)+' '+uLbl()+'</li>';
         }).join('')+'</ul>'
       +'<div class="savelog" id="adFixedAck">Got it</div></div>';
+  }catch(e){ return ''; }
+}
+// AUDIT 2026-09-10. Every adaptation action carries a `why` string, and until now the only
+// place it was ever drawn was volumeHTML() - PLAN tab, "Weekly work" fold, below the anatomy
+// map. S.adNew was counted on every pass and READ BY NOTHING: a badge that was designed and
+// never wired. So a stall cut, a layoff ease-back or a calibration bump changed the number on
+// the bar and the athlete was told nothing unless they went looking. His own words this
+// morning: "not even i know why my program is making me deload?" - the card had reasons and
+// kept them to itself. These two put the reason where the change is.
+var AD_LIFT_NAME={squat:'Squat', bench:'Bench', dead:'Deadlift', ohp:'Press', row:'Row'};
+function adSummaryLine(acts){
+  try{
+    var a=(acts||[]).filter(function(x){ return x && !x.undone; });
+    if(!a.length) return '';
+    var lay=a.filter(function(x){ return x.kind==='layoff'; });
+    if(lay.length){ return lay.length+' max'+(lay.length>1?'es':'')+' eased '+Math.round((1-lay[0].to/lay[0].from)*100)+'% \u2014 '+lay[0].days+' days away'; }
+    var parts=[];
+    a.slice(0,3).forEach(function(x){
+      var L=AD_LIFT_NAME[x.lift]||x.lift||'';
+      if(x.kind==='calib')  parts.push(L+' max '+(x.to>x.from?'up to ':'down to ')+WV(x.to)+' from your sets');
+      else if(x.kind==='stall') parts.push(L+' backed off to '+WV(x.to));
+      else if(x.kind==='rate')  parts.push(L+' max up to '+WV(x.to));
+      else if(x.kind==='deload') parts.push('deload suggested \u2014 recovery debt');
+      else if(x.kind==='weak')  parts.push(L+' stalled \u2014 feed your '+x.muscle);
+      else if(x.kind==='prov' || x.kind==='provok') parts.push(L+' tested max '+(x.kind==='provok'?'holds':'stepped to '+WV(x.to)));
+    });
+    if(a.length>3) parts.push('+'+(a.length-3)+' more');
+    return parts.join(' \u00b7 ');
+  }catch(e){ return ''; }
+}
+function adRecentCueHTML(ex){
+  try{
+    if(!ex || !ex.maxKey) return '';
+    var today=shiftDate();
+    var hit=(S.adLog||[]).filter(function(x){
+      return x && !x.undone && x.lift===ex.maxKey && x.d && adDays(x.d, today)<=7
+        && (x.kind==='calib'||x.kind==='stall'||x.kind==='layoff'||x.kind==='rate'||x.kind==='prov');
+    }).pop();
+    if(!hit) return '';
+    var dir=(hit.to>hit.from)? '\u2191' : '\u2193';
+    return '<div class="sleeve-label" style="color:var(--amber)">'+dir+' this max moved '+WV(hit.from)+' \u2192 '+WV(hit.to)
+      +' '+(hit.d===today?'today':hit.d)+' \u2014 '+esc(hit.why||'')+'</div>';
   }catch(e){ return ''; }
 }
 function adaptHTML(){
@@ -14355,7 +14547,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v229';
+const BUILD = 'v234';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -15196,7 +15388,15 @@ const GOALS = {
    cardio:'Hypertrophy block: 2\u20133\u00d720 min zone 2 \u2014 enough for health, little enough to grow.'},
  endurance:{label:'Muscular Endurance',sets:3,reps:'15',pct:[.50,.525,.55,.575,.60,.40],restMain:'0:45',accReps:'15-20',accSets:3,restAcc:'0:30',
    cardio:'Endurance block: 4\u20135\u00d730 min zone 2, one longer session weekly. Short rests are part of the training.'},
- cut:{label:'Lose Weight',sets:4,reps:'8',pct:[.65,.675,.70,.725,.75,.50],restMain:'1:30',accReps:'12-15',accSets:3,restAcc:'1:15',
+ // HIS CALL 2026-09-10. "Raise towards maintenance intensity with volume trimming."
+ // The old cut scheme dropped load to 65-75% and cut rest to 1:30 - lighter lifting with less
+ // recovery, which is the "high reps burn fat" idea. It also contradicted this goal's own
+ // cardio line one field away: the deficit does the losing, lifting is here to keep muscle.
+ // Load is what keeps muscle in a deficit, so load is the last thing to give up. Intensity
+ // now sits at maintenance (75-82.5%, sixes), rest goes UP so those sets stay honest, and the
+ // volume comes down instead - three main sets, two accessory sets, tighter accessory reps.
+ // Less work, done heavy, plus the cardio that actually creates the deficit.
+ cut:{label:'Lose Weight',sets:3,reps:'6',pct:[.75,.775,.80,.80,.825,.50],restMain:'2:30',accReps:'8-12',accSets:2,restAcc:'1:30',
    cardio:'Cut: 4\u20135\u00d730\u201340 min zone 2. The deficit does the losing \u2014 lifting is here to keep your muscle.'},
  build:{label:'Build Muscle',sets:4,reps:'10',pct:[.65,.675,.70,.725,.75,.50],restMain:'2:00',accReps:'10-15',accSets:4,restAcc:'1:30',
    cardio:'Lean gain: 2\u00d720 min zone 2. Small calorie surplus, big patience \u2014 the scale should crawl, not jump.'}
@@ -15483,7 +15683,14 @@ function exRestClass(ex){
 // the value itself is tappable to type an exact figure.
 function repStep(n){ n=+n||0; if(n>=40) return 10; if(n>=20) return 5; if(n>=12) return 2; return 1; }
 function restCap(pref, cap){ try{ return (restSecs(pref)<=restSecs(cap))? pref : cap; }catch(e){ return pref; } }
-function exRest(ex){ const g=goalDef();
+function exRest(ex){
+  // FIELD 2026-09-10. exSets() and exReps() both return the plan's own numbers on a Start
+  // program - a beginner never asked for a goal, and four sets is how you lose them in week
+  // two. This function had no such check, so a Start athlete who set a goal got the plan's
+  // 2x10 with the GOAL's rest bolted on: neither beginner programming nor goal programming.
+  // Start is treated as goal-less here rather than returned early, so the movement-class caps
+  // below still apply - a Start plank must not go back to being told 1:30.
+  const g=isStartProgram()? null : goalDef();
   // The movement-class caps hold with OR without a goal (field-caught: a goal-less card
   // showed a plank "1:30 PRESCRIBED - CORE / HOLD", the tier named but never applied).
   // Base rest comes from the goal when there is one, from the plan text when not; the
@@ -15896,14 +16103,25 @@ function platesFor(total){
     for(const p of [25,20,15,10,5,2.5,1.25,0.5]){ while(sideK>=p-1e-9){ outK.push(p); sideK-=p; } }
     return Math.abs(sideK)<1e-6 ? outK : null;
   }
-  if(total<45 || Math.abs(((total-45)/5)-Math.round((total-45)/5))>1e-6) return null;   // 5 lb grid: a pair of 2.5s
+  // FOUND BY SECOND REVIEW 2026-09-10 (finding G). The increment picker offers a 2.5 lb bar jump
+  // - "microplates" - and plateRound() duly prescribed 47.5. But this gate demanded a 5 lb grid
+  // and the plate list stopped at 2.5, so platesFor(47.5) returned null: the card told the
+  // athlete a number it could not show them how to load, and the diagram vanished on every
+  // microplate session. A 2.5 lb TOTAL jump is 1.25 a side, which is what a 1.25 lb microplate
+  // pair is for. Offer that pair only to athletes who chose the 2.5 setting - everyone else
+  // keeps the 5 lb grid and is never shown a plate they do not own.
+  if(total<45) return null;
+  var micro=(jumpLb()===2.5);
+  var grid=micro? 2.5 : 5;
+  if(Math.abs(((total-45)/grid)-Math.round((total-45)/grid))>1e-6) return null;
   let side=(total-45)/2, out=[];
-  for(const p of [45,35,25,10,5,2.5]){ while(side>=p-1e-9){ out.push(p); side-=p; } }
+  for(const p of (micro? [45,35,25,10,5,2.5,1.25] : [45,35,25,10,5,2.5])){ while(side>=p-1e-9){ out.push(p); side-=p; } }
   return Math.abs(side)<1e-6 ? out : null;
 }
 const PLATE_LB={55:['#C8322D','#fff',34],50:['#C8322D','#fff',34],45:['#2E5FA3','#fff',33],
   35:['#E8C33A','#4a3c00',29],25:['#3E8E4F','#fff',25],15:['#E8C33A','#4a3c00',21],
-  10:['#1A1A1A','#eee',19],5:['#ECECEC','#333',15],2.5:['#9AA0A6','#222',12]};
+  10:['#1A1A1A','#eee',19],5:['#ECECEC','#333',15],2.5:['#9AA0A6','#222',12],
+  1.25:['#7A8087','#fff',10]};
 const PLATE_KG={25:['#C8322D','#fff',34],20:['#2E5FA3','#fff',33],15:['#E8C33A','#4a3c00',29],
   10:['#3E8E4F','#fff',25],5:['#ECECEC','#333',19],2.5:['#C8322D','#fff',14],
   2:['#2E5FA3','#fff',13],1.5:['#E8C33A','#4a3c00',12],1.25:['#9AA0A6','#222',11],0.5:['#ECECEC','#333',10]};
@@ -16135,6 +16353,24 @@ function staleBannerHTML(){
     +'<span class="vol-pick ghost" data-stalekeep="1">Keep this one</span></div>';
 }
 var SYNC_READY=false;       // true once this copy has actually read the stored state
+// FOUND BY SECOND REVIEW 2026-09-10 (finding A). stSet() returns true/false, and save() has
+// always thrown that answer away - fire and forget. That is fine for the hundred routine saves
+// a session makes, where a retry comes along a second later anyway. It is NOT fine for a
+// restore, which writes once and then tells the athlete their data is back. saveNow() is the
+// same write, awaited, with the result handed back so a caller that must not lie can check it.
+async function saveNow(){
+  try{
+    var st=readStamp();
+    if(SYNC_READY && st && st.id!==TAB_ID && st.t>LAST_SYNC){
+      if(!STALE_WARNED){ STALE_WARNED=true; try{ render(); }catch(e){}
+        try{ alertToast('This card is open somewhere else \u2014 not overwriting it'); }catch(e){} }
+      return false;
+    }
+    var stamp={id:TAB_ID, t:Date.now()};
+    S._w=stamp; LAST_SYNC=stamp.t;
+    return await stSet(curSKEY(), JSON.stringify(S));
+  }catch(e){ try{ __logErr('saveNow',e.message,'',0,0,e); }catch(x){} return false; }
+}
 function save(){ try{
   var st=readStamp();
   // Never cry stale before loading. Anything that saves during boot runs before load() has
@@ -16446,10 +16682,15 @@ async function saveSessionLog(quiet){
     save();
     await refreshLogs();
     try{ blockDoneCheck(); }catch(e){ oops("saveSessionLog",e); }   // AFTER the write + refresh, so the final session counts
-    // the evidence for adaptation just landed, so weigh it now
-    try{ adaptRun(); }catch(e){ oops('adaptRun',e); }
+    // the evidence for adaptation just landed, so weigh it now - and SAY what moved. The pass
+    // used to run silently here; the athlete met a changed number next session with no reason.
+    var _adActs=null;
+    try{ _adActs=adaptRun(); }catch(e){ oops('adaptRun',e); }
     render();
-    if(!quiet) alertToast('Session saved \u00b7 '+S.when.date);
+    if(!quiet){
+      var _adLine=''; try{ _adLine=adSummaryLine(_adActs); }catch(e){}
+      alertToast(_adLine? 'Saved \u00b7 '+_adLine : 'Session saved \u00b7 '+S.when.date, _adLine? 6500 : undefined);
+    }
     return true;
   }catch(e){ oops('saveSessionLog',e); S.notes=noteBefore; if(!quiet) alertToast('Save failed'); return false; }
 }
@@ -16852,9 +17093,22 @@ function renderInner(){
       +'<option value="build"'+(S.profile.goal==='build'?' selected':'')+'>Build Muscle \u2014 lean gain</option>'
       +'</select></div>'
       +'<div class="sec-acts"><span class="sec-edit" data-bglock="0">Done</span></div>' : '')
-      +(G? '<div class="cue" style="padding:8px 0 0">'+G.label+': mains '+G.sets+'\u00d7'+G.reps+' at '
-          +Math.round(G.pct[0]*100)+'\u2013'+Math.round(G.pct[4]*100)+'% of max \u00b7 rest '+G.restMain
-          +' \u00b7 accessories '+G.accReps+' reps</div>'
+      +(G? (isStartProgram()
+          // FIELD 2026-09-10. This line promised the GOAL's scheme to every card. On a Start
+          // program sets, reps and rest all come from the beginner template instead, so an
+          // athlete read "mains 4x8 at 65-75%, rest 1:30" and then met 2x10. The card was
+          // describing a program it was not running. Start says what Start actually does.
+          ? '<div class="cue" style="padding:8px 0 0">'+G.label+': your first weeks stay at the beginner'
+            +' prescription \u2014 2 sets of 10, easy pace \u2014 whatever goal is set. Your goal shapes the'
+            +' conditioning below, and takes over the lifting once you move off Start.</div>'
+          : '<div class="cue" style="padding:8px 0 0">'+G.label+': mains '+G.sets+'\u00d7'+G.reps+' at '
+            +Math.round(G.pct[0]*100)+'\u2013'+Math.round(G.pct[4]*100)+'% of max \u00b7 rest '+G.restMain
+            +' \u00b7 accessories '+G.accReps+' reps</div>')
+        // AUDIT 2026-09-10. Every goal carries a `cardio` line saying how conditioning fits
+        // around it, and it had ZERO render sites in the whole card - dead data since it was
+        // written. For "Lose Weight" that line is the entire answer: the deficit does the
+        // losing. An athlete who picked it never once saw it.
+        +(G.cardio? '<div class="cue" style="padding:8px 0 0">'+esc(G.cardio)+'</div>' : '')
         : '<div class="cue" style="padding:8px 0 0">Coach-built block: loads and waves exactly as programmed for the squat correction.</div>')
       +'</div></div>';
     h+='<div class="sub" id="benchSec" style="margin-top:12px">'+BENCH.anchorLabel+'</div>';
@@ -17095,6 +17349,7 @@ function renderInner(){
       +(function(){ const LP=(S.lastPerf||{})[dispName]; if(!LP||LP.d===S.when.date) return '';
          const beat=(typeof w==='number' && LP.w!=null && w>LP.w);
          return '<div class="sleeve-label">last logged '+LP.d+': '+(LP.w!=null? WV(LP.w)+' '+uLbl()+' \u2014 ':'')+LP.r+(beat?' \u00b7 \u2605 heavier today':'')+'</div>'; })()
+      +(function(){ try{ return adRecentCueHTML(ex); }catch(e){ return ''; } })()
       +'</div>'
       + weightEditorHTML(i,ex,st)
       + wuHTML(i, ex, st, w)
@@ -18907,29 +19162,65 @@ function earlyCloseHTML(){
   if(S.earlyAsk) return blockEndHTML(true);
   return '<div class="ed-row" style="margin-top:10px"><div class="daybtn" data-blkearly="1" style="flex:1;color:var(--faint)">Close this block early \u2014 program change, layoff, restart...</div></div>';
 }
-async function backupAll(){ try{ markBackedUp(); }catch(e){}
-  const logs={};
-  if(storageOK){ for(const k of logKeys){ try{ const r={value:await stGet(k)};
-logs[k]=r.value; }catch(e){} } }
-  const payload=JSON.stringify({v:1, exported:localDate(), S:S, logs:logs});
+async function backupAll(){
+  // FOUND BY SECOND REVIEW 2026-09-10 (finding C). markBackedUp() ran HERE, first line, before
+  // a single byte left the card. Cancel the share sheet and S.lastBackup still moved to today -
+  // so the "Your log lives only on this phone" reminder went quiet for a week on the strength
+  // of a backup that never happened. It is now called only where something actually landed.
+  // What the card can honestly know differs per path: a share sheet that resolves without an
+  // AbortError, a download the browser accepted, a clipboard copy that reported success. None
+  // of those is proof the file reached a safe place, so the copy says "check" where it should.
+  // AUDIT 2026-09-10. The FAQ has said since coach mode shipped: "A backup taken while coaching
+  // carries everyone." It carried ONE drawer - the current S and the current logKeys. Roster
+  // athletes live under SKEY+':a:'+id and LOGP+id+':', and neither was ever read here. A coach
+  // who lost the phone lost every athlete, and the card had told them they were backed up.
+  // Worse, S is whichever drawer is OPEN: a backup taken inside Bucky's drawer held Bucky's
+  // state as if it were the coach's, and the coach's own was missing. Now: always the OWNER's
+  // state and logs, plus the roster and every athlete drawer. v2 payload; restore reads both.
+  var ownerS=S, ownerLogs={}, roster=null, drawers={};
+  try{
+    var inDrawer=(typeof ROSTER!=='undefined' && ROSTER && ROSTER.active);
+    if(inDrawer){ try{ var os=await stGet(SKEY); if(os) ownerS=JSON.parse(os); }catch(e){} }
+    if(storageOK){
+      // the owner's sessions: TLOGP keys with no athlete id segment (the refreshLogs rule)
+      var P=(typeof TLOGP!=='undefined')? TLOGP : LOGP;
+      var ks=(await stList(P))||[];
+      for(var i=0;i<ks.length;i++){ var k=ks[i];
+        if(k===P+'probe' || k.indexOf(P)!==0 || k.slice(P.length).indexOf(':')>=0) continue;
+        try{ ownerLogs[k]=await stGet(k); }catch(e){} }
+      if(typeof ROSTER!=='undefined' && ROSTER && ROSTER.mode==='coach'){
+        try{ roster=await stGet(ROSTER_KEY); }catch(e){}
+        var ath=ROSTER.athletes||[];
+        for(var a=0;a<ath.length;a++){ var id=ath[a]&&ath[a].id; if(!id) continue;
+          var d={S:null, logs:{}};
+          try{ d.S=await stGet(SKEY+':a:'+id); }catch(e){}
+          try{ var lk=(await stList(LOGP+id+':'))||[];
+            for(var j=0;j<lk.length;j++){ try{ d.logs[lk[j]]=await stGet(lk[j]); }catch(e){} } }catch(e){}
+          drawers[id]=d; }
+      }
+    }
+  }catch(e){ oops('backupAll',e); }
+  const logs=ownerLogs;
+  const payload=JSON.stringify({v:2, exported:localDate(), S:ownerS, logs:logs, roster:roster, drawers:drawers});
   const fname='training-card-backup-'+localDate()+'.json';
   // Path 1 - the share sheet with a REAL file (on iPhone: "Save to Files" makes it a file).
   // If the person opens the sheet and cancels, that is an answer - stop, never cascade
   // into fallbacks that look like an error.
   try{ const f=new File([payload], fname, {type:'application/json'});
     if(navigator.canShare && navigator.canShare({files:[f]})){
-      try{ await navigator.share({files:[f], title:'Training Card backup'}); alertToast('Backup saved \u2713'); }
-      catch(shErr){ if(shErr && shErr.name==='AbortError') alertToast('Backup cancelled'); else throw shErr; }
+      try{ await navigator.share({files:[f], title:'Training Card backup'}); try{ markBackedUp(); }catch(e){} alertToast('Backup saved \u2713'); }
+      catch(shErr){ if(shErr && shErr.name==='AbortError') alertToast('Backup cancelled \u2014 nothing was saved'); else throw shErr; }
       return; } }catch(e){}
   // Path 2 - a plain download link. Known-broken inside an iPhone home-screen app
   // (iOS ignores the download attribute in standalone mode), so skip straight past it there.
   const iosStandalone=(navigator.standalone===true);
   if(!iosStandalone){
     try{ const url=URL.createObjectURL(new Blob([payload],{type:'application/json'}));
-      const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); alertToast('Backup downloaded \u2014 check your Downloads'); return; }catch(e){}
+      const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); try{ markBackedUp(); }catch(e){} alertToast('Backup downloaded \u2014 check your Downloads'); return; }catch(e){}
   }
   // Path 3 - last resort, and it now explains itself instead of dumping code:
   const ok=await tryCopy(payload);
+  if(ok){ try{ markBackedUp(); }catch(e){} }
   showOverlay(ok? 'Backup copied \u2014 open Notes or Files, paste, and save it as '+fname
                : 'Copy this backup, then paste it into Notes or Files and save as '+fname, payload, ok);
 }
@@ -18960,6 +19251,7 @@ async function rescueRestore(){
 }
 async function restoreBackup(file){
   let committed=false;
+  var __failed=0;   // writes that came back false - the restore must not claim what did not land
   // Restoring replaces EVERYTHING, and it is the easiest destructive action in the card to
   // reach - one file picker, no confirmation, while erasing the phone has an arm step, an
   // offer to back up first, and a hold to fire. Pick last month's backup by mistake and
@@ -18970,8 +19262,24 @@ async function restoreBackup(file){
   // the two cards key storage differently - the Training Card is roster-aware and computes its
   // key, the Session Card has a single constant. Ask for whichever exists rather than assuming.
   try{ __rescueKey=(typeof curSKEY==='function'? curSKEY() : SKEY)+'|rescue'; }catch(e){}
-  if(__before && __rescueKey){ try{ await stSet(__rescueKey, JSON.stringify({t:Date.now(), S:__before}));
-    RESCUE={t:Date.now()}; }catch(e){} }
+  // FOUND BY SECOND REVIEW 2026-09-10 (finding A). An unchecked write here meant the rescue
+  // snapshot could silently fail to store and the restore would carry on regardless - the one
+  // safety net in the most destructive action in the card, gone, with nothing said.
+  var __rescueOK=false;
+  if(__before && __rescueKey){ try{ __rescueOK=await stSet(__rescueKey, JSON.stringify({t:Date.now(), S:__before}));
+    if(__rescueOK) RESCUE={t:Date.now()}; }catch(e){} }
+  // FOUND BY SECOND REVIEW 2026-09-10 (finding B). Undo restored S and nothing else. But a
+  // restore also WRITES SESSION LOGS - overwriting a day you already had, or adding days you
+  // did not. Undo left every one of those in place, so "put back what was here before" put
+  // back only half of what was here before, and the athlete's history stayed the other
+  // backup's. Snapshot the previous value of every key this restore will touch (null means
+  // there was none) and undo puts each back - restoring what existed, deleting what did not.
+  var __logsBefore={};
+  async function __snap(keys){
+    for(var i=0;i<keys.length;i++){ var k=keys[i];
+      if(Object.prototype.hasOwnProperty.call(__logsBefore,k)) continue;
+      try{ __logsBefore[k]=await stGet(k); }catch(e){ __logsBefore[k]=null; } }
+  }
   try{ const txt=await file.text(); const obj=JSON.parse(txt);
     if(!obj || !obj.S){ alertToast('Not a Training Card backup file'); return; }
     // FIELD 2026-09-03: a Session Card backup restored here sent him straight to setup with
@@ -18988,7 +19296,26 @@ async function restoreBackup(file){
         if(m){ moved[PERS+m[1]]=obj.logs[k]; fromSession=true; } else moved[k]=obj.logs[k]; }
         obj.logs=moved; brought.logs=Object.keys(moved).length; }
     }catch(e){}
-    S=mergeIntoShape(obj.S); save(); committed=true;
+    // AUDIT 2026-09-10 (pairs with backupAll v2). The owner's state must land in the OWNER's
+    // slot: if the coach is inside an athlete's drawer right now, curSKEY() is that athlete's
+    // key and this restore would have written the coach on top of the athlete. Step out first.
+    try{ if(typeof ROSTER!=='undefined' && ROSTER && ROSTER.active && typeof rosterSwitch==='function') await rosterSwitch(null); }catch(e){}
+    S=mergeIntoShape(obj.S); if(!(await saveNow())) __failed++; committed=true;
+    // v2: the roster and every athlete drawer come back too. v1 files have neither and skip this.
+    var broughtAth=0;
+    try{
+      if(obj.drawers && typeof obj.drawers==='object'){
+        for(var aid in obj.drawers){ var dr=obj.drawers[aid]; if(!dr) continue;
+          try{ if(dr.S){ await __snap([SKEY+':a:'+aid]); if(!(await stSet(SKEY+':a:'+aid, dr.S))) __failed++; } }catch(e){ __failed++; }
+          try{ if(dr.logs){ await __snap(Object.keys(dr.logs));
+            for(var lk in dr.logs){ try{ if(!(await stSet(lk, dr.logs[lk]))) __failed++; }catch(e){ __failed++; } } } }catch(e){}
+          broughtAth++; }
+      }
+      if(obj.roster){ try{ await __snap([ROSTER_KEY]); if(!(await stSet(ROSTER_KEY, obj.roster))) __failed++; await rosterLoad();
+        // the roster may have been saved with a drawer open. Land on the OWNER card: with a
+        // drawer active, the very next save() would write the coach's state into that athlete.
+        ROSTER.active=null; try{ rosterSave(); }catch(e){} }catch(e){} }
+    }catch(e){ oops('restoreDrawers',e); }
     try{
       brought.hist=Object.keys(S.exHist||{}).length; brought.prs=(S.prs||[]).length; brought.cal=(S.calNotes||[]).length;
       brought.maxes=Object.keys(S.maxes||{}).filter(function(k){ return S.maxes[k]>0; }).length;
@@ -18997,21 +19324,47 @@ async function restoreBackup(file){
       //     there, he lands on his card. Setup stays one tap away under Settings - Assessments.
       var o=ONB(); if(!o.done && (brought.hist||brought.maxes||brought.logs)){ o.done=true; o.mode=o.mode||'full'; S.mode=S.mode||'full'; }
       // (c) what came across is said, once, where it stays: a Bulk letter plus the toast
-      var line='Backup restored: '+brought.logs+' sessions, history on '+brought.hist+' lifts, '+brought.maxes+' maxes, '+brought.prs+' records'+(brought.cal? ', '+brought.cal+' calendar entries':'')+'.';
+      var line='Backup restored: '+brought.logs+' sessions, history on '+brought.hist+' lifts, '+brought.maxes+' maxes, '+brought.prs+' records'+(brought.cal? ', '+brought.cal+' calendar entries':'')+(broughtAth? ', '+broughtAth+' athlete'+(broughtAth>1?'s':''):'')+'.';
       if(typeof mailPush==='function') mailPush('restore-'+Date.now(), line+(fromSession? ' That was a Session Card backup, so your old block did not come with it \u2014 you are on the standard block until you build one. Settings \u2192 Assessments when you want that.':''), 'focused');
-      S.restoreNote=line; save();
+      S.restoreNote=line; await saveNow();
     }catch(e){ oops('restoreLand',e); }
     // log refresh is best-effort: a quirky storage layer must never make a SUCCESSFUL
     // restore report failure over a stuck screen
-    try{ if(storageOK && obj.logs){ for(const k in obj.logs){ try{ await stSet(k, obj.logs[k]); }catch(e){} } }
+    try{ if(storageOK && obj.logs){ await __snap(Object.keys(obj.logs));
+        for(const k in obj.logs){ try{ if(!(await stSet(k, obj.logs[k]))) __failed++; }catch(e){ __failed++; } } }
       logCache={}; await refreshLogs(); }catch(e2){}
     render();
-    if(__before) undoToast('Backup restored', function(){
-      try{ S=JSON.parse(__before); save(); render(); alertToast('Put back what was here before'); }
+    // A truthful ending. If any write came back false the data on this phone is now part old
+    // and part new, and saying "restored" would be the worst possible lie to tell someone who
+    // just handed over their training history. Say what happened and leave the undo up.
+    if(__failed){
+      alertToast(__failed+' item'+(__failed>1?'s':'')+' could not be written \u2014 the restore is INCOMPLETE'
+        +(__rescueOK? '. Use Undo, or Settings \u2192 Rescue.' : '. Storage is refusing writes \u2014 free up space and try again.'), 9000);
+    }
+    if(__before) undoToast(__failed? 'Restore incomplete' : 'Backup restored', async function(){
+      try{
+        // put back every log this restore touched: what existed is written back, what did not
+        // exist is removed. Restoring S alone left the other backup's sessions in the history.
+        var back=0, gone=0;
+        for(var k in __logsBefore){
+          try{
+            if(__logsBefore[k]==null){ await stDel(k); gone++; }
+            else { await stSet(k, __logsBefore[k]); back++; }
+          }catch(e){}
+        }
+        S=JSON.parse(__before);
+        await saveNow();
+        try{ if(typeof rosterLoad==='function') await rosterLoad(); }catch(e){}
+        logCache={}; try{ await refreshLogs(); }catch(e){}
+        try{ ROSTER_PROG={}; if(typeof rosterProgressLoad==='function') await rosterProgressLoad(); }catch(e){}
+        render();
+        alertToast('Put back what was here before \u2014 '+back+' session'+(back===1?'':'s')+' restored, '+gone+' removed', 6000);
+      }
       catch(e4){ alertToast('Could not undo the restore'); }
     }, 15000);
     else alertToast(S.restoreNote? (S.restoreNote+' \u2713') : 'Backup restored \u2713');
-  }catch(e){ if(committed){ try{ render(); }catch(e3){} alertToast('Backup restored \u2713'); }
+  }catch(e){ if(committed){ try{ render(); }catch(e3){}
+      alertToast(__failed? 'Restore INCOMPLETE \u2014 '+__failed+' item(s) failed to write' : 'Backup restored \u2713'); }
     else alertToast('Restore failed \u2014 bad file'); }
 }
 document.addEventListener('click',function(e){ const t=e.target; if(!t) return;
@@ -20013,7 +20366,7 @@ load().then(async()=>{
     }
     if(S.fin && S.fin.done && S.fin.d && S.fin.d!==shiftDate()){ S.fin=null; save(); }
   }catch(e){ oops('cardioDayRoll',e); }
-  if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs(); try{ landOnTraining(); }catch(e){ try{ syncToNext(); }catch(e2){} }
+  if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs(); try{ var _layActs=adLayoffBoot(); if(_layActs && _layActs.length){ setTimeout(function(){ try{ alertToast('Welcome back \u00b7 '+adSummaryLine(_layActs), 7000); }catch(e){} }, 1600); } }catch(e){ oops('adLayoffBoot',e); } try{ landOnTraining(); }catch(e){ try{ syncToNext(); }catch(e2){} }
   // v217: pre-shape sessions get a shape from their own report - AFTER refreshLogs, or there is
   // nothing to read. The first cut ran it earlier, saw an empty list, and marked itself done.
   // v226: never mid-session. If the athlete has work on the board that is not banked, the check
