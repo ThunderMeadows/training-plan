@@ -7,7 +7,17 @@
      which for an athlete reading a prescribed load in a dim gym, or anyone who needs larger
      text, is the difference between usable and not. The input-zoom problem has a correct fix
      that costs nobody anything: inputs at >=16px, which the stylesheet now guarantees. -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- FIELD 2026-09-12. `viewport-fit=cover` was added here in the F17 accessibility batch and it
+     put the top of the card underneath the camera cut-out and the status bar: the header - gear,
+     mail, the coach switch - became unreachable on a notched phone. viewport-fit=cover is only
+     safe when the layout keeps itself clear of that strip with env(safe-area-inset-top), and this
+     card uses env(safe-area-inset-*) in six places, every one of them -bottom. It is removed
+     until the top insets are done properly and checked on a real notched phone.
+
+     What STAYS removed from the v236 value is `maximum-scale=1.0, user-scalable=no`. That blocked
+     pinch-zoom, which fails WCAG 1.4.4 and refuses an athlete who needs the card bigger. The zoom
+     fix and the notch regression arrived in the same commit; only the regression goes back. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Chrome cannot install a web app it has never read a manifest for, and it only reads one
      the PAGE points at. manifest.json shipped in every deploy from the beginning, correctly
      filled in, with the right icons - and nothing linked to it, so Android never qualified the
@@ -4249,18 +4259,30 @@ var vcPend={};
 // Shared reader for everything day-true: the log saved WITH the day on screen, fetched
 // lazily into logCache with a re-render when it lands. Cardio, notes and bodyweight all
 // read from this one source instead of today's globals.
+// ADDITIONAL AUDIT 2026-09-12 (finding F29, case X11). This used to answer {c:null} for two
+// completely different situations - "there is no log" and "the read has not come back yet" - and
+// every caller had to guess which. docRef() guessed wrong, memoised the guess, and the archived
+// session never appeared.
+//
+// INVARIANT: a read in flight is its own answer. loading | loaded | missing | failed, said out
+// loud, so nobody has to infer it from an absent object.
+//
+// `missing` is kept alongside `status` because the visited-day blocks below already read it, and
+// they already render '\u2026' for the c-is-null case, which is exactly right for loading.
 function visitedLogRef(){
   try{
     var suffix='-'+S.day+'-W'+S.week+'B'+cyc();
     var key=(logKeys||[]).filter(function(k){ return k.endsWith(suffix); }).sort().pop();
-    if(!key) return {c:null, missing:true};
+    var own=null; try{ own=curLOGP(); }catch(e){}
+    if(!key) return {c:null, missing:true, status:'missing', key:null, owner:own};
     var c=logCache[key];
-    if(!c && !vcPend[key]){ vcPend[key]=1;
+    if(c) return {c:c, missing:false, status:'loaded', key:key, owner:own};
+    if(!vcPend[key]){ vcPend[key]=1;
       stGet(key).then(function(v){ try{ logCache[key]=v? JSON.parse(v):{}; }catch(e){ logCache[key]={}; }
         delete vcPend[key]; try{ render(); }catch(e){} }).catch(function(){ delete vcPend[key]; });
     }
-    return {c:c||null, missing:false};
-  }catch(e){ return {c:null, missing:true}; }
+    return {c:null, missing:false, status:'loading', key:key, owner:own};
+  }catch(e){ return {c:null, missing:true, status:'failed', key:null, owner:null}; }
 }
 function vdBlock(title, body){
   return '<div class="block"><h3>'+title+'</h3>'
@@ -4829,6 +4851,46 @@ try{
     }catch(e){}
   });
 }catch(e){}
+// ADDITIONAL AUDIT 2026-09-12 (finding F28, case X09). How many performed sets sit in one
+// session's slot. Reads the live set state directly rather than the day on screen, because the
+// whole point is to ask about a session the card is NOT currently showing.
+function sessionWorkAt(c, w, d){
+  var n=0;
+  try{
+    var pre=c+'c|'+w+'|'+d+'|';
+    Object.keys(S.data||{}).forEach(function(k){
+      if(k.indexOf(pre)!==0) return;
+      ((S.data[k]||{}).sets||[]).forEach(function(s){ if(s && s.st && s.st!=='pend') n++; });
+    });
+  }catch(e){}
+  return n;
+}
+// How long the pointer will wait on an unfinished session before moving on by itself. A product
+// choice, not a validated number: long enough to cover a week away, short enough that a forgotten
+// draft does not become furniture.
+var HOLD_MAX_DAYS=7;
+// Should the card HOLD here rather than advance? True when this session has performed sets that
+// were never banked and they are recent enough to be worth finishing. The athlete resolves it -
+// finish it, bank it, or tap Go to today - and the pointer does not move until they do.
+function strandHold(c, w, d){
+  try{
+    if(sessionLogged(w, d)) return false;              // banked: there is nothing unfinished
+    var n=sessionWorkAt(c, w, d);
+    if(!n) return false;
+    var s=S.strand;
+    if(s && s.c===c && s.w===w && s.d===d){
+      if(s.freed) return false;                        // they tapped Go to today: never hold again
+      s.n=n;
+      try{
+        var age=(new Date(shiftDate()+'T12:00:00')-new Date(String(s.at)+'T12:00:00'))/86400000;
+        if(age>HOLD_MAX_DAYS) return false;            // old enough to stop blocking the way
+      }catch(e){}
+      return true;
+    }
+    S.strand={c:c, w:w, d:d, n:n, at:String(shiftDate()), freed:false};
+    return true;
+  }catch(e){ return false; }
+}
 function syncToNext(){
   // On open, land on the next unsaved session. Never hijack a tab (YOU/RATE/CAL/PLAN) or a
   // session still in progress (no saved log yet) — only advance once the current one is banked.
@@ -4839,6 +4901,16 @@ function syncToNext(){
     // OPEN with a weekday map: land on the session this weekday actually owns, if it is still
     // unlogged. The athlete can move off it freely - this is where the card OPENS, not a rail.
     if(splitOpen()){
+      // ADDITIONAL AUDIT 2026-09-12 (finding F28, case X09). The line below brings the pointer up
+      // to the calendar without ever asking whether the session being left has work on it, so a
+      // completed-but-unbanked set in week 1 became unreachable the moment week 2 began. Nothing
+      // was deleted; nothing led back to it either.
+      //
+      // The card holds instead. The CALENDAR is untouched - timeWeek() is still the truth, and the
+      // banner leads with it - but the pointer waits on the unfinished session, so the half-done
+      // work is exactly where the athlete left it, under its own week and its own prescription.
+      // One tap releases it. See strandBannerHTML().
+      try{ if(strandHold(cyc(), S.week, S.day)) return; }catch(e){}
       // and bring a stale pointer up to the calendar rather than stranding it in a spent week
       if(S.week<timeWeek()) S.week=timeWeek();
       var sc=schedTodayCode();
@@ -4849,17 +4921,46 @@ function syncToNext(){
     var nx=nextSession(); if(nx){ S.day=nx.code; S.week=nx.week;
       // A repeat pass re-opens its cell: same split slot, same week, MORE training - the
       // athlete's choice. The cell unlocks, its set states wipe to a clean card, and pass
-      // one's log keeps its date - history and volume count everything actually done.
+      // one's log keeps its date.
+      //
+      // ADDITIONAL AUDIT 2026-09-12 (finding F27, case X08). The sentence that used to end this
+      // comment - "history and volume count everything actually done" - was not true. The line
+      // below deleted the previous pass's set state, and that state is the only thing weekSets()
+      // and cycleSets() can see; the log they never read. The audit reproduced it on the Open path
+      // and named this one as a repair target. It was the same three lines.
       try{ if(sessionLogged(S.week, S.day) && !loggedToday()){
         var dk=cyc()+'|'+S.week+'|'+S.day;
         if(S.locked) delete S.locked[dk];
         if(S.dbf) delete S.dbf[dk];
-        var pref=cyc()+'c|'+S.week+'|'+S.day+'|';
-        Object.keys(S.data||{}).forEach(function(k){ if(k.indexOf(pref)===0) delete S.data[k]; });
+        dparkPass(cyc()+'c|'+S.week+'|'+S.day, shiftDate());
         save();
       }}catch(e){}
     }
   }catch(e){}
+}
+// ADDITIONAL AUDIT 2026-09-12 (finding F28, case X09). The card is holding on an unfinished
+// session while the calendar has moved past it. This says so - leading with the calendar, which is
+// the fact the athlete needs - and offers the one tap that releases it. Go to today deletes
+// nothing: the sets stay under their own key, still counted, still bankable from the calendar.
+function strandBannerHTML(){
+  try{
+    var s=S.strand; if(!s) return '';
+    // Finished, banked, or the work was undone: the note has no reason to exist.
+    if(sessionLogged(s.w, s.d) || !sessionWorkAt(s.c, s.w, s.d)){ S.strand=null; try{ save(); }catch(e){} return ''; }
+    if(s.c!==cyc()) return '';
+    if(!(s.w===S.week && s.d===S.day)) return '';     // only while the card is actually held here
+    var tw=s.w; try{ tw=timeWeek(); }catch(e){}
+    if(tw<=s.w) return '';                            // the calendar has not passed it yet
+    return '<div class="block lockfree" style="border-color:var(--amber)">'
+      +'<div class="cue" style="padding:0 0 8px"><b>Week '+tw+' has started.</b> '
+      +'You have '+s.n+' set'+(s.n===1?'':'s')+' logged here from Week '+s.w+' that '
+      +(s.n===1?'was':'were')+' never banked, so the card has stayed on this session rather than '
+      +'leaving it behind. Finish it or bank it \u2014 or move on, and it keeps counting toward '
+      +'Week '+s.w+' either way.</div>'
+      +'<div class="cardio-row">'
+      +'<div class="toggle" data-strandgo="1" role="button" tabindex="0">Go to today</div>'
+      +'</div></div>';
+  }catch(e){ return ''; }
 }
 function nextLineHTML(){
   try{
@@ -5944,24 +6045,155 @@ function isVisiting(){
     return !live || live.week!==S.week || live.code!==S.day;
   }catch(e){ return false; }
 }
+// ADDITIONAL AUDIT 2026-09-12. Three findings met in this one function and all three are fixed
+// here: F29 (it would write to a log belonging to another profile), F25 (it never looked at the
+// write result and said "Log updated" over a rejection) and F30 (it rebuilt the report from
+// TODAY's notes, cardio, readiness and clock and stamped them onto a past session).
 async function resaveVisitedLog(){
   try{
     var suffix='-'+S.day+'-W'+S.week+'B'+cyc();
     var key=(logKeys||[]).filter(function(k){ return k.endsWith(suffix); }).sort().pop();
     if(!key){ alertToast('No log found for this session'); return; }
+
+    // F29, case X12. Two independent ownership checks, because getting this wrong costs somebody
+    // else their training and they would never know why.
+    //
+    //   1. the log key must sit in the profile-on-screen's own namespace, and
+    //   2. if a document is rendered, it must be THIS log - not one left in a cache by whoever was
+    //      loaded a moment ago.
+    var own=null; try{ own=curLOGP(); }catch(e){}
+    if(own && String(key).indexOf(own)!==0){
+      alertToast('That log belongs to a different profile \u2014 nothing was changed', 6000);
+      return;
+    }
+    try{
+      var __ref=docRef();
+      if(__ref && __ref.key && __ref.key!==key){
+        alertToast('This session does not match the log on file \u2014 nothing was changed', 6000);
+        try{ docMemoClear(); delete logCache[key]; await refreshLogs(); render(); }catch(e){}
+        return;
+      }
+    }catch(e){}
+
     var old={}; try{ var _v=await stGet(key); old=_v? JSON.parse(_v):{}; }catch(e){}
-    var snap={date:old.date||shiftDate(), time:old.time||'', day:S.day, week:S.week, report:report()};
+
+    // F30, case X13. The report is generated from the SESSION's context, not from today's. A log
+    // banked before contexts were stored has none, so its own report text is transcribed rather
+    // than reconstructed - see ctxFromReport().
+    var __ctx=(old && old.ctx) ? old.ctx : ctxFromReport(old);
+    var __rep=reportAsOf(__ctx, old);
+
+    var snap={date:old.date||shiftDate(), time:old.time||'', day:S.day, week:S.week, report:__rep};
+    if(old && old.ctx) snap.ctx=old.ctx;             // the session's context is its own, and stays
     // a document's corrections are written back into its shape. A log from before the shape
     // existed is corrected the old way and stays shape-less: giving it one now would be built
     // from today's plan, which is the exact thing this layer exists to stop.
     try{ if(Array.isArray(old.shape) && old.shape.length) snap.shape=sessionShape(); }catch(e){}
-    await stSet(key, JSON.stringify(snap));
-    _docMemo=null;
+
+    // F25, case X05. This was `await stSet(...)` with the result thrown away, followed
+    // unconditionally by dayLock(true) and "Log updated". A rejected write left the record at its
+    // old value, closed the day, and told the athlete it had saved.
+    //
+    // INVARIANT: the day closes only after a write that was confirmed. On a rejection nothing on
+    // disk changed, the corrected sets stay on screen so the edit is not lost, the day stays
+    // unlocked so it can be retried, and the message says which of those is true.
+    var __w=await stSetR(key, JSON.stringify(snap));
+    if(!__w || !__w.ok){
+      alertToast('Could not save that correction \u2014 the original log is unchanged and your edit '
+                +'is still here. Try again.', 8000);
+      return;
+    }
+    docMemoClear();
     delete logCache[key];
     dayLock(true);                                  // corrections made - the day closes again
     await refreshLogs(); render();
     alertToast('Log updated \u00b7 '+snap.date);
   }catch(e){ oops('resaveVisitedLog',e); alertToast('Could not update the log'); }
+}
+// ADDITIONAL AUDIT 2026-09-12 (finding F30). What a session's report is built from, captured with
+// the session so it can be rebuilt from the same facts later.
+function sessionCtx(){
+  try{
+    var d=(S.when&&S.when.date)||null;
+    var bw=null; try{ (S.weightLog||[]).forEach(function(x){ if(x && x.d===d) bw=x; }); }catch(e){}
+    return {
+      date:d, time:(S.when&&S.when.time)||'',
+      notes:String(S.notes||''),
+      cardio:(function(){ try{ return JSON.parse(JSON.stringify(S.cardio||{})); }catch(e){ return null; } })(),
+      ready:(function(){ try{ return S.ready? JSON.parse(JSON.stringify(S.ready)) : null; }catch(e){ return null; } })(),
+      bw:(function(){ try{ return bw? JSON.parse(JSON.stringify(bw)) : null; }catch(e){ return null; } })()
+    };
+  }catch(e){ return null; }
+}
+// A log banked before sessionCtx() existed has no stored context - only the report it was written
+// with. Transcribe what that text actually says. Nothing here is inferred: a field the old report
+// does not contain stays absent, and reportAsOf() carries the original's own Cardio and Readiness
+// lines across verbatim rather than generating replacements for them.
+function ctxFromReport(old){
+  try{
+    var rep=String((old&&old.report)||'');
+    var body=rep.replace(/\n\(\u2713 =[\s\S]*$/,'');
+    var n=body.match(/^Notes: ([\s\S]*)$/m);
+    return {date:(old&&old.date)||null, time:(old&&old.time)||'',
+            notes:n? n[1] : '', cardio:null, ready:null, bw:null, legacy:true};
+  }catch(e){ return {date:(old&&old.date)||null, time:(old&&old.time)||'', notes:'',
+                     cardio:null, ready:null, bw:null, legacy:true}; }
+}
+// Generate a report as of a stored session context. report() reads S.when, S.notes, S.cardio,
+// S.ready and S.weightLog directly, so the context is substituted for the duration of the call and
+// restored in a finally - including if report() throws.
+function reportAsOf(ctx, old){
+  var sv={when:S.when, notes:S.notes, cardio:S.cardio, ready:S.ready, wl:S.weightLog};
+  var out='';
+  try{
+    if(ctx){
+      if(ctx.date) S.when={date:ctx.date, time:ctx.time||''};
+      S.notes=String(ctx.notes||'');
+      // No stored cardio means this session's cardio is NOT KNOWN from a structured source. It
+      // must not inherit today's, so the generator is given a blank one and the original report's
+      // own Cardio lines are put back below.
+      S.cardio=ctx.cardio || (function(){
+        try{ return JSON.parse(JSON.stringify((typeof S_BLANK!=='undefined' && S_BLANK && S_BLANK.cardio)||{})); }
+        catch(e){ return {on:false,tstart:null,tacc:0,extra:[]}; }
+      })();
+      try{ S.cardio.tstart=null; }catch(e){}          // a running timer is a live fact, never a past one
+      S.ready=ctx.ready||null;
+      S.weightLog=ctx.bw? [ctx.bw] : [];
+    }
+    out=report();
+  }catch(e){ out=String((old&&old.report)||''); }
+  finally{
+    S.when=sv.when; S.notes=sv.notes; S.cardio=sv.cardio; S.ready=sv.ready; S.weightLog=sv.wl;
+  }
+  // For a legacy log, carry the original's transcribed context lines across rather than letting a
+  // generated placeholder stand in for them.
+  try{
+    if(ctx && ctx.legacy && old && old.report){
+      out=reportCarryLine(out, String(old.report), function(ln){ return /^Cardio/.test(ln); });
+      out=reportCarryLine(out, String(old.report), function(ln){ return /^Readiness/.test(ln); });
+    }
+  }catch(e){}
+  return out;
+}
+// Put the ORIGINAL report's lines of one kind back in place of the generated ones, at the position
+// the generated ones held. It never invents a line the original lacks - if the original has none,
+// the generated ones are simply removed, because a session whose source does not record its cardio
+// does not get a cardio line invented for it.
+function reportCarryLine(to, from, test){
+  try{
+    var keep=String(from).split('\n').filter(test);
+    var lines=String(to).split('\n');
+    var out=[], placed=false;
+    for(var i=0;i<lines.length;i++){
+      if(test(lines[i])){
+        if(!placed){ placed=true; for(var j=0;j<keep.length;j++) out.push(keep[j]); }
+        continue;                                     // drop the generated line
+      }
+      out.push(lines[i]);
+    }
+    if(!placed && keep.length) out=out.concat(keep);  // the original said something we did not
+    return out.join('\n');
+  }catch(e){ return to; }
 }
 // ===== REPEAT PASS (Open only) =====
 // FIELD 2026-09-02: with every session in the week logged, Open had no door left. Every cell
@@ -5991,8 +6223,11 @@ function rePassGo(){
     var dk=cyc()+'|'+S.week+'|'+S.day;
     if(S.locked) delete S.locked[dk];
     if(S.dbf) delete S.dbf[dk];
-    var pref=cyc()+'c|'+S.week+'|'+S.day+'|';
-    Object.keys(S.data||{}).forEach(function(k){ if(k.indexOf(pref)===0) delete S.data[k]; });
+    // ADDITIONAL AUDIT 2026-09-12 (finding F27, case X08). This used to delete the previous pass's
+    // set state outright, which is the only evidence weekSets() and cycleSets() can see. Two banked
+    // sets on two dates then read as one. The pass is parked instead - same clean card, the work
+    // still counted.
+    dparkPass(cyc()+'c|'+S.week+'|'+S.day, shiftDate());
     S.rePass={k:dk, d:String(shiftDate())}; save(); render();
     alertToast('Fresh card \u2014 your first pass is still in the log');
   }catch(e){ oops('rePassGo',e); }
@@ -6010,7 +6245,11 @@ function reviewBarHTML(){
     try{
       var vr=visitedLogRef();
       if(vr && vr.c && vr.c.shape_src==='report' && Array.isArray(vr.c.shape) && vr.c.shape.length){
-        h+='<div class="cue lockfree" style="padding:6px 0">Rebuilt from the session report \u2014 the movements, weights and sets are the ones written down when this session was banked.</div>';
+        // ADDITIONAL AUDIT 2026-09-12 (finding F26). The second sentence is new. The rep targets
+        // used to be filled in from today's program and shown with the same confidence as the
+        // weights, which were actually written down. The screen now says which is which.
+        h+='<div class="cue lockfree" style="padding:6px 0">Rebuilt from the session report \u2014 the movements, weights and sets are the ones written down when this session was banked. '
+          +'The rep targets were not recorded in that report, so they are left blank rather than guessed from today\u2019s program.</div>';
       }
       if(vr && vr.c && !(Array.isArray(vr.c.shape) && vr.c.shape.length) && vr.c.report){
         h+='<div class="block lockfree" style="border-color:var(--amber)">'
@@ -6950,6 +7189,13 @@ async function rosterSwitch(id){
     // the drawer being left may have banked a session or finished setup - its cached roster
     // line is now stale, so drop it and let the refill below read the real numbers
     try{ if(ROSTER.active) delete ROSTER_PROG[ROSTER.active]; }catch(e){}
+    // ADDITIONAL AUDIT 2026-09-12 (finding F29, case X12). The memo key now carries the owner, so
+    // this is no longer what prevents the bug - but a document cache that survives a profile
+    // switch is the SHAPE of that bug, and it should not exist at all. Dropping the pending-read
+    // table too means a read started under the previous profile cannot land into the next one's
+    // render and call for a repaint of a day it knows nothing about.
+    try{ docMemoClear(); }catch(e){}
+    try{ for(var __vk in vcPend) delete vcPend[__vk]; }catch(e){}
     // The selection changes SYNCHRONOUSLY, before any await. A tap must take effect on the tap;
     // deferring this behind a wait made the roster feel dead and made every caller that reads
     // ROSTER.active straight after the switch see the old value.
@@ -12578,6 +12824,44 @@ function dayOrderNames(code){
 // still know the work happened.
 var DPARK_MAX=600;
 function dparkAll(){ if(!S.dpark || typeof S.dpark!=='object' || Array.isArray(S.dpark)) S.dpark={}; return S.dpark; }
+// ADDITIONAL AUDIT 2026-09-12 (finding F27, case X08). A repeat pass opens a clean card, and both
+// places that did so DELETED the previous pass's set state. The pass's log survived, but the log is
+// not what weekSets() and cycleSets() read - they read live state and parked records - so a second
+// pass made the first one's work vanish from every total, permanently.
+//
+// The park is exactly the right home for this: work that happened and no longer has a slot in the
+// day. Both counters already read it.
+//
+// INVARIANT: every completed set is counted exactly once. A pass is either live in S.data or
+// parked, never both, and each pass is parked under its OWN identity - the movement's name plus the
+// date it was banked - so a second pass at the same movement does not overwrite the first.
+//
+// The date in the name also keeps these out of dparkTake()'s reach. That restores a removed
+// movement by its exact name, and a finished pass must never be restored INTO a day as live set
+// state. It is history. It is only ever counted.
+function dparkPass(dayPrefix, when){
+  var moved=0;
+  try{
+    var pref=dayPrefix+'|';
+    var stamp=String(when||shiftDate()||'');
+    Object.keys(S.data||{}).forEach(function(k){
+      if(k.indexOf(pref)!==0) return;
+      var st=S.data[k];
+      try{
+        var done=(st&&st.sets||[]).some(function(s){ return s && s.st && s.st!=='pend'; });
+        // Nothing was performed in this slot: there is no work to preserve and parking an empty
+        // record would only clutter a store with a size cap on it.
+        if(done){
+          var nm=(st&&st.n)||('slot '+k.slice(pref.length));
+          dparkPut(dayPrefix, nm+' \u00b7 '+stamp, st);
+          moved++;
+        }
+      }catch(e){}
+      delete S.data[k];
+    });
+  }catch(e){}
+  return moved;
+}
 function dparkKey(pre, name){ return pre+'\u0001'+name; }
 function dparkPut(pre, name, st){
   try{ if(!name || !st) return;
@@ -15231,7 +15515,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v237';
+const BUILD = 'v237c';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -15981,27 +16265,52 @@ function dayObjRaw(){ const p=planDay();
 //   - a log written before this existed has no shape and is left exactly as it was, with a
 //     plain notice and the banked report beside it. Nothing about the past is invented.
 var _docMemo=null, _docBusy=false;
+// ADDITIONAL AUDIT 2026-09-12 (finding F29, case X12). True while a historical document is being
+// read. The day must not fall back to today's plan in that window - see dayObj().
+var DOC_LOADING=false;
+// The memo key used to be [day, week, block, log count, rePass, splitMode, date]. Nothing in that
+// says WHOSE document it is. A coach and an athlete on the same date, week, day, block and rhythm
+// with the same number of logs produced the SAME key, so after a profile switch the coach's cached
+// ref - carrying the coach's log key - was handed back for the athlete's day. The screen showed
+// the coach's session, and the ordinary correction save then wrote it over the athlete's record.
+//
+// INVARIANT: a cache entry belongs to exactly one profile. The owner is part of the key, so two
+// profiles cannot share an entry however much else matches.
+function docMemoKey(){
+  var own='', act='';
+  try{ own=curSKEY()||''; }catch(e){}
+  try{ act=(typeof ROSTER!=='undefined' && ROSTER && ROSTER.active)? String(ROSTER.active) : ''; }catch(e){}
+  return [own, act, S.day, S.week, cyc(), (logKeys||[]).length, !!S.rePass,
+          S.splitMode||'', (S.when&&S.when.date)||''].join('|');
+}
+function docMemoClear(){ try{ _docMemo=null; DOC_LOADING=false; }catch(e){} }
 function docRef(){
   if(_docBusy) return null;                  // isVisiting -> nextSession -> dayObj -> here
   try{
-    var k=[S.day, S.week, cyc(), (logKeys||[]).length, !!S.rePass, S.splitMode||'', (S.when&&S.when.date)||''].join('|');
-    if(_docMemo && _docMemo.k===k) return _docMemo.ref;
+    var k=docMemoKey();
+    if(_docMemo && _docMemo.k===k){ DOC_LOADING=!!_docMemo.loading; return _docMemo.ref; }
     _docBusy=true;
-    var ref=null;
+    var ref=null, loading=false;
     try{
       if(isVisiting()){
         var v=visitedLogRef();
-        if(v && v.c && Array.isArray(v.c.shape) && v.c.shape.length){
+        // X11: a read that has not finished is NOT an absent document, and must never be cached as
+        // one. Leaving the memo unset means the next render - the one the read itself triggers -
+        // asks again and gets the real answer.
+        if(v && v.status==='loading'){ loading=true; }
+        else if(v && v.c && Array.isArray(v.c.shape) && v.c.shape.length){
           var suffix='-'+S.day+'-W'+S.week+'B'+cyc();
           var key=(logKeys||[]).filter(function(x){ return x.endsWith(suffix); }).sort().pop();
           if(key) ref={key:key, shape:v.c.shape};
         }
       }
-    }catch(e){ ref=null; }
+    }catch(e){ ref=null; loading=false; }
     _docBusy=false;
-    _docMemo={k:k, ref:ref};
+    DOC_LOADING=loading;
+    if(loading) return null;                 // deliberately NOT memoised
+    _docMemo={k:k, ref:ref, loading:false};
     return ref;
-  }catch(e){ _docBusy=false; return null; }
+  }catch(e){ _docBusy=false; DOC_LOADING=false; return null; }
 }
 // the shape of the day on screen, as performed - taken at bank and at every correction
 function sessionShape(){
@@ -16066,6 +16375,15 @@ function docParseTok(t){
   var reps=m[1].indexOf(':')>-1? (parseInt(m[1].split(':')[0],10)*60+parseInt(m[1].split(':')[1],10)) : +m[1];
   return {st:'done', reps:reps, rir:(m[2]!=null? +m[2] : null), w:null, g:g};
 }
+// ADDITIONAL AUDIT 2026-09-12 (finding F26, case X07). This walks TODAY'S plan, which is fine for
+// what it is - a lookup of the current prescription - and was catastrophic for what it was used
+// for: filling in the rep target of a session logged months ago. The same old report reconstructed
+// as 8 reps or 3 reps depending on what today's template happened to say.
+//
+// INVARIANT: a checkmark in an old report means "met the target". It does not say what the target
+// WAS. What the source does not record stays unknown; nothing here supplies a number for it.
+// Callers reconstructing history take `rest` and `main` from this and must mark them as inferred -
+// see shapeFromReport().
 function docPlanLookup(name){
   var out={r:'', rest:'', main:false};
   try{ (PLAN.days||[]).forEach(function(dd){ (dd.exercises||[]).forEach(function(e){
@@ -16078,7 +16396,9 @@ function shapeFromReport(rep){
     for(var i=0;i<lines.length;i++){
       var line=lines[i].trim(); if(!line || DOC_SKIP.test(line)) continue;
       var nd=line.match(/^(.+): not done$/);
-      if(nd){ var pl0=docPlanLookup(nd[1]); out.push({n:nd[1], sub:null, r:pl0.r, rir:'', rest:pl0.rest, w:null, load:'', ph:false, main:pl0.main, out:false, feel:null, sets:[]}); continue; }
+      // F26: r stays UNKNOWN. The report records that this movement was not done; it does not
+      // record what was asked of it, and today's template is not evidence about that day.
+      if(nd){ var pl0=docPlanLookup(nd[1]); out.push({n:nd[1], sub:null, r:'', rir:'', rest:pl0.rest, w:null, load:'', ph:false, main:pl0.main, out:false, feel:null, sets:[], r_src:'unknown', m_src:'plan'}); continue; }
       var tags=[]; var tm=line.match(/\s\[([^\]]*)\]$/); if(tm){ tags=tm[1].split(' \u2014 '); line=line.slice(0, tm.index); }
       var segs=line.split(' | '); var head=segs[0];
       var hm=head.match(/^(.+?) (\S+?)(\/hand)?: (.*)$/); if(!hm) return null;
@@ -16093,7 +16413,17 @@ function shapeFromReport(rep){
       var isOutTag=tags.indexOf('removed')>-1;
       var name=orig||nm, sub=orig? nm : null;
       var pl=docPlanLookup(name);
-      out.push({n:name, sub:sub, r:pl.r, rir:'', rest:pl.rest, w:w, load:(w==null? wtok : ''), ph:ph, main:pl.main, out:isOutTag, feel:null, sets:sets});
+      // ADDITIONAL AUDIT 2026-09-12 (finding F26, case X07). `r:pl.r` is what made the same old
+      // report read as 8 reps today and 3 reps tomorrow. The weight, the movement and every set's
+      // result are TRANSCRIBED from the report and are facts. The rep target is not in the report,
+      // so it is recorded as unknown and labelled as such.
+      //
+      // rest and main still come from the current plan, and are labelled too. Neither changes what
+      // the athlete is recorded as having done - rest is not a claim about performance, and whether
+      // a lift is a main lift belongs to the movement rather than to that session - but the schema
+      // says where they came from rather than leaving it to be assumed.
+      out.push({n:name, sub:sub, r:'', rir:'', rest:pl.rest, w:w, load:(w==null? wtok : ''), ph:ph,
+                main:pl.main, out:isOutTag, feel:null, sets:sets, r_src:'unknown', m_src:'plan'});
     }
     return out.length? out : null;
   }catch(e){ return null; }
@@ -16130,6 +16460,12 @@ function docDayObj(ref){
 }
 function dayObj(){
   try{ var ref=docRef(); if(ref) return docDayObj(ref); }catch(e){}
+  // ADDITIONAL AUDIT 2026-09-12 (finding F29, case X11). A visited day whose log is still being
+  // read used to fall through and render TODAY'S plan - and the athlete could then correct and
+  // save it, writing today's movements into a past session. An empty day that says it is loading
+  // is the honest answer for the fraction of a second the read takes; the read's own render()
+  // replaces it with the real session.
+  try{ if(DOC_LOADING){ return Object.assign({}, planDay(), {exercises:[], doc:true, docLoading:true}); } }catch(e){}
   var d=dayObjRaw();
   try{
     var ordered=applyOrder(d.code,d.exercises);
@@ -17944,17 +18280,35 @@ function scheduleRestBeeps(b){
 // written under MONDAY'S DATE. That corrupts the log the whole week engine reads.
 // On every return to the foreground, if the training day has changed, do what boot does.
 var __lastSeenDay=null;
+// FIELD 2026-09-12 (Jerry). How far back a session may be dated. Not a validated number: far
+// enough to cover a phone left in a truck over a long weekend, short enough that a mistyped year
+// is refused rather than buried somewhere the calendar will never show it.
+var BACKDATE_MAX_DAYS=30;
+// Is this session dated the way the athlete asked, rather than merely out of date?
+function whenManual(){ try{ return !!(S.when && S.when.manual); }catch(e){ return false; } }
 function dayRollCheck(){
   try{
     var today=shiftDate();
     if(__lastSeenDay===null) __lastSeenDay=(S.when&&S.when.date)||today;
+    // FIELD 2026-09-12 (Jerry): "if i change the date on that day's training, it bounces back to
+    // today." It did, here. This guard re-dates a session whose date is not today, which is right
+    // when the card was left open overnight and wrong when the athlete typed yesterday on purpose
+    // because their phone was not with them. It could not tell the two apart. Now it can: a
+    // session the athlete dated is left exactly as they left it, and every other session gets the
+    // overnight protection unchanged.
+    if(whenManual()){ __lastSeenDay=today; return false; }
     if((S.when&&S.when.date)===today){ __lastSeenDay=today; return false; }
     // a new training day: re-date the session, land on the next one, clear yesterday's focus
+    // ADDITIONAL AUDIT 2026-09-12 (finding F28, case X09). A new day can move the card off a
+    // session that has performed sets on it and was never banked. Decide BEFORE syncToNext() moves
+    // the pointer, while S.week and S.day still say which session that is. Re-dating still happens
+    // - the clock really did move - but the pointer, and their place in the session, stay put.
+    var __hold=false; try{ __hold=strandHold(cyc(), S.week, S.day); }catch(e){}
     S.when={date:today, time:(typeof localTime==='function')? localTime() : '00:00'};
-    S.focus=0;
+    if(!__hold) S.focus=0;
     __lastSeenDay=today;
     save();
-    try{ syncToNext(); }catch(e){}
+    if(!__hold){ try{ syncToNext(); }catch(e){} }
     try{ render(); }catch(e){}
     return true;
   }catch(e){ return false; }
@@ -18149,6 +18503,10 @@ async function saveSessionLog(quiet){
   // failed to persist, and it moved on whatever profile happened to be on screen when the write
   // came back. It now runs after the write has succeeded and inside the owned path, below.
   if(!storageOK){ opEnd(__op); if(!quiet) alertToast('Storage unavailable on this device'); return false; }
+  // FIELD 2026-09-12 (Jerry). This key is why back-dating works at all: the session files under
+  // the date on the field, so yesterday's work lands on yesterday. Banking locks dayKey() -
+  // cycle|week|day - which has never been tied to the calendar, so today's training day is freed
+  // exactly as Jerry wanted.
   const key=__op.logp+S.when.date+'-'+S.day+'-W'+S.week+'B'+cyc();
   try{ __op.dk=cyc()+'|'+S.week+'|'+S.day; }catch(e){}
   // Session notes belong to the session they were written for. They are cleared once safely
@@ -18160,7 +18518,11 @@ async function saveSessionLog(quiet){
   // itself renders this session from, forever, whatever the program becomes
   var shape0=[]; try{ shape0=sessionShape(); }catch(e){ shape0=[]; }
   try{ srvCount('sessions'); }catch(e){}
-  const snap={date:S.when.date, time:S.when.time, day:S.day, week:S.week, report:report(), shape:shape0};
+  // ADDITIONAL AUDIT 2026-09-12 (finding F30). The context a report is built from is now stored
+  // WITH the session, so a correction months later can regenerate that session's report from that
+  // session's own facts instead of from whatever is on screen today.
+  const snap={date:S.when.date, time:S.when.time, day:S.day, week:S.week, report:report(),
+              shape:shape0, ctx:sessionCtx()};
   try{
     // stSet returns FALSE when the write fails - a full device, most often - and this line
     // used to discard that answer and carry on to "Session saved". The athlete finished a
@@ -18206,6 +18568,12 @@ async function saveSessionLog(quiet){
     try{ var dk=cyc()+'|'+S.week+'|'+S.day;
          S.dbf=S.dbf||{}; S.dbf[dk]=true;
          S.locked=S.locked||{}; S.locked[dk]=true; }catch(e){ oops('lockOnSave',e); }
+    // FIELD 2026-09-12 (Jerry). A back-date belongs to the session being logged, not to the card.
+    // The session is now on disk under the date the athlete chose, so the deliberate-date mark has
+    // done its job and is cleared here: the NEXT session starts on today, and dayRollCheck() goes
+    // back to protecting it the ordinary way. A back-date is a decision about one session, never
+    // a setting that quietly persists.
+    try{ if(S.when && S.when.manual) delete S.when.manual; }catch(e){}
     if(String(S.notes||'').trim()){ S.noteStash=S.notes; S.noteStashKey=key; }
     S.notes='';
     try{ if(S.rePass && S.rePass.k===cyc()+'|'+S.week+'|'+S.day) S.rePass=null; }catch(e){}   // the pass is banked: the door closes
@@ -18490,6 +18858,7 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(S.noteStashKey===undefined) S.noteStashKey=null;
   if(S.froze===undefined) S.froze={};
   if(S.rptOpen===undefined) S.rptOpen=false;
+  if(S.strand===undefined) S.strand=null;    // F28: an unfinished session the card is waiting on
   if(S.rptKind===undefined) S.rptKind='bug';
   if(S.coachOwn===undefined) S.coachOwn=false;
   if(S.locked===undefined) S.locked={};
@@ -18931,6 +19300,7 @@ function renderInner(){
   try{ h+=fatigueHTML(); }catch(e){}
   try{ h=lockBarHTML()+h; }catch(e){}
   try{ h+=prBannerHTML(); }catch(e){}
+  try{ h+=strandBannerHTML(); }catch(e){}
   try{ h+=blockFxHTML(); }catch(e){}
   try{ h+=howSheetHTML(); }catch(e){}
   try{ h+=reportHTML(); }catch(e){}
@@ -19460,6 +19830,22 @@ function wire(){
   try{ rosterWire(); }catch(e){ oops('rosterWire',e); }
   document.querySelectorAll('[data-unlock]').forEach(function(el){
     el.onclick=function(){ dayLock(false); alertToast('Unlocked \u2014 changes will be saved again'); render(); }; });
+  // F28. Releases the hold and moves to today. Deletes NOTHING - the unbanked sets stay under their
+  // own key, still count toward their own week and block, and that session can still be banked
+  // later from the calendar. `freed` makes the release permanent, so having once said "move on" the
+  // athlete is not asked again tomorrow about the same session.
+  document.querySelectorAll('[data-strandgo]').forEach(function(el){
+    el.onclick=function(){
+      try{
+        var s=S.strand;
+        if(s) s.freed=true;
+        save();
+        try{ syncToNext(); }catch(e){}
+        save(); render();
+        if(s) alertToast('Moved on \u2014 those '+s.n+' set'+(s.n===1?'':'s')
+                        +' still count toward Week '+s.w, 6000);
+      }catch(e){ oops('strandGo',e); }
+    }; });
   document.querySelectorAll('[data-how]').forEach(function(el){ el.onclick=function(ev){ ev.stopPropagation(); howEx=el.dataset.how; render(); }; });
   document.querySelectorAll('[data-howclose]').forEach(function(el){ el.onclick=function(ev){
     if(ev.target!==el) return; howEx=null; render(); }; });
@@ -19917,8 +20303,38 @@ function wire(){
     render();
   };
   try{ wireRest(); paintRest(true); paintBars(); }catch(e){}
-  const sd=document.getElementById('sdate'); if(sd) sd.onchange=()=>{S.when.date=sd.value;save();};
-  const stm=document.getElementById('stime'); if(stm) stm.onchange=()=>{S.when.time=stm.value;save();};
+  // FIELD 2026-09-12 (Jerry). Changing the date marks the session as deliberately dated, which is
+  // what stops dayRollCheck() and the boot guard from dragging it back to today. The bounds are
+  // here rather than on the input because a phone's native date picker ignores min/max often
+  // enough that relying on it would be a guess.
+  const sd=document.getElementById('sdate'); if(sd) sd.onchange=()=>{
+    var v=String(sd.value||'');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){ sd.value=S.when.date; return; }
+    var today=shiftDate();
+    if(v>today){
+      // Refuse rather than correct. A session that has not happened yet breaks every reader that
+      // asks how long ago something was - readiness, layoff detection, rate of climb.
+      sd.value=S.when.date;
+      alertToast('That date has not happened yet \u2014 a session can only be logged for today or earlier', 5000);
+      return;
+    }
+    var age=0; try{ age=Math.round((new Date(today+'T12:00:00')-new Date(v+'T12:00:00'))/86400000); }catch(e){ age=0; }
+    if(age>BACKDATE_MAX_DAYS){
+      sd.value=S.when.date;
+      alertToast('That is more than '+BACKDATE_MAX_DAYS+' days ago \u2014 check the year', 5000);
+      return;
+    }
+    S.when.date=v;
+    S.when.manual=(v!==today)||undefined;    // back to today is not a deliberate back-date
+    save(); render();
+    if(v!==today) alertToast('This session will be logged for '+v+' \u2014 Now puts it back to today', 5000);
+  };
+  const stm=document.getElementById('stime'); if(stm) stm.onchange=()=>{
+    S.when.time=stm.value;
+    // A time set by hand on a back-dated session must survive the same way the date does.
+    if(S.when.date!==shiftDate()) S.when.manual=true;
+    save();
+  };
   const nb=document.getElementById('nowBtn'); if(nb) nb.onclick=()=>{S.when={date:shiftDate(),time:localTime()};save();render();};
   const sl=document.getElementById('saveLog'); if(sl) sl.onclick=()=>{ saveSessionLog(false); };
   const xl=document.getElementById('exportLogs'); if(xl) xl.onclick=()=>{ exportAllLogs(); };
@@ -22654,7 +23070,10 @@ async function bootAfterLoad(res){
     }
     if(S.fin && S.fin.done && S.fin.d && S.fin.d!==shiftDate()){ S.fin=null; save(); }
   }catch(e){ oops('cardioDayRoll',e); }
-  if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; if(!S.when || !S.when.date || (S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs();
+  if(!S.weightLog) S.weightLog=[]; if(!S.outs) S.outs={}; if(!S.customs) S.customs={}; // FIELD 2026-09-12 (Jerry). Same rule as dayRollCheck: a session the athlete dated on purpose
+// survives a close and reopen. Without this half, the fix above only lasted until the card was
+// shut - which on a phone is most of the time.
+if(!S.when || !S.when.date || (!whenManual() && S.when.date!==shiftDate() && S.when.date!==localDate())){ S.when={date:shiftDate(), time:localTime()}; save(); } await probeStorage(); await refreshLogs();
   // R02. Immediately after the listing, while LOGS_OK describes THIS listing.
   try{ if(lockReconcile()) save(); }catch(e){ oops('lockReconcile',e); }
   try{ var _layActs=adLayoffBoot(); if(_layActs && _layActs.length){ setTimeout(function(){ try{ alertToast('Welcome back \u00b7 '+adSummaryLine(_layActs), 7000); }catch(e){} }, 1600); } }catch(e){ oops('adLayoffBoot',e); } try{ landOnTraining(); }catch(e){ try{ syncToNext(); }catch(e2){} }

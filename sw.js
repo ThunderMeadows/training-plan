@@ -12,7 +12,7 @@
 //   SHELL  card-shell-<build>   replaced on every deploy. Cheap to refetch.
 //   MEDIA  card-media-v1        SURVIVES deploys. Cleared only by an explicit request from the
 //                               card, or by the browser under storage pressure.
-const BUILD = 'v237';
+const BUILD = 'v237c';
 const SHELL = 'card-shell-' + BUILD;
 const MEDIA = 'card-media-v1';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './apple-touch-icon.png',
