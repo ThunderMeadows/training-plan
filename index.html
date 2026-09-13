@@ -4278,7 +4278,10 @@ function visitedLogRef(){
     var c=logCache[key];
     if(c) return {c:c, missing:false, status:'loaded', key:key, owner:own};
     if(!vcPend[key]){ vcPend[key]=1;
-      stGet(key).then(function(v){ try{ logCache[key]=v? JSON.parse(v):{}; }catch(e){ logCache[key]={}; }
+      stGet(key).then(function(v){
+        // DS03: a document this copy has READ can be replaced by it. One it has never read cannot.
+        try{ logRevNote(key, v); }catch(e){}
+        try{ logCache[key]=v? JSON.parse(v):{}; }catch(e){ logCache[key]={}; }
         delete vcPend[key]; try{ render(); }catch(e){} }).catch(function(){ delete vcPend[key]; });
     }
     return {c:null, missing:false, status:'loading', key:key, owner:own};
@@ -4404,6 +4407,37 @@ function finisherPanelHTML(){
 // adjustment produced strength outcomes at least as good as fixed percentage prescription.
 const AC_MIN_SETS=3;        // evidence required before touching a training max
 const AC_MAX_JUMP=0.15;     // never move a max more than 15% at once
+// FIELD 2026-09-13 (Jerry). THE ONE PLACE an estimated or tested 1RM becomes a programming max.
+//
+// There used to be three. pvStart() cut a tested 1RM by PV_HAIRCUT=0.95, suggestMax() cut an
+// estimate by a literal 0.95, and autoCalibrate() - the path that runs by itself on every bank -
+// cut by 0.85/0.87/0.90 depending on declared experience. The comment above PV_HAIRCUT claimed it
+// used "the same haircut suggestMax() already applies to an estimate", which was true of
+// suggestMax and false of the automatic one.
+//
+// The effect on a real athlete: suggestMax only ever proposes UPWARD, autoCalibrate writes in BOTH
+// directions at the lower number, so the standing disagreement always resolved downward. Jerry set
+// four personal records and was told in the same breath that his bench had dropped 50 lb and his
+// squat 40. His evidence had not fallen. The exchange rate had two values.
+//
+// DECIDED BY JERRY 2026-09-13: 0.95, everywhere, from here. Three readers, one number, so they
+// cannot drift apart again.
+//
+// The experience tiering it replaces was doing a second job - being cautious with a novice whose
+// RIR reporting is least reliable - in the wrong place, invisibly, inside a conversion factor.
+// That caution belongs in what counts as evidence, not in a hidden multiplier. The consequence is
+// that auto-calibration now prescribes heavier for a novice than it did, and that is ON THE
+// BATCH 4 LIST for the qualified strength and conditioning review, not settled here.
+const MAX_HAIRCUT=0.95;
+// P02. Rep context of the evidence calibration prefers. A set of ten estimates a lower single than
+// a set of eight at the same strength - the card's own release notes say so - and pooling them
+// walked a max down through a volume block. CHOSEN, not validated: 8 is the line the card's own
+// starter templates already draw between a heavy day and a volume day. Batch 4 reviews it.
+const AC_REP_MAX=8;
+// FOURTH AUDIT 2026-09-13 (finding DS11). The floor the manual max steppers have always enforced
+// (`Math.max(45, ...)`), named once so an automatic pass cannot put a max somewhere the athlete is
+// not allowed to type. The audit's rounding sweep produced 45 -> 40, below it.
+const MAX_FLOOR_LB=45;
 // Does the plan actually running right now take its loads from S.maxes? A generated plan always
 // does. A baked plan does whenever any exercise carries both a maxKey and a pct ladder - that is
 // exactly the pair baseLoad() multiplies. If nothing is max-driven, revising a max would change
@@ -4451,6 +4485,15 @@ function autoCalibrate(){
       // enough of it and fall back to everything only when there is not.
       var near=H.filter(function(x){ return x.r!=null && x.r<=2; });
       if(near.length>=AC_MIN_SETS) H=near;
+      // PROGRESSION AUDIT (finding P02), reported from the field by Jerry 2026-09-13. The same rule
+      // one line up, applied to rep context. A ten-rep set estimates a lower single than an
+      // eight-rep set off the same strength; taking the median across both walked a max DOWN
+      // through a volume block while the athlete was setting personal records. Heavy evidence
+      // extrapolates least, so calibration reads that when there is enough of it - and falls back
+      // to everything when there is not, so a lift only ever trained in the ten-to-twelve range is
+      // still calibrated from its own evidence rather than frozen.
+      var heavy=H.filter(function(x){ return x.n!=null && +x.n<=AC_REP_MAX; });
+      if(heavy.length>=AC_MIN_SETS) H=heavy;
       // median of recent estimates: one fluke set should not move a training max
       // PROGRESSION AUDIT 2026-09-12 (finding P01). This computes a target from the EVIDENCE but
       // caps the step against the CURRENT max, so the same four points walked a 200 lb max to
@@ -4466,14 +4509,45 @@ function autoCalibrate(){
       if(S.acSeen[k]===sig) return;                  // already spent; re-saving earns nothing
       var vals=H.map(function(x){ return x.v; }).sort(function(a,b){ return a-b; });
       var med=vals[Math.floor(vals.length/2)];
-      var factor=(S.onb&&S.onb.exp==='vet')?0.90:(S.onb&&S.onb.exp==='some'?0.87:0.85);
-      var want=Math.round(med*factor/5)*5;
+      // FIELD 2026-09-13 (Jerry). This was
+      //     var factor=(S.onb&&S.onb.exp==='vet')?0.90:(S.onb&&S.onb.exp==='some'?0.87:0.85);
+      // while pvStart() and suggestMax() both used 0.95 for the same conversion. See MAX_HAIRCUT.
+      var want=Math.round(med*MAX_HAIRCUT/5)*5;
       var cur=S.maxes[k];
       if(!cur||!want) return;
       var delta=(want-cur)/cur;
       if(Math.abs(delta)<0.04) return;                  // inside the noise band, leave it alone
-      var capped=Math.round(cur*(1+Math.max(-AC_MAX_JUMP,Math.min(AC_MAX_JUMP,delta)))/5)*5;
+      // FOURTH AUDIT 2026-09-13 (finding DS11, case N02). This was
+      //     var capped=Math.round(cur*(1+clamp(delta))/5)*5;
+      // which clamps the PERCENTAGE and then rounds the weight to the NEAREST 5 - routinely
+      // outward. 55 -> 65 is +18.18% under a cap that says 15%, and 95 -> 110 is +15.79%.
+      //
+      // The same mistake as P11, one function across: there a 1.5% cap produced a 2.5% move by
+      // rounding to the nearest 5, and the repair was to apply the bound AFTER the rounding. I did
+      // not carry it here, and tools/calibration-probes.cjs tested 100 -> 115 - a value that lands
+      // exactly on the grid, so it passed whichever way the rounding leaned.
+      //
+      // INVARIANT: the bound holds on the FINAL STORED VALUE. Rounding goes INWARD - down while
+      // rising, up while falling - so the stored result is always at least as close to where it
+      // started as the raw bound allows, never further.
+      var __lim=Math.max(-AC_MAX_JUMP, Math.min(AC_MAX_JUMP, delta));
+      var __edge=cur*(1+__lim);
+      // The epsilon is not decoration. 200*1.15 is 229.99999999999997 in IEEE-754, so a bare floor
+      // drops a whole 5 lb step at values that sit exactly ON the boundary - 200 would cap at 225
+      // instead of 230, quietly under-applying the athlete's earned move. Caught by the boundary
+      // sweep added to tools/calibration-probes.cjs for this same finding, which is the point of
+      // having widened it. It rounds inward, and only inward, by strictly more than float error.
+      var capped=(__lim>=0)? Math.floor(__edge/5 + 1e-9)*5 : Math.ceil(__edge/5 - 1e-9)*5;
+      // Inward rounding can land back on the current max when the whole allowance is smaller than
+      // one 5 lb step - a light lift under a tight cap. Holding is the honest answer; the noise
+      // band above has already established this is not a move worth forcing.
       if(capped===cur) return;
+      // The floor the manual controls enforce. An automatic pass may not go below it.
+      if(capped<MAX_FLOOR_LB) capped=MAX_FLOOR_LB;
+      if(capped===cur) return;
+      // Belt and braces: assert the contract on the value actually about to be stored. If this ever
+      // trips, the arithmetic above is wrong and holding is better than storing an out-of-bounds max.
+      if(Math.abs((capped-cur)/cur) > AC_MAX_JUMP+1e-9) return;
       S.maxes[k]=capped;
       S.acSeen[k]=sig;                               // this evidence is now spent for this lift
       changed.push({k:k, from:cur, to:capped, n:H.length});
@@ -4488,6 +4562,9 @@ function autoCalibrate(){
     // wrote to acLog, which nothing reverses. It goes in the same record as every other change.
     S.adLog=(S.adLog||[]).concat(changed.map(function(c){
       return {kind:'calib', lift:c.k, from:c.from, to:c.to, d:acd,
+              // FOURTH AUDIT 2026-09-13 (section 7). `c.n` counts retained EVIDENCE POINTS - roughly
+              // one per lift per date - not sets and not sessions, which is what this line and the
+              // banner below each called them. Two names, neither true.
               why:'your own logged sets estimate a '+(c.to>c.from?'higher':'lower')+' max \u2014 '
                  +c.n+' sessions of evidence'};
     })).slice(-30);
@@ -4546,7 +4623,7 @@ function acBannerHTML(){
      +'<h3 style="color:var(--green)">Weights updated from your own sets</h3>'
      +'<div style="font-size:13px;line-height:1.7">'+last.changed.map(function(c){
         return (names[c.k]||c.k)+': '+WV(c.from)+' \u2192 '+WV(c.to)+' '+uLbl()
-          +' <span style="color:var(--dim)">(from '+c.n+' logged sets)</span>'; }).join('<br>')+'</div>'
+          +' <span style="color:var(--dim)">(from '+c.n+' day'+(c.n===1?'':'s')+' of evidence)</span>'; }).join('<br>')+'</div>'
      +'<div class="cue" style="padding:8px 0 0">Your starting numbers came from a short test. These come from real training, which is better evidence \u2014 so the card trusts these instead.</div>'
      +'<div class="daybtn" data-acack="1" style="margin-top:10px;display:inline-block;padding:8px 14px;font-size:12px">Got it</div>'
      +'</div>';
@@ -6075,7 +6152,52 @@ async function resaveVisitedLog(){
       }
     }catch(e){}
 
-    var old={}; try{ var _v=await stGet(key); old=_v? JSON.parse(_v):{}; }catch(e){}
+    // FOURTH AUDIT 2026-09-13 (finding DS01). Everything above this line is synchronous and was
+    // already checked. Everything below it crosses an await, and the checks above were never
+    // repeated - so a rosterSwitch during the read left the ownership tests passed by the profile
+    // that LEFT and the payload built from the profile that ARRIVED. A's Back Squat log was
+    // overwritten with B's Rope Pushdowns and B's day was locked.
+    //
+    // The card has had the answer to this since F07 and the correction path never adopted it:
+    // opCtx() captures the profile an operation began in, opOwns() asks whether it is still the one
+    // on screen. saveSessionLog has used it for days.
+    var __op=opCtx('correct');
+    // The corrected work is captured HERE, before any await, from the day actually on screen. A
+    // switch mid-read can no longer substitute somebody else's workout for it.
+    var __shape=null; try{ __shape=sessionShape(); }catch(e){ __shape=null; }
+
+    // FOURTH AUDIT 2026-09-13 (finding DS02). This was
+    //     var old={}; try{ var _v=await stGet(key); old=_v? JSON.parse(_v):{}; }catch(e){}
+    // stGet() flattens stGetR()'s four outcomes into a string or null and the catch discards the
+    // rest, so "there is no such record" and "I could not find out" both became `old={}` - and the
+    // correction then built a replacement, with a fallback date and no shape or context, and wrote
+    // it over a document it had never read.
+    //
+    // INVARIANT: a correction is an EDIT OF A KNOWN DOCUMENT. If the document cannot be read there
+    // is nothing to edit, so nothing is written and the athlete keeps their draft. Missing is
+    // refused for the same reason: a record that is not there is not permission to invent one under
+    // its key.
+    var __r=await stGetR(key);
+    if(!opOwns(__op)){ opEnd(__op); return; }                      // DS01: not our profile any more
+    if(__r.status==='unavailable'){
+      opEnd(__op);
+      alertToast('Could not read that session \u2014 nothing was changed and your edit is still '
+                +'here. Try again.', 8000);
+      return;
+    }
+    if(__r.status!=='ok' || !__r.value){
+      opEnd(__op);
+      alertToast('That session could not be found \u2014 nothing was written.', 7000);
+      return;
+    }
+    var old=null;
+    try{ old=JSON.parse(__r.value); }catch(e){ old=null; }
+    if(!old || typeof old!=='object'){
+      opEnd(__op);
+      alertToast('That session\u2019s record could not be read \u2014 nothing was changed.', 8000);
+      return;
+    }
+    logRevNote(key, __r.value);                    // DS03: this copy has now SEEN this document
 
     // F30, case X13. The report is generated from the SESSION's context, not from today's. A log
     // banked before contexts were stored has none, so its own report text is transcribed rather
@@ -6088,25 +6210,54 @@ async function resaveVisitedLog(){
     // a document's corrections are written back into its shape. A log from before the shape
     // existed is corrected the old way and stays shape-less: giving it one now would be built
     // from today's plan, which is the exact thing this layer exists to stop.
-    try{ if(Array.isArray(old.shape) && old.shape.length) snap.shape=sessionShape(); }catch(e){}
+    if(Array.isArray(old.shape) && old.shape.length && __shape) snap.shape=__shape;
 
-    // F25, case X05. This was `await stSet(...)` with the result thrown away, followed
-    // unconditionally by dayLock(true) and "Log updated". A rejected write left the record at its
-    // old value, closed the day, and told the athlete it had saved.
+    // F25, case X05 and DS03. The write result is inspected - it always was - and now the write
+    // itself goes through docWrite(), which refuses a document whose revision moved since this copy
+    // read it, and refuses one this copy never read at all.
     //
-    // INVARIANT: the day closes only after a write that was confirmed. On a rejection nothing on
+    // INVARIANT: the day closes only after a write that was confirmed. On any refusal nothing on
     // disk changed, the corrected sets stay on screen so the edit is not lost, the day stays
     // unlocked so it can be retried, and the message says which of those is true.
-    var __w=await stSetR(key, JSON.stringify(snap));
+    var __w=await docWrite(key, snap);
+    if(!opOwns(__op)){ opEnd(__op); return; }                      // DS01: recheck after the write
     if(!__w || !__w.ok){
-      alertToast('Could not save that correction \u2014 the original log is unchanged and your edit '
-                +'is still here. Try again.', 8000);
+      opEnd(__op);
+      if(__w && (__w.status==='stale' || __w.status==='unseen')){
+        alertToast('This session was changed somewhere else \u2014 nothing was overwritten. Reopen '
+                  +'it to see the newer version, then redo your correction.', 9000);
+      } else if(__w && __w.status==='unavailable'){
+        alertToast('Storage is not answering \u2014 the original log is unchanged and your edit is '
+                  +'still here. Try again.', 8000);
+      } else {
+        alertToast('Could not save that correction \u2014 the original log is unchanged and your edit '
+                  +'is still here. Try again.', 8000);
+      }
       return;
     }
+    // FOURTH AUDIT 2026-09-13 (finding DS06, case N09). The correction wrote the document and
+    // nothing else. Changing a 300 lb set to 150 stored 150 and left the squat estimate at 358,
+    // while the same estimator returns 179 for the corrected set.
+    //
+    // The repair is not a second estimator - it is to run the ONE estimator over the corrected
+    // records, stamped with the SESSION's date rather than today's. With DS05 in place a correction
+    // that removes eligibility now retracts the point, and one that changes a weight replaces it.
+    // recordPerf() is re-run for the same reason, and is safe to re-run because DS07 stops an older
+    // session displacing a newer anchor.
+    try{
+      var __sd=S.when && S.when.date;
+      try{ if(!S.when) S.when={}; S.when.date=snap.date; }catch(e){}
+      try{ updateE1RM(); }catch(e){ oops('resaveE1RM',e); }
+      try{ recordPerf(); }catch(e){ oops('resavePerf',e); }
+      try{ S.when.date=__sd; }catch(e){}
+    }catch(e){ oops('resaveDerived',e); }
     docMemoClear();
     delete logCache[key];
     dayLock(true);                                  // corrections made - the day closes again
-    await refreshLogs(); render();
+    try{ await refreshLogs(); }catch(e){ oops('resaveRefresh',e); }
+    if(!opOwns(__op)){ opEnd(__op); return; }
+    opEnd(__op);
+    render();
     alertToast('Log updated \u00b7 '+snap.date);
   }catch(e){ oops('resaveVisitedLog',e); alertToast('Could not update the log'); }
 }
@@ -6744,7 +6895,12 @@ function ghostRow(taken, rir){
 // The card asked for reps in reserve and then did nothing with the answer, which makes the
 // question a survey rather than a tool. Four or more left means the load is wrong NOW, and
 // the fix is weight on the next set - not another set. A set taken five reps shy of failure
-// buys fatigue and very little stimulus; adding more of them is junk volume.
+// FOURTH AUDIT 2026-09-13 (section 7). Was: "buys fatigue and very little stimulus; adding more of
+// them is junk volume." Too broad - it is stated flatly across strength, skill, power, deload and
+// return-to-training, and it contradicts the card's own deliberately easy prescriptions. ACSM's
+// 2026 summary says failure training is not consistently necessary for the average healthy adult.
+// What holds is the comparison: effort far from the session's INTENDED effort is worth flagging,
+// because the session had a purpose and the set missed it.
 function rirAdvice(b){
   try{
     var r=restSetRef(b); if(!r || r.s.rir==null) return '';
@@ -6760,7 +6916,7 @@ function rirAdvice(b){
       var up=cur+step;
       return '<div class="rir-adv"><b>That was too light.</b>'
         +(left? 'Put '+WV(up)+' '+uLbl()+' on for the '+(left===1?'last set':'remaining '+left+' sets')
-                +' rather than adding another \u2014 a set that far from failure does very little.'
+                +' rather than adding another \u2014 that is further from failure than this session asked for.'
               : 'Start here next time instead of '+WV(cur)+'.')
         +(left? '<span class="vol-pick" data-rirup="'+up+'">Use '+WV(up)+' '+uLbl()+'</span>' : '')
         +'</div>';
@@ -7834,8 +7990,12 @@ function adWeakLink(lift){
 // and RIR-proximity-to-failure is the Helms/Zourdos basis the load table already rests on.
 // Reusing `c` means probation and the stall rule read the same evidence, so they can never
 // disagree about what happened in a session.
-var PV_HAIRCUT=0.95;   // a tested 1RM becomes a programming max at 95% - his call, and the same
-                       // haircut suggestMax() already applies to an estimate
+// FIELD 2026-09-13: this now READS the shared constant rather than declaring a second copy of the
+// same number. The comment below used to claim autoCalibrate() applied the same haircut. It did
+// not - it used 0.85/0.87/0.90 - and a comment asserting agreement is exactly how three paths
+// drift apart without anyone noticing. There is one number now, so the claim is structural.
+var PV_HAIRCUT=MAX_HAIRCUT;   // a tested 1RM becomes a programming max at 95% - his call, and the
+                              // same haircut suggestMax() and autoCalibrate() apply to an estimate
 var PV_BAD=2;          // CHOSEN: two failed sessions, not one. One bad day is sleep or stress,
                        // not load. That a window is needed is sourced; that it is 2 is a choice.
 var PV_OK=3;           // CHOSEN: three clean sessions graduates it - the same evidence bar
@@ -8747,7 +8907,12 @@ function selfTestRun(cb){
     //    scheduled countdown, and a missed bell costs more than knowing does.
     try{
       var AC=window.AudioContext||window.webkitAudioContext;
-      var st2=(typeof actx!=='undefined' && actx && actx.state)|| null;
+      // FOURTH AUDIT 2026-09-13 (T04). This read `actx`, a name that does not exist in this file -
+      // the audio context is `AC` (see ensureAudio). The typeof guard meant it never threw; it just
+      // reported null forever, so the phone check could not tell a running audio context from a
+      // missing one and quietly said nothing either way. A diagnostic that cannot fail is not a
+      // diagnostic. Real playback is still untested and stays on the device-gate list.
+      var st2=(typeof AC!=='undefined' && AC && AC.state)|| null;
       add('Sound', !!AC, !AC? 'no audio in this browser'
         : (st2==='running'? 'ready' : (st2? ('waiting for a tap ('+st2+')') : 'starts on your first tap')));
     }catch(e){ add('Sound', false, 'threw'); }
@@ -10643,7 +10808,12 @@ function srvGraceLeft(){
 //               punished for the server having a bad day.
 var SRV_REFUSED={revoked:1, inuse:1, expired:1, ended:1, unknown:1};
 var SRV_NEEDSCLAIM={unclaimed:1};
-var SRV_SOFT={bad:1, toolarge:1, ratelimited:1, misconfigured:1, server:1, auth:1, route:1};
+// FOURTH AUDIT 2026-09-13 (finding DS16). `unavailable` is new on the Worker: a credential lookup
+// that could not be performed, as distinct from one that found nothing. It already landed here
+// by the default rule two lines down - "an answer this build does not know is not a refusal" -
+// but relying on a safety net for a reason we now deliberately send is how a later build turns
+// a storage blip into a lockout. Named on purpose.
+var SRV_SOFT={bad:1, toolarge:1, ratelimited:1, misconfigured:1, server:1, auth:1, route:1, unavailable:1};
 function srvVerdict(r){
   if(!r || typeof r!=='object') return 'unreachable';
   if(r.ok===true) return 'ok';
@@ -12455,7 +12625,7 @@ function provenanceHTML(){
     ['Sourced','Training loads by goal','Sets, reps and percentage ranges per goal follow the NSCA\u2019s standard training-load table (Essentials of Strength Training and Conditioning), checked cell by cell against the published parameters.'],
     ['Sourced','Two-minute compound rests','Longer rest builds more muscle than short rest at the same volume (Schoenfeld 2016). The older 30\u201390 second advice is the metabolic-stress model \u2014 we left it deliberately.'],
     ['Sourced','Where a movement\u2019s tension peaks','Whether a lift loads a muscle stretched, mid-range or short is biomechanics, not a study result. An incline curl loads the elbow flexors at a longer length than a preacher curl because the shoulder is extended; a seated leg curl holds the hamstring longer than a lying one. Every movement in the library is tagged this way.'],
-    ['Sourced','Training at long muscle lengths','Lengthened-biased work appears to build more muscle than shortened-biased work at matched volume (Maeo on seated vs standing leg curl and overhead vs pushdown triceps; Pedrosa on lengthened partials). Real, but a young literature with small samples \u2014 enough for the card to prefer it, not enough to enforce it.'],
+    ['Sourced','Training at long muscle lengths','Lengthened-biased work appears to build more muscle than shortened-biased work at matched volume (Maeo on seated vs PRONE leg curl and overhead vs pushdown triceps; Pedrosa on lengthened partials). Real, but a young literature with small samples \u2014 enough for the card to prefer it, not enough to enforce it.'],
     ['Reasoned','Half credit for assisting muscles','A defensible way to count a row toward your biceps. The exact fraction is a judgement, not a measurement \u2014 nobody has the true number.'],
     ['Reasoned','Rest by movement class','Longer rest for heavy compounds is well supported. The specific tiers here are our reading of it.'],
     ['Reasoned','Variety of stimulus over repetition of it','That two movements with different resistance profiles beat two with the same profile, at matched volume, is our read of length-dependent and regional adaptation. Nobody has demonstrated it directly. It is why the card prefers a stimulus your week is missing, and why it only ever reports a one-sided week rather than rewriting your program.'],
@@ -13271,7 +13441,7 @@ var VOL_PICK={
 //          This is BIOMECHANICS, not a study result: an incline curl loads the elbow flexors at
 //          a longer muscle length than a preacher curl because the shoulder is extended. The
 //          separate claim that lengthened-biased work grows more muscle is real but young
-//          (Maeo on seated vs standing leg curl and overhead vs pushdown triceps; Pedrosa on
+//          (Maeo on seated vs PRONE leg curl and overhead vs pushdown triceps; Pedrosa on
 //          lengthened partials) - good enough to PREFER, not settled enough to enforce.
 //   mode - what the trunk is actually resisting, where that is the whole point: 'antiext',
 //          'antirot', 'antilat', 'flex', 'rot', 'latflex'. Everything else is 'dyn'.
@@ -15515,7 +15685,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v237c';
+const BUILD = 'v237e';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -16326,19 +16496,44 @@ function sessionShape(){
       var out0=false; try{ out0=isOut(ex.name); }catch(e){}
       var rr='', rs=''; try{ rr=String(exReps(ex)); }catch(e){ rr=String(ex.reps||''); }
       try{ rs=String(exRest(ex)||ex.rest||''); }catch(e){ rs=String(ex.rest||''); }
+      // FOURTH AUDIT 2026-09-13 (finding DS06). `mk` is new. The shape recorded what was performed
+      // and never which max the movement is keyed to, so a rebuilt historical day had exercises
+      // with no maxKey - and updateE1RM's first line skips those. A correction could therefore
+      // never rebuild the evidence it had just changed.
       out.push({n:ex.name, sub:st.sub||null, r:rr, rir:String(ex.rir||''), rest:rs,
                 w:(typeof w==='number'? w:null), load:String(ex.load||''), ph:!!ex.perHand,
+                mk:(ex.maxKey||null),
                 main:!!isMain(ex), out:out0, feel:(st.feel!=null? st.feel:null), sets:sets});
     });
   }catch(e){}
   return out;
 }
 // the day, rebuilt from its shape - plain objects that every reader already understands
+// FOURTH AUDIT 2026-09-13 (finding DS06). A rebuilt day now carries maxKey, without which the
+// estimator skips every exercise on it and a correction cannot rebuild what it changed.
+//
+// `mk` is stored with the shape from this build on. A document written before this has none, so
+// the key is looked up BY NAME in the current plan - that is identity rather than prescription,
+// and it is the only thing an older record can still tell us. If even that finds nothing the
+// exercise keeps no maxKey and is skipped, which is exactly what happens today.
+function docMaxKey(s){
+  try{
+    if(s && s.mk) return s.mk;
+    var nm=String((s&&s.n)||''); if(!nm) return null;
+    var found=null;
+    (PLAN.days||[]).forEach(function(dd){ (dd.exercises||[]).forEach(function(e){
+      if(!found && e && e.name===nm && e.maxKey) found=e.maxKey; }); });
+    return found;
+  }catch(e){ return null; }
+}
 function docExercises(shape){
   return shape.map(function(s){
-    return {name:s.n, sets:(s.sets||[]).length, reps:s.r, rir:s.rir||'', rest:s.rest||'',
+    var mk=null; try{ mk=docMaxKey(s); }catch(e){ mk=null; }
+    var o={name:s.n, sets:(s.sets||[]).length, reps:s.r, rir:s.rir||'', rest:s.rest||'',
             load:(s.w!=null? String(s.w) : (s.load||'')), loadNum:(s.w!=null? s.w : null),
             perHand:!!s.ph, primary:!!s.main, doc:true, custom:false, subs:[]};
+    if(mk) o.maxKey=mk;
+    return o;
   });
 }
 // set state for a document lives under its own keys and is built from the shape on first
@@ -17152,14 +17347,39 @@ function uLbl(){ return isKg()? 'kg' : 'lb'; }
 function WV(lb){
   if(!isKg()) return lb;
   var kg=lb*0.45359237;
-  // PROGRESSION AUDIT 2026-09-12 (finding P22). This used a hard-coded 2.5 kg grid while
-  // plateRound() uses kgJump() - the athlete's OWN plate setting. With microplates selected a
-  // prescription stored and plate-loaded as exactly 21 kg was displayed as 20: the card showing
-  // a weight it was not asking anyone to lift, and a plate diagram that disagreed with the text
-  // beside it.
+  // PROGRESSION AUDIT 2026-09-12 (finding P22), then FOURTH AUDIT 2026-09-13 (finding DS10, case
+  // N04). These two look like opposites and are not; the second is what the first was reaching for.
   //
-  // INVARIANT: the stored prescription, the plate diagram and every number on screen are ONE
-  // weight. WV asks the same question plateRound asks.
+  // P22: WV used a hard-coded 2.5 kg grid while plateRound() uses the athlete's OWN kgJump(), so a
+  // prescription stored and plate-loaded as exactly 21 kg displayed as 20 - a weight the card was
+  // not asking anyone to lift, beside a plate diagram that disagreed with it. The repair pointed WV
+  // at kgJump() so the two agreed.
+  //
+  // DS10: pointing a DISPLAY function at an equipment setting means every number it draws moves
+  // when that setting changes - including numbers that are facts rather than prescriptions. Store
+  // exactly 22.5 kg and it reads 23, 22.5 or 25 as S.jump goes 2.5, 5, 10. The set you already did
+  // is not re-prescribed because you told the card about different plates.
+  //
+  // ATTEMPTED AND REVERTED, 2026-09-13. Making WV a pure converter closes N04 and breaks the kg
+  // experience: kgplates reported 5 lb -> 2.27, 45 lb -> 20.41, 135 lb -> 61.23, 225 lb -> 102.06,
+  // and "183.7 kg - numbers no plate makes". The premise was wrong. Most weights reaching WV are
+  // NOT already-plate-rounded prescriptions: storage is pounds for everything (see the note above
+  // this section), so a bar, an accessory anchor and a lb-native max all arrive here raw and it is
+  // WV that makes them into numbers a kg gym can load.
+  //
+  // So P22 and DS10 are both right and they cannot both be served by one function:
+  //   P22  a PRESCRIPTION must display as the weight the athlete's own plates make, or the text
+  //        and the plate diagram disagree about what to load.
+  //   DS10 a RECORDED weight is a fact and must not move when equipment settings change. Store
+  //        22.5 kg and it should read 22.5 whatever S.jump says.
+  //
+  // The audit's own repair direction is the answer - "separate factual unit formatting from
+  // prescription rounding" - and that means classifying all 86 WV call sites into facts and
+  // prescriptions. That is a real piece of work with a real blast radius on every kg athlete's
+  // screen, and it needs a kg device check that has not been performed. It is NOT done here, it is
+  // open, and it is written up rather than quietly left.
+  //
+  // Current behaviour, unchanged from P22: the athlete's own grid.
   if(kg<10) return Math.round(kg*2)/2;             // light dumbbells: half-kilo, as before
   var g=2.5; try{ g=kgJump()||2.5; }catch(e){ g=2.5; }
   return Math.round(Math.round(kg/g)*g*100)/100;
@@ -17955,6 +18175,45 @@ function repoStale(key, theirRev){
     try{ alertToast('This card is open somewhere else \u2014 not overwriting it', 8000); }catch(e){}
   }catch(e){}
 }
+// FOURTH AUDIT 2026-09-13 (finding DS03). Profile STATE has had revision protection since R02.
+// Session LOGS - the documents that hold the actual training - had none: both writers wrote the
+// whole document with no _rev and no comparison, so a newer workout could be replaced by an older
+// one and the replacement carried no revision either, leaving the next writer unable to detect it.
+//
+// LOGREV is the revision of each log document THIS copy has actually seen: recorded when one is
+// read, corrected or banked. It is the difference between "I am replacing the document I loaded"
+// and "I am replacing a document I have never looked at".
+var LOGREV={};
+function logRevNote(key, raw){
+  try{ if(key) LOGREV[key]=revOf(raw); }catch(e){}
+}
+// Write a session document with the same care profile state already gets.
+//
+// REFUSES: a read it cannot perform (never overwrite what could not be verified); a document whose
+// revision has moved since this copy read it; and a document this copy has never read at all,
+// which is the blind overwrite in DS03's second reproduction.
+//
+// NOT CLAIMED: this is not a transaction. Two contexts can still interleave between the read and
+// the write in a store with no compare-and-swap. What it removes is the SILENT loss - a stale
+// whole-document write is refused, and says so.
+async function docWrite(key, snap){
+  try{
+    var cur=await stGetR(key);
+    if(cur.status==='unavailable') return {ok:false, status:'unavailable'};
+    var have=(cur.status==='ok' && cur.value);
+    var curRev=have? revOf(cur.value) : 0;
+    if(have){
+      var seen=LOGREV[key];
+      if(seen==null) return {ok:false, status:'unseen', rev:curRev};
+      if(seen!==curRev) return {ok:false, status:'stale', rev:curRev};
+    }
+    var out=Object.assign({}, snap, {_rev:curRev+1});
+    var w=await stSetR(key, JSON.stringify(out));
+    if(!w || !w.ok) return {ok:false, status:'failed'};
+    LOGREV[key]=curRev+1;
+    return {ok:true, status:'written', rev:curRev+1, snap:out};
+  }catch(e){ return {ok:false, status:'failed'}; }
+}
 // Take the stored revision as ours. Used by "Keep this one", which promises that this copy wins:
 // without adopting the revision the next save is refused again and the button does nothing.
 async function repoAdopt(key){
@@ -17982,8 +18241,20 @@ async function repoUpdate(key, mutate, tries){
     try{ mutate(obj); }catch(e){ return {ok:false, status:'failed'}; }
     obj._rev=rev+1;
     // re-check immediately before the write: the narrowest window this store allows
+    //
+    // FOURTH AUDIT 2026-09-13 (finding DS04). This used to read
+    //     if(again.status==='ok' && revOf(again.value)!==rev) continue;
+    // which only acts when the re-read SUCCEEDS. `unavailable` and `missing` fell straight through
+    // to the write, so a read fault wrote unverified and a record deleted between the two reads was
+    // silently resurrected. The first read in this same loop rejects `unavailable` properly, which
+    // is what makes this a slip rather than a policy.
+    //
+    // INVARIANT: the write happens only after a final read that SUCCEEDED and AGREED. Every other
+    // outcome propagates rather than being treated as permission.
     var again=await stGetR(key);
-    if(again.status==='ok' && revOf(again.value)!==rev) continue;       // moved: start over
+    if(again.status==='unavailable') return {ok:false, status:'unavailable'};
+    if(again.status!=='ok' || !again.value) return {ok:false, status:'missing'};
+    if(revOf(again.value)!==rev) continue;                             // moved: start over
     var w=await stSetR(key, JSON.stringify(obj));
     if(!w.ok) return {ok:false, status:'failed'};
     if(WREV[key]!=null && WREV[key]===rev) WREV[key]=rev+1;
@@ -18507,6 +18778,11 @@ async function saveSessionLog(quiet){
   // the date on the field, so yesterday's work lands on yesterday. Banking locks dayKey() -
   // cycle|week|day - which has never been tied to the calendar, so today's training day is freed
   // exactly as Jerry wanted.
+  //
+  // FOURTH AUDIT 2026-09-13 (finding DS03). This document is now written through docWrite(), which
+  // will not replace a log whose revision has moved, nor one this copy has never read. Banking a
+  // 150 lb session over a newer 300 lb document that arrived from another context is exactly the
+  // second reproduction, and it is refused rather than silently winning.
   const key=__op.logp+S.when.date+'-'+S.day+'-W'+S.week+'B'+cyc();
   try{ __op.dk=cyc()+'|'+S.week+'|'+S.day; }catch(e){}
   // Session notes belong to the session they were written for. They are cleared once safely
@@ -18528,7 +18804,23 @@ async function saveSessionLog(quiet){
     // used to discard that answer and carry on to "Session saved". The athlete finished a
     // session, was told it was filed, and it was gone. A false success is worse than an
     // error: it removes the one chance they had to do something about it.
-    var wrote=await stSet(key, JSON.stringify(snap));
+    // FOURTH AUDIT 2026-09-13 (finding DS03). This was `stSet(key, ...)` - a whole-document write
+    // with no revision on it and no comparison, so a newer 300 lb workout could be replaced by an
+    // older live 150 lb session and the replacement carried no revision either, leaving the next
+    // writer unable to detect the loss. docWrite() refuses a document whose revision has moved
+    // since this copy read it, and one this copy has never read at all.
+    var __dw=await docWrite(key, snap);
+    var wrote=(__dw && __dw.ok)? true : false;
+    if(__dw && !__dw.ok && (__dw.status==='stale' || __dw.status==='unseen')){
+      // A different copy of this card banked or corrected this same session. Refusing is the whole
+      // point; saying so plainly is what makes the refusal useful rather than mysterious.
+      if(opOwns(__op)) S.notes=noteBefore;
+      opEnd(__op);
+      if(!quiet) alertToast('This session was already filed somewhere else \u2014 nothing was '
+                           +'overwritten. Reopen the card to see that version before banking again.', 9000);
+      try{ render(); }catch(e){}
+      return false;
+    }
     if(wrote===false){
       if(opOwns(__op)) S.notes=noteBefore;      // give them their notes back, nothing was filed
       opEnd(__op);
@@ -19337,7 +19629,12 @@ function renderInner(){
         // own current pick always stays visible so the menu never loses its selection.
         if(!(ex.subs && ex.subs.length)) return '';
         var inUse={};
-        try{ (effDay? effDay():dayObj()).exercises.forEach(function(o2,oi){
+        // FOURTH AUDIT 2026-09-13 (finding DS13, case N15). `effDay` is defined nowhere in this
+        // file. Sixteen sites read it and fifteen guard it with `typeof effDay==='function'`; this
+        // one did not, so it threw a ReferenceError before the ternary was evaluated, the catch
+        // below swallowed it, and `inUse` stayed empty - so the swap menu has never once filtered
+        // out a movement already used elsewhere in the day.
+        try{ ((typeof effDay==='function')? effDay():dayObj()).exercises.forEach(function(o2,oi){
           if(oi===i) return;
           var st2=exState(oi,o2); inUse[(st2&&st2.sub)||o2.name]=1;
         }); }catch(e){}
@@ -20104,6 +20401,43 @@ function wire(){
   document.querySelectorAll('[data-week]').forEach(el=>el.onclick=()=>{S.week=+el.dataset.week;save();render();});
   document.querySelectorAll('[data-swap]').forEach(el=>el.onchange=()=>{
     const i=+el.dataset.swap, ex=dayObj().exercises[i], st=exState(i,ex);
+    // FOURTH AUDIT 2026-09-13 (finding DS08, case N14). The swap changed the exercise-wide name and
+    // left the completed sets alone, so eight reps of Back Squat at 150 became eight reps of GOBLET
+    // SQUAT at 150 - a weight nobody has goblet squatted, and then the anchor the next goblet
+    // session is built from.
+    //
+    // A set now carries the movement it was actually performed as, stamped here, at the one moment
+    // that identity would otherwise be lost. Sets logged before this have no `m` and fall back to
+    // the exercise-level name, so nothing already stored changes meaning.
+    //
+    // NOT CLAIMED: this does not split the slot into two movement segments with their own
+    // prescriptions, which is the fuller shape the audit describes. That is a change to how a
+    // session is modelled and needs its own batch and its own device check. This stops the card
+    // attributing one movement's work to another.
+    try{
+      var __was=st.sub||ex.name;
+      (st.sets||[]).forEach(function(s){ if(s && s.st && s.st!=='pend' && !s.m) s.m=__was; });
+    }catch(e){}
+    // DS13. The audit asks that uniqueness be enforced in the STATE MUTATION as well as in the
+    // menu, so a stale menu or a programmatic selection cannot slip past a filter it never saw.
+    // The menu was the only guard, and it had not run since it was written.
+    try{
+      var __want=el.value||null;
+      if(__want){
+        var __dup=false;
+        ((typeof effDay==='function')? effDay():dayObj()).exercises.forEach(function(o2,oi){
+          if(oi===i) return;
+          var st2=null; try{ st2=S.data[exKey(oi)]; }catch(e){}
+          var nm2=(st2&&st2.sub)||o2.name;
+          if(String(nm2)===String(__want)) __dup=true;
+        });
+        if(__dup){
+          try{ el.value=st.sub||''; }catch(e){}
+          alertToast(__want+' is already in today\u2019s session \u2014 pick a different movement', 6000);
+          return;
+        }
+      }
+    }catch(e){}
     st.sub = el.value || null; st.w=null; st.feel=null; st.wopen=!!st.sub;
     if(st.sub){ st.w=subStartLoad(ex, st.sub); st.wopen=(st.w==null); }   // a picture and a number, not a dash
     save(); render();
@@ -20178,7 +20512,12 @@ function wire(){
  document.querySelectorAll('[data-bwup]').forEach(function(el){ el.onclick=function(){
    try{
      var i=+el.dataset.bwup, nx=el.dataset.bwnext, ex=dayObj().exercises[i]; if(!ex||!nx) return;
-     var st=exState(i,ex); st.sub=nx; st.open=-1;
+     var st=exState(i,ex);
+     // DS08: the bodyweight progression is a substitution too, and loses the same identity.
+     try{ var __was2=st.sub||ex.name;
+       (st.sets||[]).forEach(function(s){ if(s && s.st && s.st!=='pend' && !s.m) s.m=__was2; });
+     }catch(e){}
+     st.sub=nx; st.open=-1;
      save(); alertToast(nx+' it is \u2014 test a max set when you are fresh'); render();
    }catch(e){}
  }; });
@@ -20873,14 +21212,32 @@ function recordPerf(){
   try{ if(isDeload() && PLAN && PLAN.weeks>1) return; }catch(e){}
   const d=dayObj(); if(!S.lastPerf) S.lastPerf={};
   d.exercises.forEach((ex,i)=>{ const st=S.data[exKey(i)]; if(!st) return;
-    const done=st.sets.filter(s=>s.st!=='pend'); if(!done.length) return;
-    const nm=st.sub||ex.name; const numeric=st.sub? true: ex.loadNum!=null;
+    const doneAll=st.sets.filter(s=>s.st!=='pend'); if(!doneAll.length) return;
+    // FOURTH AUDIT 2026-09-13 (finding DS08, case N14). This filed one anchor per SLOT under
+    // `st.sub||ex.name`, so eight reps of Back Squat at 150 followed by a switch to Goblet Squat
+    // filed GOBLET SQUAT AT 150 - a weight nobody has goblet squatted, and then the anchor every
+    // future goblet session is built from.
+    //
+    // The first pass of this batch stamped each completed set with the movement that performed it
+    // and then left this function reading st.sub regardless: the identity was recorded and ignored.
+    //
+    // INVARIANT: a slot's completed sets may belong to more than one movement, and each movement
+    // gets its own anchor from its own sets. A set with no `m` - everything logged before this -
+    // falls back to the slot's name, so no stored session changes meaning.
+    var __byMove={};
+    doneAll.forEach(function(s){
+      var mv=(s && s.m)? String(s.m) : (st.sub||ex.name);
+      (__byMove[mv]=__byMove[mv]||[]).push(s);
+    });
+    Object.keys(__byMove).forEach(function(nm){
+    const done=__byMove[nm]; if(!done.length) return;
+    const numeric=(nm!==ex.name)? true : (ex.loadNum!=null);
     // The anchor for future sessions is the weight actually lifted, not the weight the plan
     // asked for. Take the last completed set that carries its own weight - if the athlete
     // adjusted mid-session, the weight they settled on is the one that should come forward.
     var perf=null;
     try{ for(var pi=done.length-1; pi>=0; pi--){ if(done[pi].w!=null){ perf=done[pi].w; break; } } }catch(e){}
-    const w=(perf!=null)? perf : (st.sub? st.w : (numeric? curLoad(ex,st): null));
+    const w=(perf!=null)? perf : ((nm!==ex.name)? st.w : (numeric? curLoad(ex,st): null));
     const reps=done.map(s=> s.st==='hit'? defReps(ex): (s.reps!=null? s.reps:'?')).join(',');
     // Effort was being collected on every set and then discarded at save: lastPerf carried
     // date, weight and reps, and nothing about how hard any of it was. That made reps-in-
@@ -20916,8 +21273,25 @@ function recordPerf(){
       var __ws=done.map(function(s){ return s.w; }).filter(function(v){ return v!=null; });
       if(__ws.length>1 && __ws.some(function(v){ return v!==__ws[0]; })) __sameW=0;
     }catch(e){}
-    S.lastPerf[nm]={d:S.when.date, w:(typeof w==='number'? w:null), r:reps, rir:hardest, g:grind,
-                    ez:(__rm<1?1:0), sw:__sameW}; }); }
+    // FOURTH AUDIT 2026-09-13 (finding DS07, case N03). This assignment was unconditional, so the
+    // last session PROCESSED became the latest performance whatever its date. Rope Pushdowns at
+    // 100 lb on the 10th, then a back-dated session on the 6th at 60 lb, and the anchor - which
+    // accLoad() builds every future prescription from - became 60.
+    //
+    // That is the shadow of the back-dating Jerry asked for on 2026-09-12: before it, a back-dated
+    // session did not survive, so this could not bite. The feature did not create the defect; it
+    // made a latent one reachable.
+    //
+    // INVARIANT: the anchor is the LATEST performance, decided by the session's date rather than by
+    // the order things were saved in. Same date still wins, because correcting today's session must
+    // be able to replace today's anchor.
+    var __prevA=S.lastPerf[nm];
+    var __newD=S.when.date;
+    if(__prevA && __prevA.d && __newD && String(__newD)<String(__prevA.d)) return;   // older: keep it
+    S.lastPerf[nm]={d:__newD, w:(typeof w==='number'? w:null), r:reps, rir:hardest, g:grind,
+                    ez:(__rm<1?1:0), sw:__sameW};
+    });           // per movement performed in this slot
+  }); }
 function holdHTML(i){ const on=holdT&&holdT.i===i;
   var _tg=null; try{ _tg=holdTarget(dayObj().exercises[i]); }catch(e){}
   return '<div class="ed-row" style="padding:0 12px 10px;margin-top:0"><div class="ed-label" style="width:auto">Hold'
@@ -20964,6 +21338,18 @@ function blockSuccess(k){
       dd.exercises.forEach((ex,i)=>{
         if(ex.maxKey!==k) return;
         const st=S.data[cyc()+'c|'+w+'|'+dd.code+'|'+i]; if(!st) return;
+        // FOURTH AUDIT 2026-09-13 (finding DS09, case N05). This selected on the TEMPLATE's maxKey
+        // and never asked what was actually performed, so four completed Goblet Squat sets scored
+        // Back Squat 4/4 and maxPlan proposed 200 -> 210 for the barbell squat, explaining that it
+        // had been earned. It had not been attempted.
+        //
+        // P09 fixed this inside the estimator. blockSuccess is a DIFFERENT consumer of the same
+        // evidence and was untouched by that repair - which is why the audit lists them separately
+        // and why fixing one was never going to cover the other.
+        //
+        // The substituted work is not discarded; it simply earns progression for the movement that
+        // did it, through its own evidence, rather than for the one the template named.
+        if(st.sub && String(st.sub)!==String(ex.name)) return;
         // PROGRESSION AUDIT 2026-09-12 (finding P18). This took the target from
         // `String(ex.reps)` - the RAW TEMPLATE - so four sets of three, performed against a goal
         // that asks for three, scored 0/4. The same sets marked one-tap scored 4/4, because a
@@ -20979,6 +21365,10 @@ function blockSuccess(k){
         if(tgt==null) tgt=(String(ex.reps).match(/\d+/)||[8])[0]*1;
         (st.sets||[]).forEach(s=>{
           if(s.st==='pend') return;
+          // DS08/DS09: a set that records the movement it was performed as is judged against THAT
+          // movement. A set performed as something other than the planned lift is that movement's
+          // evidence, not this one's.
+          if(s.m && String(s.m)!==String(ex.name)) return;
           total++;
           const r=(s.st==='hit')? tgt : (s.reps!=null? s.reps : 0);
           if(r>=tgt) hit++;
@@ -22192,8 +22582,22 @@ function firstInt(s,def){ const m=String(s==null?'':s).match(/\d+/); return m? +
 //   Scale Measuring Repetitions in Reserve." J Strength Cond Res 30(1):267-275.
 // Helms ER et al. (2016) "Application of the Repetitions in Reserve-Based RPE Scale for
 //   Resistance Training." Strength Cond J 38(4):42-49.
-// Reported accuracy is roughly +/-3-5% for trained lifters; wider for novices, which is why
-// E1_CONF widens the band and why novices get a lower training-max multiplier below.
+// FOURTH AUDIT 2026-09-13 (section 7). Two corrections to what this block CLAIMS. Neither changes
+// a number.
+//
+// ACCURACY. The sources support RIR as a way to regulate load - Zourdos studied 29 participants on
+// the squat - and the +/-3-5% figure is reported for RIR ESTIMATION BY TRAINED LIFTERS in that
+// literature. It is not a measured error band for THIS fifty-cell table, this estimator, or every
+// lift, and the note twelve lines down already admits the full printed grid is paywalled. E1_CONF
+// widens the band for novices because their RIR reporting is less reliable, which is the sourced
+// part; the exact interval is this card's choice.
+//
+// THE MULTIPLIER. This used to end "and why novices get a lower training-max multiplier below."
+// That has been untrue since 2026-09-13, when MAX_HAIRCUT became 0.95 for every path by Jerry's
+// decision - the three conversions disagreed and the automatic one always resolved downward. The
+// tiering was doing a second job, novice caution, invisibly inside a conversion factor. It is gone,
+// auto-calibration now prescribes heavier for a novice than it did, and that consequence is on the
+// list for the strength and conditioning reviewer. DO NOT quietly restore it here.
 // VERIFIED 2026-08-31 against open primary sources: scale structure (RPE10=0RIR, each RIR row
 // a one-step shift, per Zourdos 2016) matches this table's construction; the one openly
 // published anchor cell (8 reps @ 70% = RPE 7, Helms 2016 as cited in Helms 2018 Front
@@ -22252,6 +22656,22 @@ function updateE1RM(){
   const d=(typeof effDay==='function')? effDay() : dayObj();
   if(!S.e1rmH) S.e1rmH={};
   const touched={};
+  // FOURTH AUDIT 2026-09-13 (finding DS05, case N01). The date this pass is reconciling. Held once
+  // so the retraction sweep below and the write loop agree about which day they are talking about.
+  const __hd=S.when.date||localDate();
+  // Every key this day's exercises CAN file under: the planned max key, every substitute the
+  // template allows, and the substitute actually in force. Computed from the day itself, so the
+  // reconciliation can never reach another session's evidence on a key this day does not own.
+  const __owned={};
+  try{
+    d.exercises.forEach(function(ex,i){
+      if(!ex || !ex.maxKey) return;
+      __owned[ex.maxKey]=1;
+      (ex.subs||[]).forEach(function(nm){ try{ __owned[e1SubKey(nm)]=1; }catch(e){} });
+      try{ var st0=S.data[exKey(i)];
+        if(st0 && st0.sub) __owned[e1SubKey(String(st0.sub))]=1; }catch(e){}
+    });
+  }catch(e){}
   // PROGRESSION AUDIT 2026-09-12 (finding P08). The day's point used to be merged into whatever
   // was already filed for that date, and only when the new value was HIGHER. So correcting a
   // mis-typed 300 lb set down to 150 left the day's estimate at 358 while the same estimator
@@ -22300,8 +22720,7 @@ function updateE1RM(){
     // substitute to its parent lift needs an explicit, reviewed mapping; inventing one here would
     // be exactly the kind of unjustified movement this audit is about.
     const __perf=(st.sub && String(st.sub)!==ex.name)? String(st.sub) : null;
-    const __ekey=__perf? ('sub:'+__perf.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''))
-                       : ex.maxKey;
+    const __ekey=__perf? e1SubKey(__perf) : ex.maxKey;
     st.sets.forEach((s)=>{
       if(s.st==='pend') return;
       // PROGRESSION AUDIT 2026-09-12 (finding P03). Decided by Jerry, 2026-09-12: a set with no
@@ -22343,6 +22762,23 @@ function updateE1RM(){
       }
     });
   });
+  // FOURTH AUDIT 2026-09-13 (finding DS05, case N01). THE RETRACTION. This loop is the half that
+  // was missing: a key this session owns, which produced NO eligible evidence in this pass, must
+  // have its point for this date removed. Without it, setting a set back to pending, clearing its
+  // reported RIR, moving its reps out of range or substituting the movement all left the previous
+  // estimate standing - and on a substitution the work was then counted twice, once under the
+  // planned lift and once under the substitute.
+  //
+  // It runs BEFORE the write loop so that a key with evidence is simply written afterwards; only
+  // keys with nothing left to say lose their point.
+  Object.keys(__owned).forEach(function(k){
+    if(dayAgg[k]) return;                          // has evidence this pass: the write loop files it
+    var arr=S.e1rmH[k];
+    if(!Array.isArray(arr)) return;
+    var ix=-1;
+    for(var z=0;z<arr.length;z++){ if(arr[z] && arr[z].d===__hd){ ix=z; break; } }
+    if(ix>-1){ arr.splice(ix,1); touched[k]=1; }   // retracted, and the rolling best is recomputed
+  });
   // Write each key's day exactly once, replacing whatever was there for that date.
   Object.keys(dayAgg).forEach(function(k){
     var pt=dayAgg[k];
@@ -22356,12 +22792,47 @@ function updateE1RM(){
     if(!pt.sub) touched[k]=1;                     // a substitute never moves the planned lift
   });
   // rolling best over the window - moves up when earned, decays when work stops
+  //
+  // FOURTH AUDIT 2026-09-13 (findings DS05 and DS12). This used to leave S.e1rm[k] untouched when
+  // the window came back empty, so a retracted lift kept its old rolling best - which is exactly
+  // the stale value suggestMax() then offered as a current recommendation. An empty window means
+  // there is no current estimate, and the card now says so by having none.
   Object.keys(touched).forEach(k=>{ const b=e1Window(k);
-    if(b) S.e1rm[k]={val:b.v, date:b.d}; });
+    if(b) S.e1rm[k]={val:b.v, date:b.d};
+    else { try{ if(S.e1rm) delete S.e1rm[k]; }catch(e){} } });
+}
+// FOURTH AUDIT 2026-09-13 (finding DS05). The evidence key for a performed substitute, in one
+// place. This slug was inline in updateE1RM and the retraction sweep has to produce the identical
+// string, so two copies of it would be a defect waiting for its first typo.
+function e1SubKey(name){
+  return 'sub:'+String(name||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 }
 function suggestMax(k){
+  // FOURTH AUDIT 2026-09-13 (finding DS12, case N06). This read S.e1rm directly, with no date check
+  // at all, while every other consumer of the same evidence goes through the bounded window - so a
+  // cached estimate dated January 2020 produced a live "use 380 instead" button on a 200 lb max.
+  //
+  // The first attempt at this required e1Window() to return something, and that REMOVED THE
+  // FEATURE: maxapply caught it in one line - "no suggestion offered at all - the feature is gone,
+  // not fixed". A rolling best can legitimately exist while the history that produced it has been
+  // pruned or lives under another key, and refusing to suggest in that case is not a repair, it is
+  // a deletion.
+  //
+  // INVARIANT: one freshness rule, shared. The estimate is checked against E1_WINDOW - the same
+  // horizon e1Window() uses - rather than against whether the window can be rebuilt right now.
+  // Stale, future-dated and undated estimates suggest nothing; fresh ones suggest exactly as they
+  // always did. An old personal record stays visible as history, it just stops being an actionable
+  // recommendation about today.
   const e=S.e1rm[k]; if(!e) return null;
-  const sugg=isKg()? toLb(Math.round(e.val*0.95*0.45359237/2.5)*2.5) : Math.round(e.val*0.95/5)*5;
+  try{
+    var __ref=new Date((S.when.date||localDate())+'T12:00:00').getTime();
+    var __t=e.date? new Date(String(e.date)+'T12:00:00').getTime() : NaN;
+    if(!isFinite(__t)) return null;                        // undated: not evidence about today
+    var __age=(__ref-__t)/86400000;
+    if(__age<0 || __age>E1_WINDOW) return null;            // future-dated, or older than the window
+  }catch(err){ return null; }
+  // FIELD 2026-09-13: was a literal 0.95 in two places here. Same conversion, same constant.
+  const sugg=isKg()? toLb(Math.round(e.val*MAX_HAIRCUT*0.45359237/2.5)*2.5) : Math.round(e.val*MAX_HAIRCUT/5)*5;
   return sugg>=S.maxes[k]+5? {sugg:sugg, e:e.val} : null;
 }
 function painAlt(ex,st){
