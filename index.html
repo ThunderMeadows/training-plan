@@ -59,9 +59,11 @@
 <style>
 :root{
   --bg:#F1F2F0; --panel:#FFFFFF; --panel2:#E7E9E6; --line:#D5D8D3;
-  --chalk:#14171A; --dim:#5C6570; --faint:#8B949E;
+  /* DESIGN AUDIT 2026-09-13 (D02/D03). Coach day is an empty theme dict by design - it IS
+     the base stylesheet - so its tokens are these. --faint was 3.076:1 on the panel. */
+  --chalk:#14171A; --dim:#5C6570; --faint:#6D7883;
   --amber:#1F4FD8; --amber-ink:#FFFFFF;
-  --green:#1E7A46; --red:#C0392B;
+  --green:#1E7A46; --green-ink:#F1F2F0; --red:#C0392B; --red-ink:#F1F2F0;
   --accent-soft:color-mix(in srgb,var(--amber) 12%,var(--panel));
   --green-soft:color-mix(in srgb,var(--green) 14%,var(--panel));
   --red-soft:color-mix(in srgb,var(--red) 12%,var(--panel));
@@ -98,7 +100,11 @@ h1{margin:3px 0 0;font-size:26px;font-weight:800;letter-spacing:-.02em;text-tran
 .roadtbl td:first-child{text-align:left;font-weight:700;}
 .roadtbl td.now{color:var(--amber);font-weight:800;}
 .drbtn.exx{opacity:.7;}
-.drbtn.exx.warn{background:var(--red);border-color:var(--red);color:#fff;opacity:1;}
+/* DESIGN AUDIT 2026-09-13 (D03, extended). The audit examined white-on-green and stopped
+   there. White on --red fails 4.5:1 in ten of twenty theme/modes as well - 2.283:1 on Redline
+   night - and these are DESTRUCTIVE controls, which is the worst possible place for text a
+   person cannot read. Same repair, same reasoning. */
+.drbtn.exx.warn{background:var(--red);border-color:var(--red);color:var(--red-ink);opacity:1;}
 .hdr-id{display:flex;align-items:center;gap:12px;}
 .hdr-tx{flex:1;min-width:0;}
 .ava-mini{width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid var(--line);flex:0 0 auto;}
@@ -138,7 +144,11 @@ h1{margin:3px 0 0;font-size:26px;font-weight:800;letter-spacing:-.02em;text-tran
 .lib-name{font-size:14.5px;font-weight:700;color:var(--chalk);}
 .lib-desc{font-size:12px;color:var(--dim);line-height:1.45;margin-top:2px;}
 .tabrow{display:flex;gap:2px;margin:8px 2px 0;border-bottom:1px solid var(--line);}
+/* DESIGN AUDIT 2026-09-13 (D06). .tab is a <button> now, so it needs the properties a button
+   does not inherit - family, a transparent ground, no border - or it renders in the browser's
+   default UI font on a grey slab. Appearance is unchanged. */
 .tab{flex:1;text-align:center;padding:8px 0 9px;font-size:11px;font-weight:800;letter-spacing:.1em;
+  font-family:inherit;background:transparent;border:0;
   text-transform:uppercase;color:var(--faint);cursor:pointer;position:relative;}
 .tab.on{color:var(--chalk);}
 .tab.on::after{content:"";position:absolute;left:18%;right:18%;bottom:-1px;height:2.5px;
@@ -198,8 +208,11 @@ h1{margin:3px 0 0;font-size:26px;font-weight:800;letter-spacing:-.02em;text-tran
 .set:active{transform:scale(.95);}
 .set .n{font-size:9px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;font-weight:800;}
 .set .v{font-size:22px;font-weight:800;margin-top:2px;}
-.set.hit{background:var(--green);border-color:var(--green);color:#fff;}
-.set.hit .n{color:rgba(255,255,255,.75);}
+.set.hit{background:var(--green);border-color:var(--green);color:var(--green-ink);}
+/* DESIGN AUDIT 2026-09-13 (D03). This was white at 75% alpha over the green, which took an
+   already-failing pair and reduced it further. The set number is 9px; it gets the full ink and
+   keeps its hierarchy from size and weight instead of from being harder to see. */
+.set.hit .n{color:var(--green-ink);opacity:.9;}
 .set.dev{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);}
 .set.dev .n{color:rgba(255,255,255,.75);}
 
@@ -348,7 +361,7 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
      justify-content:center CLIPS overflow at both ends - that was the cut-off clock. */
   justify-content:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch;
   text-align:center;padding:18px 24px calc(22px + env(safe-area-inset-bottom));cursor:pointer;min-width:0;}
-.restchip.go,.restchip.done{background:var(--green);color:#fff;}
+.restchip.go,.restchip.done{background:var(--green);color:var(--green-ink);}
 /* final ten seconds: the clock brightens and breathes in time with the countdown beeps */
 /* transition gauge: ambient edge bars, read at a glance with no numbers.
    Colour alone is a bad signal (red/green is the most common colour-blindness), so phase is
@@ -385,7 +398,7 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 .fin-sub{font-size:12.5px;color:var(--dim);line-height:1.5;max-width:320px;margin:0 auto;}
 .fin-btns{margin-top:14px;}
 .fin-go{display:block;width:100%;padding:16px;border-radius:13px;border:0;background:var(--green);
-  color:#fff;font-family:inherit;font-size:15.5px;font-weight:800;cursor:pointer;}
+  color:var(--green-ink);font-family:inherit;font-size:15.5px;font-weight:800;cursor:pointer;}
 .fin-go:active{transform:scale(.99);}
 .fin-min{display:flex;gap:8px;margin-top:8px;}
 .fin-alt{flex:1;padding:11px;border-radius:11px;border:2px solid var(--line);background:transparent;
@@ -437,7 +450,7 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 .ck:active{transform:scale(.96);}
 .ck.op{border-color:var(--amber);color:var(--amber);}
 .ck.fn{font-size:14px;color:var(--dim);}
-.ck.eq{background:var(--green);border-color:var(--green);color:#fff;}
+.ck.eq{background:var(--green);border-color:var(--green);color:var(--green-ink);}
 .calc-note{font-size:10.5px;color:var(--faint);margin-top:8px;text-align:center;line-height:1.4;}
 @media print{.calcfab,.calcpanel{display:none!important;}}
 /* visual warm-up: bars drawn big enough to read standing at the rack */
@@ -580,7 +593,7 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 .dr-n{width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:var(--panel2);color:var(--faint);
   display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;}
 .deckrow.cur .dr-n{background:var(--amber);color:var(--amber-ink);}
-.deckrow.fin .dr-n{background:var(--green);color:#fff;}
+.deckrow.fin .dr-n{background:var(--green);color:var(--green-ink);}
 .dr-b{flex:1;min-width:0;}
 .dr-t{font-size:15.5px;font-weight:800;letter-spacing:-.01em;line-height:1.25;}
 .dr-s{font-size:12.5px;color:var(--dim);margin-top:3px;font-weight:600;}
@@ -749,7 +762,7 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 
 .mail-face{width:42px;height:42px;border-radius:21px;flex:0 0 42px;background:#000;}
 .mail-badge{position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;
-  background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:15px;text-align:center;padding:0 2px;}
+  background:var(--red);color:var(--red-ink);font-size:10px;font-weight:800;line-height:15px;text-align:center;padding:0 2px;}
 .cal-count{font-size:13px;color:var(--chalk);margin-bottom:6px;font-weight:700;}
 .cal-risk{background:var(--accent-soft);border:1px solid var(--amber);border-radius:10px;padding:8px 10px;font-size:13px;font-weight:800;margin:6px 0;}
 
@@ -1048,7 +1061,7 @@ td.c-n.now{font-weight:700;}
 .wipe-zone{border:1px solid var(--red-soft);}
 .wipe-fire{display:block;width:100%;padding:15px;border-radius:14px;border:2px solid var(--red);
   background:var(--red-soft);color:var(--red);font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;}
-.wipe-fire.holding{background:var(--red);color:#fff;}
+.wipe-fire.holding{background:var(--red);color:var(--red-ink);}
 .rest-lw small{font-size:13px;font-weight:700;opacity:.8;margin-left:4px;}
 .rest-plates{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;font-size:11px;margin-top:6px;opacity:.95;}
 .rest-cue{font-size:11px;font-style:italic;opacity:.8;margin-top:8px;line-height:1.45;max-width:300px;margin-left:auto;margin-right:auto;}
@@ -1115,7 +1128,7 @@ td.c-n.now{font-weight:700;}
 .onb-opt.on{border-color:var(--amber);background:var(--amber);color:var(--amber-ink);}
 .onb-why{display:block;font-size:12px;font-weight:500;color:var(--dim);margin-top:3px;}
 .onb-opt.on .onb-why{color:var(--amber-ink);opacity:.85;}
-.onb-go{margin-top:14px;text-align:center;padding:15px;font-weight:800;background:var(--green);color:#fff;border-color:var(--green);}
+.onb-go{margin-top:14px;text-align:center;padding:15px;font-weight:800;background:var(--green);color:var(--green-ink);border-color:var(--green);}
 .onb-restore{text-align:center;margin-top:14px;font-size:12px;color:var(--dim);cursor:pointer;padding:8px;}
 .onb-back{display:inline-block;font-size:12.5px;font-weight:700;color:var(--dim);cursor:pointer;padding:2px 2px 10px;letter-spacing:.02em;-webkit-tap-highlight-color:transparent;}
 .onb-back:hover,.onb-back:active{color:var(--chalk);}
@@ -1218,7 +1231,14 @@ td.c-n.now{font-weight:700;}
 .vol-reset{margin-top:10px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;display:inline-block;padding:4px 0;-webkit-tap-highlight-color:transparent;}
 .vol-reset:hover,.vol-reset:active{color:var(--amber);}
 /* ===== how-to clips ===== */
+/* DESIGN AUDIT 2026-09-13 (D04). .hw-btn is a <button> now, so it needs the three properties a
+   button does not inherit - family, size and a transparent ground - or it renders in the browser's
+   default UI font at the browser's default size on a grey slab. Everything else is unchanged. */
+/* X10. The written technique, in the sheet named How. Reads as prose rather than as a caption:
+   it is the longest text on the sheet and the part someone actually follows in a gym. */
+.hw-how{font-size:13.5px;line-height:1.62;color:var(--chalk);margin-top:10px;white-space:pre-line;}
 .hw-btn{display:inline-block;margin-left:8px;font-size:10.5px;font-weight:800;letter-spacing:.06em;
+  font-family:inherit;background:transparent;line-height:normal;
   color:var(--amber);border:1px solid var(--amber);border-radius:999px;padding:2px 8px;cursor:pointer;
   vertical-align:middle;-webkit-tap-highlight-color:transparent;}
 .hw-btn:active{background:var(--amber);color:var(--amber-ink,#111);}
@@ -4323,7 +4343,7 @@ function cardioBlockHTML(){
     +'<summary style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700;cursor:pointer">Cardio & conditioning'
     +(cardioActive? ' <span class="subtag">ACTIVE</span>':'')+'</summary>'
     +'<div style="margin-top:8px"><h3>Cardio finisher</h3>'
-    +'<select class="dtin swapsel" id="cmodeSel" style="margin-top:0">'
+    +'<select class="dtin swapsel" id="cmodeSel" aria-label="Cardio machine or activity" style="margin-top:0">'
     +CMODES.map(m=>'<option value="'+m.id+'"'+(m.id===CM.id?' selected':'')+'>'+m.name+'</option>').join('')
     +'</select>'
     +'<div class="cardio-row" style="margin-top:10px">'
@@ -4361,7 +4381,7 @@ function cardioBlockHTML(){
     +'</div>'
     +(S.cardio.info? '<div class="exnote" style="padding:8px 0 0;font-style:normal;line-height:1.6">'+((CNOTES[S.cardio.mode]||CNOTES.generic)+znote())+'</div>':'')
     +'</div>';
-  h+='<div style="margin-top:12px"><h3>Conditioning (optional)</h3><div class="cardio-row" style="margin-top:2px"><select class="dtin" data-ct="1" style="margin-top:0;flex:1">'+CONDS.map(c=>'<option value="'+c.id+'"'+((S.condSel||'none')===c.id?' selected':'')+'>'+c.label+'</option>').join('')+'</select></div></div>';
+  h+='<div style="margin-top:12px"><h3>Conditioning (optional)</h3><div class="cardio-row" style="margin-top:2px"><select class="dtin" data-ct="1" aria-label="Conditioning workout" style="margin-top:0;flex:1">'+CONDS.map(c=>'<option value="'+c.id+'"'+((S.condSel||'none')===c.id?' selected':'')+'>'+c.label+'</option>').join('')+'</select></div></div>';
   h+=condSessionHTML();
   h+='</details>';
   return h;
@@ -4754,7 +4774,7 @@ function rirDrillHTML(){
          : off>1 ? 'You had '+off+' more reps than you thought. That is the normal direction and it means you have been training lighter than intended \u2014 the card will now correct for it.'
          : 'You went past your own estimate. The card will correct for it, and ease back slightly on prescribed effort.')
        +'</div>'
-       +'<div class="daybtn" data-rirsave="1" style="margin-top:12px;display:inline-block;padding:10px 16px;background:var(--green);color:#fff;border-color:var(--green)">Save it</div>';
+       +'<div class="daybtn" data-rirsave="1" style="margin-top:12px;display:inline-block;padding:10px 16px;background:var(--green);color:var(--green-ink);border-color:var(--green)">Save it</div>';
       if(rirLog().length) h+='<div class="cue" style="padding:10px 0 0">Previous checks: '
         +rirLog().slice(-3).map(function(x){ return x.d+' off by '+((x.actual-x.pred)>=0?'+':'')+(x.actual-x.pred); }).join(' \u00b7 ')+'</div>';
     }
@@ -5724,7 +5744,10 @@ function coachPaint(){
       +'</svg></div>'
       +'<div class="coach-txt"><div class="coach-t">'+esc(st.t)+'</div>'
       +'<div class="coach-b">'+esc((TOUR.mode==='core'&&st.bc)? st.bc : st.b)+'</div></div></div>'
-      +'<div class="coach-dots">'+dots+'<span class="coach-count">'+(stepPos+1)+' / '+visIdx.length+'</span></div>'
+      // DESIGN AUDIT 2026-09-13 (D04). Decorative: the step count beside them is the real
+      // information and it is already text.
+      +'<div class="coach-dots"><span aria-hidden="true" style="display:contents">'+dots+'</span>'
+      +'<span class="coach-count">'+(stepPos+1)+' / '+visIdx.length+'</span></div>'
       +'<div class="coach-btns">'
       +(TOUR.i>0? '<button class="coach-b2" data-tour="back">Back</button>':'')
       +'<button class="coach-b1" data-tour="'+(last?'done':'next')+'">'+(last?'Start training':'Next')+'</button>'
@@ -6488,7 +6511,7 @@ function debriefHTML(){
           +'<span class="fin-why">'+o.why+'</span></button>'; }).join('')
      +'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:12px">'
-     +'<div class="daybtn" data-debsave="1" style="flex:2;text-align:center;padding:12px;background:var(--green);color:#fff;border-color:var(--green)">Save log & finish</div>'
+     +'<div class="daybtn" data-debsave="1" style="flex:2;text-align:center;padding:12px;background:var(--green);color:var(--green-ink);border-color:var(--green)">Save log & finish</div>'
      +'<div class="daybtn" data-debskip="1" style="flex:1;text-align:center;padding:12px">Dismiss</div>'
      +'</div></div>';
     return h;
@@ -7357,6 +7380,10 @@ async function rosterSwitch(id){
     // ROSTER.active straight after the switch see the old value.
     ROSTER.active=id||null;
     rosterSave();
+    // X01. From here until load() has filled S, the live state is a PLACEHOLDER under the incoming
+    // athlete's namespace. Nothing may persist it. swapEnd() is in a finally below, so a load that
+    // throws cannot leave the card unable to save.
+    swapBegin();
     try{ S=JSON.parse(JSON.stringify(S_BLANK)); }catch(e){ oops('rosterBlank',e); }
     // load() MERGES a saved state over whatever S currently holds, so a brand-new athlete with
     // an empty drawer inherited whoever was loaded before them - maxes, plan and all. Blank
@@ -7370,8 +7397,17 @@ async function rosterSwitch(id){
     // Only now wait for work that was already in flight. It started under the PREVIOUS
     // selection, so its opOwns() check already fails and it will commit to its own profile;
     // waiting here just means the common case is settled before the new profile is loaded.
-    try{ await opsQuiesce(); }catch(e){}
-    await load();                              // reads from curSKEY() -> their drawer
+    // X01. opsQuiesce() is BOUNDED - 2500 ms - and its answer used to be discarded, so a save
+    // still in flight after that simply carried on into the window below. The answer is now read
+    // and recorded: the swap marker above makes the window safe either way, and a timeout is worth
+    // knowing about rather than swallowing.
+    var __quiet=true; try{ __quiet=await opsQuiesce(); }catch(e){ __quiet=false; }
+    if(!__quiet){ try{ __logErr('rosterSwitch','opsQuiesce timed out - a save was still in flight','',0,0,null); }catch(e){} }
+    // X01. The guarded window is exactly this: blank state under the incoming namespace, until
+    // load() has filled it. It is lowered the moment load() returns - in a finally, so a throwing
+    // read cannot leave the card unable to save - and everything below runs normally.
+    try{ await load(); }                       // reads from curSKEY() -> their drawer
+    finally{ swapEnd(); }
     // whatever they have generated is theirs; nobody else's plan may survive the switch
     try{ PLAN=planUsable(S.genPlan)? S.genPlan
               : JSON.parse(JSON.stringify(PLAN_DEFAULT||PLAN)); }catch(e){}
@@ -7386,6 +7422,15 @@ async function rosterSwitch(id){
     // already up - this only corrects the lines once the real numbers are in.
     if(!id){ try{ await rosterProgressLoad(); render(); }catch(e){} }
   }catch(e){ oops('rosterSwitch',e); }
+  finally{
+    // X01, safety net only. The marker is normally lowered the instant load() returns, a few
+    // lines above - the window it guards is the blank-to-load gap and NOTHING after it. An
+    // earlier version of this patch lowered it only here, which left every save during load(),
+    // refreshLogs(), render() and rosterProgressLoad() refused: rosterflow caught it at once,
+    // reporting a built plan as unassessed because the write that records the assessment was
+    // silently dropped. This clears any residue if the path above threw before reaching it.
+    try{ while(PROFILE_SWAPPING>0) swapEnd(); }catch(e){}
+  }
 }
 // FOUND BY SECOND REVIEW 2026-09-10 (finding D). Two defects in one small function.
 //
@@ -7681,7 +7726,12 @@ function adStalled(){
       // same way. The comparison is what was wrong, so points are now compared only against
       // points from the SAME rep target. Untagged points - written before the tag existed -
       // cannot be placed in a bucket and are not judged at all: no evidence, no cut.
-      var all=S.e1rmH[k]||[];
+      // X06. A stall is a statement about PROGRAMMED work - three sessions run as written that
+      // did not move. A maximal single is not programmed work, and with tests and estimates now
+      // able to share a date this has to be said rather than left to chance: a test record carries
+      // no rep target, so when one happened to be last, `last.n==null` disabled the stall rule for
+      // that lift entirely and silently. Same outcome for tests, now for a stated reason.
+      var all=(S.e1rmH[k]||[]).filter(function(x){ return x && !x.t; });
       var last=all[all.length-1];
       if(!last || last.n==null) return;
       var h=all.filter(function(x){ return x.n===last.n; }).slice(-6);
@@ -7697,7 +7747,20 @@ function adStalled(){
       if(struggled<2) return;                                // did the work as written - not a stall
       var lastReset=(S.adLog||[]).filter(function(x){ return x.kind==='stall' && x.lift===k; }).pop();
       if(lastReset && adDays(lastReset.d, shiftDate())<AD_STALL_COOLDOWN) return;
-      out.push({lift:k, from:prev, to:last, n:h.length});
+      // FIFTH AUDIT 2026-09-14 (finding X03). The cooldown is a DELAY, not a record. It says "not
+      // again this month"; it never said "not again for THESE sessions". So twenty-two days later
+      // the same three observations were still the newest three, still flat, still flagged, and
+      // they paid for another cut - 200 -> 185 -> 170 -> 155 over twelve weeks on one body of
+      // evidence and no new squat work.
+      //
+      // Calibration solved this on 2026-09-06 with S.acSeen, a signature of what a change
+      // consumed, and this very function already checks acMovedRecently() - whether CALIBRATION
+      // spent the evidence - while recording nothing about what IT spent. Same idea, same shape:
+      // the signature is the dates and values of the exact points being judged, so new work
+      // changes it and re-reading the same three does not.
+      var sig=recent.map(function(x){ return x.d+':'+x.v; }).join('|');
+      try{ if(!S.adSeen) S.adSeen={}; if(S.adSeen[k]===sig) return; }catch(e){}
+      out.push({lift:k, from:prev, to:last, n:h.length, sig:sig});
     });
   }catch(e){ oops('adStalled',e); }
   return out;
@@ -7774,7 +7837,10 @@ var AD_RATE_CAP=0.015;         // never more than 1.5% of the training max per w
 function adRate(lift){
   try{
     var today=shiftDate();
+    // X06. Same reasoning as the stall rule: a rate describes how programmed work is trending.
+    // A maximal attempt is a different measurement and would tilt the line it is dropped into.
     var all=(S.e1rmH&&S.e1rmH[lift]||[]).filter(function(x){
+      if(!x || x.t) return false;
       var a=adDays(x.d, today); return a>=0 && a<=AD_RATE_DAYS; });
     // AUDIT 2026-09-06: this is the same fault the stall rule was field-caught on the day before,
     // sitting in its sibling. The trend was least-squares fitted across every point in the window
@@ -8024,8 +8090,14 @@ function pvStart(k, tested){
     // the tested single is real measured evidence and belongs in the history, flagged t:1 so
     // nothing reads a maximal attempt as programmed work
     if(!S.e1rmH) S.e1rmH={}; if(!S.e1rmH[k]) S.e1rmH[k]=[];
-    var hd=shiftDate(), arr=S.e1rmH[k], ix=arr.findIndex(function(x){ return x.d===hd; });
-    if(ix>-1){ if(tested>arr[ix].v){ arr[ix].v=tested; arr[ix].r=0; } arr[ix].c=1; arr[ix].t=1; }
+    // FIFTH AUDIT 2026-09-14 (finding X06). This used to find the day's existing point and REWRITE
+    // it into a test record - and only raise the value if the test was higher, so a record marked
+    // as a measured single could end up carrying an estimate nobody measured. Either way the
+    // estimate was destroyed. A measured test and a working-set estimate are different kinds of
+    // evidence about the same day, which is what the audit asks for: store both.
+    var hd=shiftDate(), arr=S.e1rmH[k];
+    var ix=arr.findIndex(function(x){ return x.d===hd && x.t; });      // an earlier test today
+    if(ix>-1){ arr[ix].v=tested; arr[ix].r=0; arr[ix].c=1; }           // retest replaces the test
     else arr.push({d:hd, v:tested, r:0, c:1, t:1});
     arr.sort(function(a,b){ return a.d<b.d?-1:1; });
     if(arr.length>60) S.e1rmH[k]=arr.slice(-60);
@@ -8037,6 +8109,10 @@ function pvStart(k, tested){
 }
 // judged on every bank, not on the weekly pass: a max that is too heavy should come down before
 // a full week of bad sessions goes by
+// X05. Lifts pvJudge has handled during THIS adaptation pass. It is cleared by adaptRun before
+// pvJudge runs, so it never carries across passes, and it survives the deletion of S.mxProv - which
+// is the whole point, because that deletion is what makes pvOn() blind.
+var PV_TOUCHED={};
 function pvJudge(){
   var acts=[];
   try{
@@ -8045,6 +8121,15 @@ function pvJudge(){
       var p=S.mxProv[k], H=pvSessions(k);
       var bad=H.filter(function(x){ return x.c===0; }).length;
       var ok =H.filter(function(x){ return x.c===1; }).length;
+      // FIFTH AUDIT 2026-09-14 (finding X05). Every lift this pass looks at is recorded, whether
+      // it moves, ends, or is left alone. adStalled() carries the right guard - "on probation:
+      // pvJudge owns this lift, one penalty not two" - but it asks pvOn(), and the branches below
+      // DELETE S.mxProv[k] when a trial reaches its floor or has nowhere left to step. After that
+      // the guard asks about a record that no longer exists and is told there is no probation, so
+      // a lift whose trial has just finished walking down is handed straight to the stall rule and
+      // cut again, through a floor the card had just proved. A correct guard defeated by the order
+      // of two lines reads as handled and is not.
+      try{ PV_TOUCHED[k]=1; }catch(e){}
       if(bad>=PV_BAD){
         var cur=(S.maxes||{})[k]||0; if(!cur) return;
         // AUDIT 2026-09-06: the floor is a floor, never a target. Clamping to it unconditionally
@@ -8059,7 +8144,12 @@ function pvJudge(){
         if(to<p.floor) to=p.floor;                   // never below what was already proven
         if(to>=cur){ delete S.mxProv[k]; return; }   // nowhere left to step: end it, move nothing
         S.maxes[k]=to;
+        // FIFTH AUDIT 2026-09-14 (finding X07). The action carries the TRIAL it acted on, not just
+        // the two numbers. Undo needs the floor above all - that is a weight the athlete has
+        // already trained successfully, and a trial rebuilt without it could walk below a load
+        // they have proven. Captured before the branch below may delete the record.
         acts.push({kind:'prov', lift:k, from:cur, to:to, d:today,
+          pv:{floor:p.floor, tested:p.tested, start:p.start, since:p.since, from:p.from},
           why:'the tested max has not held \u2014 '+bad+' sessions with missed reps or a grind, so the working weight comes back '+WV(cur-to)+' '+uLbl()});
         if(to<=p.floor) delete S.mxProv[k];          // back at a proven number: normal rules resume
         else p.since=today;                          // fresh test at the new load
@@ -8089,18 +8179,36 @@ function adaptRun(force){
     var today=shiftDate();
     // Probation is judged EVERY bank, ahead of the weekly gate - a tested max that is proving too
     // heavy should not sit on the bar for another six days waiting for the pass to come round.
+    // FIFTH AUDIT 2026-09-14 (findings X04, X05). One ledger of what this pass has already done to
+    // each lift. The rate loop below has always had this idea - "already handled this lift" - and
+    // the stall loop between them never did, so a lift could be cut by the layoff rule and cut
+    // again by the stall rule in the same pass (X04), or finish a probation walk-down and be cut
+    // again on the way out (X05).
+    try{ PV_TOUCHED={}; }catch(e){}
+    var __handled={};
     var pv=pvJudge();   // files its own actions
+    try{ Object.keys(PV_TOUCHED).forEach(function(k){ __handled[k]=1; }); }catch(e){}
     if(!force && S.adLast && adDays(S.adLast, today)<7) return pv.length? pv : null;   // once a week, at most
     var acts=[];
     // Coming back from a break is judged before anything else: every other signal is read against
     // loads that are no longer true.
     var lay=adLayoff();
     if(lay){
-      acts=acts.concat(adLayoffApply(lay, today));
+      var __layActs=adLayoffApply(lay, today);
+      // X04. A break has just eased every max back. The sessions BEFORE that break are exactly the
+      // struggling sessions the stall rule reads, so without this the same lift is cut for the
+      // break and then cut again for the work that led into it - their reproduction, 200 -> 170
+      // -> 155, including through the real return-session bank path.
+      try{ __layActs.forEach(function(a){ if(a && a.lift) __handled[a.lift]=1; }); }catch(e){}
+      acts=acts.concat(__layActs);
     }
     // Stalls next: a reset changes the loads everything else is judged against. But before cutting
     // the bar weight, ask WHY - if a driver of that lift is under-dosed, the volume is the problem.
     adStalled().forEach(function(s){
+      // X04/X05. One penalty per lift per pass, whoever applied it. pvOn() alone could not carry
+      // this: pvJudge deletes the probation record on the way out, so the lift it JUST finished
+      // penalising looks untouched by the time this line runs.
+      if(__handled[s.lift]) return;
       if(pvOn(s.lift)) return;      // on probation: pvJudge owns this lift, one penalty not two
       // AUDIT 2026-09-10. The rate path below has had this guard since 2026-09-06 - "calibration
       // already spent this evidence." The stall path never got it. So three bad sessions were
@@ -8121,6 +8229,11 @@ function adaptRun(force){
       var to=Math.round(cur*(1-AD_STALL_DROP)/5)*5;
       if(to>=cur) return;
       S.maxes[s.lift]=to;
+      // X03. Spend the evidence. Recorded only when the cut is actually APPLIED - the weak-link
+      // branch above returns without cutting, and evidence nothing was charged for must stay
+      // available for the cut it may still justify next cycle.
+      try{ if(!S.adSeen) S.adSeen={}; if(s.sig) S.adSeen[s.lift]=s.sig; }catch(e){}
+      __handled[s.lift]=1;
       S.adWeakTried=false;
       acts.push({kind:'stall', lift:s.lift, from:cur, to:to, d:today,
         why:'three sessions without progress \u2014 backed off to build a run-up again'});
@@ -8133,8 +8246,14 @@ function adaptRun(force){
         if(acMovedRecently(k)) return;   // calibration already spent this evidence - see above
         var mv=adRateMove(k); if(!mv) return;
         S.maxes[k]=mv.to;
+        // FIFTH AUDIT 2026-09-14 (finding X09). mv.rate is POUNDS per week and uLbl() is the
+        // athlete's chosen unit, so with kg selected this described a 10 lb/week climb as
+        // "climbing about 10 kg a week" - more than double the truth, in the one line that
+        // explains why the card just moved someone's working weight. WV1() is the shared factual
+        // converter; the Rate tab now calls it too rather than writing the same arithmetic out
+        // longhand, so the two cannot drift apart again.
         acts.push({kind:'rate', lift:k, from:mv.from, to:mv.to, rate:mv.rate, d:today,
-          why:'climbing about '+mv.rate+' '+uLbl()+' a week on your own numbers'
+          why:'climbing about '+WV1(mv.rate)+' '+uLbl()+' a week on your own numbers'
              +(mv.capped?' (held to a safe step)':'')});
       });
     }
@@ -8193,8 +8312,22 @@ function adaptUndoOne(i){
       S.maxes[a.lift] = (cur===a.to) ? a.from : (cur + (a.from - a.to));
       if(S.maxes[a.lift]<45) S.maxes[a.lift]=45;
     }
-    // a trial step put back means the max is on trial again, not proven
-    if(a.kind==='prov' && S.mxProv && S.mxProv[a.lift]) S.mxProv[a.lift].since=shiftDate();
+    // FIFTH AUDIT 2026-09-14 (finding X07). This refreshed the trial IF THE TRIAL WAS STILL THERE,
+    // and the one step where that is false is the last one: pvJudge deletes the record on reaching
+    // the floor. So undoing the final step put the weight back and left the lift with nothing
+    // recording that it was ever under test - a tested number under ordinary rules, which is
+    // exactly the state the trial exists to prevent.
+    //
+    // Putting a step back means the max is on trial again. If the trial is gone it is rebuilt from
+    // what the action recorded, floor included; if it is still there it is simply re-clocked.
+    if(a.kind==='prov'){
+      if(!S.mxProv) S.mxProv={};
+      if(S.mxProv[a.lift]) S.mxProv[a.lift].since=shiftDate();
+      else if(a.pv){
+        S.mxProv[a.lift]={ floor:a.pv.floor, tested:a.pv.tested, start:a.pv.start,
+                           from:a.pv.from, since:shiftDate() };
+      }
+    }
     if(a.kind==='weak') S.adWeakTried=false;
     if(a.kind==='deload') S.adDeloadDue=false;
     a.undone=shiftDate();
@@ -8428,6 +8561,15 @@ function adaptWire(){
 // catch up on. Leave `bulk` out and Bulk reads the title and items instead. Standing rule for
 // every noticeable build: if athletes will see or feel it, it gets an entry.
 var WHATSNEW=[
+  // FIFTH AUDIT 2026-09-14 (finding X16). The 2026.09.04f entry below announced an open-counter and
+  // is NOT edited: it was accurate about what it described on the day it was written, and quietly
+  // rewriting a dated entry to match today is not something this project does. This records what
+  // changed instead.
+  {build:'2026.09.14a', date:'2026-09-14', title:'The card no longer counts your opens, and the wording is now exact', items:[
+    'An outside analytics script used to load every time the card opened. It set no cookie and carried nothing about your training, but it was a request to another company on every launch, and it happened while this app told you nothing was being transmitted anywhere. It is gone. The card now contacts exactly one service, only to check your access code.',
+    'The FAQ used to answer "does it work without signal?" with "yes, entirely - there is no server". That was wrong and it mattered: your code IS checked against a service, and if the card cannot reach it for two weeks it will ask you for a code. The answer now says so, and says you can train offline as long as you like in between.',
+    'The Terms said your data has "nowhere to send it to". Your TRAINING still goes nowhere and never has - not a weight, not a rep, not a note. But the card does send your code, a random device number, the version, and counts of sessions banked. That was always listed in section 5; section 4 now agrees with it instead of contradicting it.'
+  ], bulk:'I have to correct something I told you. The card was loading an outside counter every time you opened it - nothing about your training, but it was a request going out to another company, and at the same time this app was telling you nothing gets transmitted anywhere. Both of those could not be true. The counter is gone. Your training has never left your phone and still has not: no weight, no rep, no note, no name. What does go out is your access code, a random number for your phone, the version, and how many sessions you banked - that is it, and it is all written down in the Terms. I also fixed the answer that said there is no server. There is one, it checks your code, and if it cannot be reached for two weeks the card asks you for a code. You deserved to know that before you found out in a basement.'},
   {build:'2026.09.09a', date:'2026-09-09', title:'Your code is now tied to your phone', items:[
     'A code now works on one phone \u2014 the first one it is entered on. Entering it on a second phone is refused, so a code you were given is yours alone.',
     'On iPhone, add the card to your Home Screen BEFORE entering your code. The Home Screen copy is a separate copy from Safari, and your code should live in the one you train on. The card will walk you through it.',
@@ -9176,7 +9318,15 @@ function ytSearchURL(name){
 }
 function howBtnHTML(name){
   // every movement can teach itself now: clip, curated video, or at worst a precise search
-  return '<span class="hw-btn" data-how="'+esc(name)+'">How</span>';
+  // DESIGN AUDIT 2026-09-13 (D04). Was a <span> with no role and tabIndex -1: reachable by
+  // pointer only, and announced as nothing. The sibling control three hundred lines down
+  // ("Show me how") is already a <button>, so this is the file agreeing with itself.
+  // The .lockfree marker is load-bearing and was NOT needed while this was a <span>: the lock
+  // guard swallows controls, and a span carrying no handler was never one. Turning it into a real
+  // button for D04 put it inside the guard, so on a banked day an athlete could no longer look up
+  // how to do a movement - lockaudit caught it in one line. Looking something up is not editing a
+  // session, and a finished day is exactly when someone reviews their form.
+  return '<button type="button" class="hw-btn lockfree" data-how="'+esc(name)+'" aria-label="How to do '+esc(name)+'">How</button>';
 }
 // ===== EXERCISE LIBRARY =====
 // Every movement the card knows, on its own tab - the same How sheet the session uses,
@@ -9187,14 +9337,14 @@ function libraryHTML(){
   var groups={}, order=[];
   try{ EXLIB.forEach(function(r){ var g=String(r[1]||'other');
     if(!groups[g]){ groups[g]=[]; order.push(g); } groups[g].push(r); }); }catch(e){}
-  var GLBL={push:'Push', pull:'Pull', legs:'Legs', arms:'Arms', shoulders:'Shoulders', core:'Core', carry:'Carries', other:'Other'};
+  var GLBL=GRP_LABEL;
   var h='<div class="sub" style="margin-top:8px">Exercise library</div>'
    +'<div class="block">'
    +'<input type="search" id="libSearch" class="dtin" placeholder="Search an exercise\u2026" value="'+esc(libQ)+'"'
    +' autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="margin-top:0">'
    +'<div id="libEmpty" class="cue" style="display:none;padding:10px 0 0">Nothing matches \u2014 try fewer letters.</div>';
   order.forEach(function(g){
-    h+='<div data-libgroup="1"><h3 style="margin-top:14px">'+esc(GLBL[g]||g)+'</h3>';
+    h+='<div data-libgroup="1"><h3 style="margin-top:14px">'+esc(grpLabel(g))+'</h3>';
     (groups[g]||[]).forEach(function(r){
       var name=r[0], desc=r[7]||'';
       h+='<div class="lib-row" data-librow="'+esc((String(name)+' '+String(desc)+' '+String(r[2]||'')+' '+String(g)).toLowerCase())+'">'
@@ -9312,8 +9462,12 @@ function settingsBodyHTML(){
     +'</div><div class="cue" style="padding:10px 0 0"><b>Beeps while the screen is off</b> \u2014 '
     +'<span class="chip'+(S.kaOn?' on':'')+'" data-kaon="1" style="font-size:12px;padding:6px 12px;display:inline-block">'+(S.kaOn?'On':'Off')+'</span> '
     +'Only turn this on if you do not listen to music while you train: it holds the audio open, and iOS will pause your music to let it. '
-    +'With it off, the card keeps the screen awake through your rest instead \u2014 the beeps still work, and your music keeps playing.</div><div style="display:none"'
-    +'</div>'
+    // DESIGN AUDIT 2026-09-13 (D09). There was a `<div style="display:none"` here with no closing
+    // bracket, so the parser folded the NEXT `</div>` into its attribute list and produced an
+    // element with attributes named `<` and `/div`. It was empty, hidden and referenced by
+    // nothing - debris. Removing the broken open tag and the `</div>` the parser was eating with
+    // it leaves the surrounding structure exactly as it renders today.
+    +'With it off, the card keeps the screen awake through your rest instead \u2014 the beeps still work, and your music keeps playing.</div>'
     +'</div>'
     + (function(){ try{ return '<div class="block"><h3>Bulk</h3>'
           +'<div class="cue" style="padding:0 0 8px">Drag him to the middle of the screen and he lights '
@@ -9582,6 +9736,13 @@ function howSheetHTML(){
      +(row? '<div class="hw-tags"><span>'+esc(row[2])+'</span><span>'+esc(row[1])+'</span></div>':'')
      +(row&&row[7]? '<div class="hw-cue">'+esc(row[7])+'</div>':'')
      +trains
+     // FIFTH AUDIT 2026-09-14 (finding X10). The card carries 42 written technique write-ups -
+     // brace, foot position, bar path, where to stop - and this sheet, the one named "How", never
+     // called for them. Not for some movements: for none. The session view has shown them all
+     // along (howtoFor, in the exercise row), so the Library was the half of the app where the
+     // written coaching did not exist. One source, both screens, as the audit asks.
+     +(function(){ try{ var t=howtoFor(name);
+        return t? '<div class="hw-how">'+esc(t)+'</div>' : ''; }catch(e){ return ''; } })()
      +rx
      +((!file)? '<a class="hw-ytbtn" href="'+ytSearchURL(name)+'" target="_blank" rel="noopener">'
         +'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="vertical-align:-4px;margin-right:7px"><path d="M23 7.2s-.2-1.6-.9-2.3c-.9-.9-1.9-.9-2.4-1C16.4 3.5 12 3.5 12 3.5s-4.4 0-7.7.4c-.5.1-1.5.1-2.4 1-.7.7-.9 2.3-.9 2.3S.8 9.1.8 11v1.8c0 1.9.2 3.8.2 3.8s.2 1.6.9 2.3c.9.9 2 .9 2.5 1 1.9.2 7.6.4 7.6.4s4.4 0 7.7-.4c.5-.1 1.5-.1 2.4-1 .7-.7.9-2.3.9-2.3s.2-1.9.2-3.8V11c0-1.9-.2-3.8-.2-3.8zM9.8 15.3V8.1l6.4 3.6-6.4 3.6z"/></svg>'
@@ -9879,10 +10040,13 @@ function gbHelpItems(){
     'The way back is always in the header while you are in an athlete. A coached athlete never gets the beginner shell for that exact reason - it replaces the whole screen and the way out with it.', 'roster');
 
   H('The app itself');
+  // FIFTH AUDIT 2026-09-14 (finding X16). This said "Yes, entirely. There is no account and no
+  // server." There is a server, your code is checked against it, and the card locks after two
+  // weeks without it. An athlete reading the old answer would not know their card could stop.
   A('Does it work without signal?',
-    'Yes, entirely. There is no account and no server. Everything runs on the phone, in the gym basement, on airplane mode.');
+    'Training does, completely - the gym basement, airplane mode, a dead phone signal for a whole session. Nothing you do while training needs a connection, and nothing you log leaves the phone.\n\nThe one thing that does need a connection is your ACCESS CODE. The card checks it when it can, at most once a day, and if it cannot reach the service it keeps working for two weeks and tells you how long is left. After that it asks for a code. So: train offline as long as you like, but get online sometime in any fortnight.');
   A('Where is my data kept?',
-    'On this device and nowhere else. That is the point - and it means a backup is the only copy that survives a lost phone.');
+    'Your training is on this device and nowhere else - every session, weight, max, note and photo, stored by your browser on your phone. A backup is the only copy that survives a lost phone.\n\nWhat the card does send, when it checks your access code, is listed field by field in the Terms, section 5. It is your code, a random device number, which version you are running, and counts of how many sessions you banked, printed or swapped. No exercise, no weight, no name, no note.');
   A('How do I get it onto my home screen?',
     'Share, then Add to Home Screen. It then opens like an app, full screen, with no browser bar.');
   A('How do I move my data to a new phone?',
@@ -11618,10 +11782,22 @@ function termsHTML(){
    +'if a weight is wrong, change it.</p>'
 
    +'<h3>4 \u00b7 Your training stays on your phone</h3>'
+   // FIFTH AUDIT 2026-09-14 (finding X16). This used to end "the card has nowhere to send it to",
+   // four lines above a section that names the address it sends to. The TRAINING claim is true and
+   // is kept, in the strongest form that is actually true; the absolute one is gone.
    +'<p>There is no account and no sign-in. Every session, weight, max, note, photo and record '
-   +'is stored by your browser on your own device. None of it is transmitted anywhere, and we '
-   +'cannot see it. That is not a policy choice we could quietly reverse \u2014 the card has '
-   +'nowhere to send it to.</p>'
+   +'is stored by your browser on your own device. <b>None of your training is ever transmitted '
+   +'anywhere and we cannot see it</b> \u2014 not a weight, not a rep, not a name, not a note, not '
+   +'a photo. Nothing in this app sends it, and no part of it reaches us or anyone else.</p>'
+   +'<p>The card is not, however, silent, and two things are worth knowing. It contacts one '
+   +'service by itself, for one purpose \u2014 checking that your access code is still valid '
+   +'\u2014 and section 5 lists every single thing that goes with it. Nothing else in this app '
+   +'contacts anyone on its own.</p>'
+   +'<p>The other is your choice, every time. Sixty-two movements have a demonstration video, and '
+   +'those play from YouTube\u2019s no-cookie address \u2014 so when you open one, your phone '
+   +'asks Google for that video, the way it would if you searched for it yourself. Google sees the '
+   +'request; we do not, and nothing about your training goes with it. No video loads unless you '
+   +'tap How and open it, and the written coaching on that screen works with no signal at all.</p>'
    +'<p>Because it lives in browser storage, clearing your browsing data or site data deletes '
    +'your training history. Back it up first if you want to keep it.</p>'
 
@@ -11663,8 +11839,7 @@ function termsHTML(){
    +'<p>The card is served as a static page from GitHub Pages, so GitHub receives your IP address '
    +'when your browser loads it \u2014 the same as visiting any website. The access service in '
    +'section 5 runs on Cloudflare Workers, which receives your IP address to deliver the request. '
-   +'Page opens are also counted by Cloudflare Web Analytics, which receives your IP address and, '
-   +'by its own account, does not use cookies or track individual visitors. Exercise how-to '
+   +'Exercise how-to '
    +'videos are embedded from YouTube in privacy-enhanced mode; if you play one, YouTube receives '
    +'your IP address. Each of those companies operates under its own terms and privacy policy. '
    +'No third party ever receives your training data, because the card never sends it.</p>'
@@ -13215,7 +13390,9 @@ function swapPickerHTML(code, oldName){
    +'<div style="display:flex;justify-content:space-between;align-items:baseline">'
    +'<div style="font-size:17px;font-weight:800;letter-spacing:-.02em">Swap out '+esc(oldName)+'</div>'
    +'<div class="daybtn" data-swcancel="1" style="padding:7px 12px;font-size:12px">Cancel</div></div>'
-   +'<div class="sleeve-label" style="margin:6px 0 0">'+(grp&&!q? 'Showing other '+grp+' movements. Search to see everything.':'Search results.')
+   // DESIGN AUDIT 2026-09-13 (D13). Printed the raw group key at the athlete: "Showing other
+   // carry movements".
+   +'<div class="sleeve-label" style="margin:6px 0 0">'+(grp&&!q? 'Showing other '+grpLabel(grp).toLowerCase()+' movements. Search to see everything.':'Search results.')
    +' The new movement keeps this slot in your day.</div>'
    +'<input class="dtin libsearch" id="swQ" placeholder="Search all '+EXLIB.length+'" value="'+(S.swapQ||'')+'">'
    +'<div class="libwrap" style="margin-top:10px">'
@@ -13722,16 +13899,45 @@ var VOL_SUPPORT={
   'DB Reverse Curl':{forearm:1},
   'Dead Hang':{forearm:1}
 };
+// FIFTH AUDIT 2026-09-14 (finding X12). The same movement under two names credited two different
+// sets of muscles: "Deadlift" and "Conventional Deadlift" share a description, a HOWTO entry, a
+// group, an implement and a pattern, and disagreed about traps, low back, forearms and adductors.
+// So did "Seated Cable Row" and "Cable Rows". Whichever name the athlete happened to pick changed
+// the shape of their weekly volume chart for identical work.
+//
+// Five other equivalent-name pairs in this library already agree - Leg Curl / Lying Leg Curl,
+// Incline DB Press / Incline Dumbbell Press, Barbell Curl / Straight Bar Curl, DB Curl / Dumbbell
+// Curl, Incline DB Curl / Incline Dumbbell Curl - and are left alone. These two are the exceptions,
+// and audit5-probes X12 fails if a third ever appears.
+var VOL_ALIAS={
+  'Deadlift':'Conventional Deadlift',
+  'Seated Cable Row':'Cable Rows'
+};
+function volCanon(name){ try{ return VOL_ALIAS[name]||name; }catch(e){ return name; } }
 function volMuscles(name){
-  // merge the supporting credit into whatever the primary table says
+  // FIFTH AUDIT 2026-09-14 (finding X11). This MERGED BY ADDITION, so an exercise named in both
+  // the generic group rule and the specific support table was credited twice for the same muscle.
+  // Side Plank, Pallof Press and Russian Twist each banked 1.5 abdominal sets per set performed;
+  // Back Extension and Weighted Back Extension each banked a full glute set out of two halves.
+  // 1.5 is a number neither table claims - it is the sum of two statements about one thing.
+  //
+  // Their repair, and it is the right one: "resolve one deliberate contribution per exercise/muscle
+  // pair." The SPECIFIC table wins for every muscle it names; the generic supplies only what the
+  // specific is silent about.
+  //
+  // THIS CHANGES VOLUME ACCOUNTING - Side Plank reads abs 0.5 rather than 1.5 - and that is on the
+  // list for the S&C reviewer. The new numbers are what the tables actually say. Whether they are
+  // the right numbers is a coaching question.
+  name=volCanon(name);
   var _sup=(typeof VOL_SUPPORT!=='undefined' && VOL_SUPPORT[name])? VOL_SUPPORT[name] : null;
   var _base=volMusclesBase(name);
   if(!_sup) return _base;
   var out={}; if(_base) for(var k in _base) out[k]=_base[k];
-  for(var s in _sup) out[s]=(out[s]||0)+_sup[s];
+  for(var s in _sup) out[s]=_sup[s];      // the specific statement replaces, never adds to, the generic
   return out;
 }
 function volMusclesBase(name){
+  name=volCanon(name);                    // X12: an alias resolves before any table is consulted
   if(VOL_OVERRIDE[name]) return VOL_OVERRIDE[name];
   var r=libRow(name); if(!r) return null;
   var g=r[1], pat=r[3];
@@ -14214,7 +14420,15 @@ function routineHTML(){
 }
 function libPickerHTML(c){
   var q=(S.libQ||'').toLowerCase();
-  var groups=libGroups(), names={'push':'Push','pull':'Pull','legs':'Legs','arms':'Arms','core':'Core / carry'};
+  // DESIGN AUDIT 2026-09-13 (D13). This was a hardcoded five-group map that the loop below
+  // iterated, so shoulders, carry and back were unreachable from "Add a movement" - three
+  // movements in the library the picker could not offer. The groups now come from the DATA, in a
+  // stable order, and the labels from the one shared map.
+  var groups=libGroups();
+  var names={};
+  ['push','pull','legs','back','shoulders','arms','core','carry','other'].forEach(function(g){
+    if(groups[g] && groups[g].length) names[g]=grpLabel(g); });
+  Object.keys(groups).forEach(function(g){ if(!names[g]) names[g]=grpLabel(g); });
   var have={}; planExercises(c).forEach(function(e){ have[e.name]=1; });
   rtCustoms(c).forEach(function(x){ have[x.name]=1; });
   var h='<div class="block"><h3>Add a movement</h3>'
@@ -14563,6 +14777,16 @@ function libRow(n){ try{ return (EXBY&&EXBY[n])||null; }catch(e){ return null; }
 function libAnchor(n){ var r=libRow(n); if(!r) return null;
   if(r[5]==='bw') return null;
   return {base:r[3], f:parseFloat(r[4]), unit:r[5], conf:r[6]}; }
+// DESIGN AUDIT 2026-09-13 (D13). ONE map, because there were two and they disagreed. The
+// library's had no entry for `back` and printed the raw key as a section heading; the picker's had
+// only five entries and iterated ITSELF, so movements filed under shoulders, carry and back could
+// never be offered by "Add a movement" at all - and its "Core / carry" label promised carries it
+// then filtered out. Anything not listed here falls back to a capitalised key rather than a raw
+// one, so a group added to EXLIB later is never shown to an athlete as an identifier.
+var GRP_LABEL={push:'Push', pull:'Pull', legs:'Legs', back:'Back', arms:'Arms',
+               shoulders:'Shoulders', core:'Core', carry:'Carries', other:'Other'};
+function grpLabel(g){ g=String(g||'other');
+  return GRP_LABEL[g] || (g.charAt(0).toUpperCase()+g.slice(1)); }
 function libGroups(){ var g={}; EXLIB.forEach(function(r){ (g[r[1]]=g[r[1]]||[]).push(r); }); return g; }
 function libAvailable(r){ try{
   var eq=(S.profile&&S.profile.equip)||S.equip||{};
@@ -15491,7 +15715,14 @@ const RAMPS={
    pull:'Raise: 3\u20135 min easy cardio. Activate: dead hang 20\u201330s, band rows \u00d715. Mobilize: lat stretch 30s/side, thoracic rotations \u00d78. Potentiate: two lighter feeder sets on the first pull.',
    legs:'Raise: 3\u20135 min bike or incline walk. Activate: glute bridges \u00d712, side-lying clamshells \u00d710/side. Mobilize: hip openers, ankle rocks, bodyweight squats \u00d710. Potentiate: bar ramp on the first lift \u2014 own every depth.',
    full:'Raise: 3\u20135 min easy cardio. Activate: glute bridges \u00d712, band pull-aparts \u00d715. Mobilize: hips + shoulders 2 min. Potentiate: bar ramps as listed.'};
-function trainsFor(n){ var r=libRow(n); return (r&&r[7])||TRAINS[n]||''; }
+// FIFTH AUDIT 2026-09-14 (finding X10). This returned the library row's DESCRIPTION - r[7] -
+// and only fell through to TRAINS if there was no row. TRAINS has one entry, so for all 170
+// movements this returned the description, which howSheetHTML then printed a second time one line
+// below where it had already printed it. 170 of 170 How sheets said the same sentence twice.
+//
+// It is now what its name says: what this movement trains, when the card has something to say
+// about that beyond the description it already showed.
+function trainsFor(n){ return TRAINS[n]||''; }
 function howtoFor(n){ return HOWTO[n]||''; }
 
 // ---- focus state ----
@@ -15585,10 +15816,17 @@ function deckHeadHTML(){
   var d=dayObj(), f=focusIdx(), p=sessionPct(), open=(S.view==='deck');
   var dots='';
   for(var i=0;i<d.exercises.length;i++){
-    dots+='<i class="'+(exDone(i)?'done':(i===f?'now':''))+'"></i>';
+    dots+='<i class="'+(exDone(i)?'done':(i===f?'now':''))+'" aria-hidden="true"></i>';
   }
   return '<div class="deckhead lockfree">'
-   +'<div class="dots'+(open?' open':'')+'" data-deck="1" title="Tap to see the whole day">'+dots+'</div>'
+   // DESIGN AUDIT 2026-09-13 (D04). The pips are a PICTURE of progress; the strip is the control.
+   // Announcing eleven anonymous children and no operable parent is backwards, so the children are
+   // hidden and the parent gets the role, the tab stop and a name that carries the same
+   // information the pips do visually.
+   +'<div class="dots'+(open?' open':'')+'" data-deck="1" role="button" tabindex="0"'
+     +' aria-expanded="'+(open?'true':'false')+'"'
+     +' aria-label="'+(open?'Close the whole day':'See the whole day')+' \u2014 exercise '+(f+1)+' of '+p.total+', '+p.done+' done">'
+     +dots+'</div>'
    +'<div class="deckmeta"><span>'+(open? 'Whole day \u00b7 '+p.done+' of '+p.total+' done'
        : 'Exercise '+(f+1)+' of '+p.total)+'</span>'
    +'<span class="pull" data-deck="1">'+(open?'Close \u25B4':'See whole day \u25BE')+'</span></div></div>'; }
@@ -15685,7 +15923,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v237e';
+const BUILD = 'v237g';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -15957,34 +16195,34 @@ const THEMES=[
  // here and its athletes migrate across to the identical colours.
  {id:'coach',name:'Coach',nat:'day',
    d:{},
-   n:{'--bg':'#12151A','--panel':'#1A1F27','--panel2':'#232A34','--line':'#333C48','--chalk':'#EDF1F5','--dim':'#9BA6B3','--faint':'#6B7683','--amber':'#5B8CFF','--amber-ink':'#0A1226','--green':'#5BD98A','--red':'#FF6B5E'}},
+   n:{'--bg':'#12151A','--panel':'#1A1F27','--panel2':'#232A34','--line':'#333C48','--chalk':'#EDF1F5','--dim':'#9BA6B3','--faint':'#7C8794','--amber':'#5B8CFF','--amber-ink':'#0A1226','--green':'#5BD98A','--green-ink':'#12151A','--red':'#FF6B5E','--red-ink':'#12151A'}},
  {id:'iron',name:'Iron',nat:'night',
-   d:{'--bg':'#EFEDE8','--panel':'#FFFFFF','--panel2':'#E4E1DA','--line':'#CFCBC1','--chalk':'#1A1D22','--dim':'#565C66','--faint':'#868D97','--amber':'#8A5A12','--amber-ink':'#FFF6E6','--green':'#2E6B34','--red':'#B03024'},
-   n:{'--bg':'#14161A','--panel':'#1C2026','--panel2':'#22262D','--line':'#2E333B','--chalk':'#F0ECE4','--dim':'#A8AEB8','--faint':'#6C727C','--amber':'#E0A94C','--amber-ink':'#171A1F','--green':'#8FBF6F','--red':'#E2574C'}},
+   d:{'--bg':'#EFEDE8','--panel':'#FFFFFF','--panel2':'#E4E1DA','--line':'#CFCBC1','--chalk':'#1A1D22','--dim':'#565C66','--faint':'#707782','--amber':'#8A5A12','--amber-ink':'#FFF6E6','--green':'#2E6B34','--green-ink':'#EFEDE8','--red':'#B03024','--red-ink':'#EFEDE8'},
+   n:{'--bg':'#14161A','--panel':'#1C2026','--panel2':'#22262D','--line':'#2E333B','--chalk':'#F0ECE4','--dim':'#A8AEB8','--faint':'#808791','--amber':'#E0A94C','--amber-ink':'#171A1F','--green':'#8FBF6F','--green-ink':'#14161A','--red':'#E2574C','--red-ink':'#14161A'}},
  {id:'nightops',name:'Ops',nat:'night',
-   d:{'--bg':'#EDF1F2','--panel':'#FFFFFF','--panel2':'#E0E6E8','--line':'#C6CFD2','--chalk':'#10161A','--dim':'#4E5A61','--faint':'#7E8B93','--amber':'#00697F','--amber-ink':'#EAFBFF','--green':'#16704F','--red':'#BE3A2C'},
-   n:{'--bg':'#0B0E11','--panel':'#12161B','--panel2':'#1A2027','--line':'#2A333D','--chalk':'#E8EDF2','--dim':'#9AA7B4','--faint':'#66727E','--amber':'#4FC3F7','--amber-ink':'#04222E','--green':'#5BD6A0','--red':'#FF6B5E'}},
+   d:{'--bg':'#EDF1F2','--panel':'#FFFFFF','--panel2':'#E0E6E8','--line':'#C6CFD2','--chalk':'#10161A','--dim':'#4E5A61','--faint':'#6B7880','--amber':'#00697F','--amber-ink':'#EAFBFF','--green':'#16704F','--green-ink':'#EDF1F2','--red':'#BE3A2C','--red-ink':'#EDF1F2'},
+   n:{'--bg':'#0B0E11','--panel':'#12161B','--panel2':'#1A2027','--line':'#2A333D','--chalk':'#E8EDF2','--dim':'#9AA7B4','--faint':'#73808E','--amber':'#4FC3F7','--amber-ink':'#04222E','--green':'#5BD6A0','--green-ink':'#0B0E11','--red':'#FF6B5E','--red-ink':'#0B0E11'}},
  {id:'desert',name:'Desert Tan',nat:'night',
-   d:{'--bg':'#F2EADD','--panel':'#FFFDF8','--panel2':'#E8DECC','--line':'#D2C3A6','--chalk':'#241C10','--dim':'#5E5340','--faint':'#8C7F66','--amber':'#8A5A16','--amber-ink':'#FFF6E4','--green':'#4F6B22','--red':'#B0392A'},
-   n:{'--bg':'#1B140C','--panel':'#251C11','--panel2':'#2F2416','--line':'#4A3A22','--chalk':'#F4EBDD','--dim':'#C4B49A','--faint':'#8F8168','--amber':'#E0A458','--amber-ink':'#2A1A05','--green':'#9DB86A','--red':'#E2574C'}},
+   d:{'--bg':'#F2EADD','--panel':'#FFFDF8','--panel2':'#E8DECC','--line':'#D2C3A6','--chalk':'#241C10','--dim':'#5E5340','--faint':'#80745D','--amber':'#8A5A16','--amber-ink':'#FFF6E4','--green':'#4F6B22','--green-ink':'#F2EADD','--red':'#B0392A','--red-ink':'#F2EADD'},
+   n:{'--bg':'#1B140C','--panel':'#251C11','--panel2':'#2F2416','--line':'#4A3A22','--chalk':'#F4EBDD','--dim':'#C4B49A','--faint':'#918369','--amber':'#E0A458','--amber-ink':'#2A1A05','--green':'#9DB86A','--green-ink':'#1B140C','--red':'#E2574C','--red-ink':'#1B140C'}},
  {id:'redline',name:'Redline',nat:'night',
-   d:{'--bg':'#F5EDEC','--panel':'#FFFFFF','--panel2':'#EBDEDC','--line':'#D6C0BD','--chalk':'#211416','--dim':'#5F4C4E','--faint':'#8E7679','--amber':'#B32B1E','--amber-ink':'#FFF2F0','--green':'#4A6B22','--red':'#8E1F14'},
-   n:{'--bg':'#140D0D','--panel':'#1D1212','--panel2':'#271818','--line':'#452525','--chalk':'#F5E9E7','--dim':'#C0A5A2','--faint':'#8A6F6C','--amber':'#E2574C','--amber-ink':'#2B0703','--green':'#8FA34A','--red':'#FF8A80'}},
+   d:{'--bg':'#F5EDEC','--panel':'#FFFFFF','--panel2':'#EBDEDC','--line':'#D6C0BD','--chalk':'#211416','--dim':'#5F4C4E','--faint':'#887073','--amber':'#B32B1E','--amber-ink':'#FFF2F0','--green':'#4A6B22','--green-ink':'#F5EDEC','--red':'#8E1F14','--red-ink':'#F5EDEC'},
+   n:{'--bg':'#140D0D','--panel':'#1D1212','--panel2':'#271818','--line':'#452525','--chalk':'#F5E9E7','--dim':'#C0A5A2','--faint':'#937875','--amber':'#E2574C','--amber-ink':'#2B0703','--green':'#8FA34A','--green-ink':'#140D0D','--red':'#FF8A80','--red-ink':'#140D0D'}},
  {id:'forest',name:'Forest',nat:'night',
-   d:{'--bg':'#ECF2ED','--panel':'#FFFFFF','--panel2':'#DFE9E1','--line':'#C2D2C6','--chalk':'#101A13','--dim':'#4C5B50','--faint':'#7C8C81','--amber':'#1F6B33','--amber-ink':'#F2FFF4','--green':'#2E7D3A','--red':'#B3372A'},
-   n:{'--bg':'#0D140F','--panel':'#131D16','--panel2':'#1A271E','--line':'#2C4234','--chalk':'#EAF2EC','--dim':'#A8BFAF','--faint':'#71857A','--amber':'#7BC96F','--amber-ink':'#0A2408','--green':'#A3D977','--red':'#E2574C'}},
+   d:{'--bg':'#ECF2ED','--panel':'#FFFFFF','--panel2':'#DFE9E1','--line':'#C2D2C6','--chalk':'#101A13','--dim':'#4C5B50','--faint':'#6B7A70','--amber':'#1F6B33','--amber-ink':'#F2FFF4','--green':'#2E7D3A','--green-ink':'#FFFFFF','--red':'#B3372A','--red-ink':'#ECF2ED'},
+   n:{'--bg':'#0D140F','--panel':'#131D16','--panel2':'#1A271E','--line':'#2C4234','--chalk':'#EAF2EC','--dim':'#A8BFAF','--faint':'#72877C','--amber':'#7BC96F','--amber-ink':'#0A2408','--green':'#A3D977','--green-ink':'#0D140F','--red':'#E2574C','--red-ink':'#0D140F'}},
  {id:'rose',name:'Rose',nat:'night',
-   d:{'--bg':'#F8EDF2','--panel':'#FFFFFF','--panel2':'#EFDDE6','--line':'#D9BECC','--chalk':'#22141A','--dim':'#614C56','--faint':'#8F7683','--amber':'#A81F62','--amber-ink':'#FFF0F6','--green':'#2E6B44','--red':'#B83A2C'},
-   n:{'--bg':'#170D12','--panel':'#21121A','--panel2':'#2B1822','--line':'#4A2A3A','--chalk':'#F7EAF0','--dim':'#C7A3B6','--faint':'#8F6F80','--amber':'#F06FA8','--amber-ink':'#33081C','--green':'#5BD98A','--red':'#FF6B5E'}},
+   d:{'--bg':'#F8EDF2','--panel':'#FFFFFF','--panel2':'#EFDDE6','--line':'#D9BECC','--chalk':'#22141A','--dim':'#614C56','--faint':'#886F7C','--amber':'#A81F62','--amber-ink':'#FFF0F6','--green':'#2E6B44','--green-ink':'#F8EDF2','--red':'#B83A2C','--red-ink':'#F8EDF2'},
+   n:{'--bg':'#170D12','--panel':'#21121A','--panel2':'#2B1822','--line':'#4A2A3A','--chalk':'#F7EAF0','--dim':'#C7A3B6','--faint':'#957787','--amber':'#F06FA8','--amber-ink':'#33081C','--green':'#5BD98A','--green-ink':'#170D12','--red':'#FF6B5E','--red-ink':'#170D12'}},
  {id:'violet',name:'Violet',nat:'night',
-   d:{'--bg':'#F0EDF8','--panel':'#FFFFFF','--panel2':'#E4DEF0','--line':'#C9BFE0','--chalk':'#17131F','--dim':'#554C66','--faint':'#837A93','--amber':'#5B34C4','--amber-ink':'#F6F2FF','--green':'#2E6B44','--red':'#B3372A'},
-   n:{'--bg':'#100D18','--panel':'#171226','--panel2':'#1F1832','--line':'#362A55','--chalk':'#EFEAF7','--dim':'#B0A3C7','--faint':'#7C6F8F','--amber':'#9B7BFF','--amber-ink':'#150A33','--green':'#5BD98A','--red':'#FF6B5E'}},
+   d:{'--bg':'#F0EDF8','--panel':'#FFFFFF','--panel2':'#E4DEF0','--line':'#C9BFE0','--chalk':'#17131F','--dim':'#554C66','--faint':'#7C728D','--amber':'#5B34C4','--amber-ink':'#F6F2FF','--green':'#2E6B44','--green-ink':'#F0EDF8','--red':'#B3372A','--red-ink':'#F0EDF8'},
+   n:{'--bg':'#100D18','--panel':'#171226','--panel2':'#1F1832','--line':'#362A55','--chalk':'#EFEAF7','--dim':'#B0A3C7','--faint':'#867997','--amber':'#9B7BFF','--amber-ink':'#150A33','--green':'#5BD98A','--green-ink':'#100D18','--red':'#FF6B5E','--red-ink':'#100D18'}},
  {id:'ember',name:'Ember',nat:'night',
-   d:{'--bg':'#F7EDE6','--panel':'#FFFFFF','--panel2':'#EEDFD3','--line':'#DCC4B0','--chalk':'#211610','--dim':'#5F4C3E','--faint':'#8E7A69','--amber':'#B3521A','--amber-ink':'#FFF4EC','--green':'#4F6B22','--red':'#B02F3F'},
-   n:{'--bg':'#170F0A','--panel':'#211610','--panel2':'#2B1D15','--line':'#4A3222','--chalk':'#F7EEE7','--dim':'#C7AE9A','--faint':'#8F7A68','--amber':'#FF8A50','--amber-ink':'#331103','--green':'#7BC96F','--red':'#FF5A72'}},
+   d:{'--bg':'#F7EDE6','--panel':'#FFFFFF','--panel2':'#EEDFD3','--line':'#DCC4B0','--chalk':'#211610','--dim':'#5F4C3E','--faint':'#867363','--amber':'#B3521A','--amber-ink':'#FFF4EC','--green':'#4F6B22','--green-ink':'#F7EDE6','--red':'#B02F3F','--red-ink':'#F7EDE6'},
+   n:{'--bg':'#170F0A','--panel':'#211610','--panel2':'#2B1D15','--line':'#4A3222','--chalk':'#F7EEE7','--dim':'#C7AE9A','--faint':'#927D6A','--amber':'#FF8A50','--amber-ink':'#331103','--green':'#7BC96F','--green-ink':'#170F0A','--red':'#FF5A72','--red-ink':'#170F0A'}},
  {id:'daylight',name:'Brass',nat:'day',
-   d:{'--bg':'#F2EFE6','--panel':'#FFFFFF','--panel2':'#EDE9DC','--line':'#CFC9B4','--chalk':'#26241B','--dim':'#5C594A','--faint':'#8B8877','--amber':'#B8860B','--amber-ink':'#FFF8E1','--green':'#4A7C2A','--red':'#C0392B'},
-   n:{'--bg':'#16130D','--panel':'#1F1B12','--panel2':'#292317','--line':'#443B25','--chalk':'#F6F1E4','--dim':'#BFB59A','--faint':'#8A8270','--amber':'#E3B657','--amber-ink':'#2A1F04','--green':'#9CC06B','--red':'#E2574C'}}
+   d:{'--bg':'#F2EFE6','--panel':'#FFFFFF','--panel2':'#EDE9DC','--line':'#CFC9B4','--chalk':'#26241B','--dim':'#5C594A','--faint':'#7A7768','--amber':'#936B09','--amber-ink':'#FFF8E1','--green':'#4A7C2A','--green-ink':'#FFFFFF','--red':'#C0392B','--red-ink':'#F2EFE6'},
+   n:{'--bg':'#16130D','--panel':'#1F1B12','--panel2':'#292317','--line':'#443B25','--chalk':'#F6F1E4','--dim':'#BFB59A','--faint':'#8A8270','--amber':'#E3B657','--amber-ink':'#2A1F04','--green':'#9CC06B','--green-ink':'#16130D','--red':'#E2574C','--red-ink':'#16130D'}}
 ];
 // Countdown voices: each is a complete character - its own tick and its own GO signature -
 // run through the same sample-accurate scheduler. The pitch setting (Deep/Standard/Bright)
@@ -16128,7 +16366,11 @@ function applyTheme(){
   const t=themeDef();
   const v=themeVars(t);
   const r=document.documentElement.style;
-  ['--bg','--panel','--panel2','--line','--chalk','--dim','--faint','--amber','--amber-ink','--green','--red'].forEach(k=>r.removeProperty(k));
+  // DESIGN AUDIT 2026-09-13 (D03). This list is the teardown, and it is hand-maintained: a
+  // token added to THEMES but not named here is never cleared, so it SURVIVES a theme change.
+  // Iron night's near-black completed-set ink would have carried over onto Coach day's light
+  // green and been unreadable in a theme that defines a perfectly good ink of its own.
+  ['--bg','--panel','--panel2','--line','--chalk','--dim','--faint','--amber','--amber-ink','--green','--green-ink','--red','--red-ink'].forEach(k=>r.removeProperty(k));
   Object.keys(v).forEach(k=>r.setProperty(k,v[k]));
   // one attribute anything downstream can read without recomputing the rule
   try{ document.documentElement.setAttribute('data-light', lightNow()); }catch(e){}
@@ -17490,11 +17732,24 @@ var EQ_STEP={machine:10, cable:10, dumbbell:5, plate:5, band:0, bodyweight:0, ot
 function inferStep(name){
   try{
     var ws=[];
-    (logKeys||[]).forEach(function(k){
-      var c=logCache[k]; if(!c||!c.report) return;
-      var re=new RegExp('^'+String(name).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b.*?(\\d+(?:\\.\\d+)?)\\s*lb','mi');
-      var m=re.exec(c.report); if(m) ws.push(parseFloat(m[1]));
-    });
+    // FIFTH AUDIT 2026-09-14 (finding X08). This walked logKeys reading logCache[k].report, and
+    // logCache is a LAZY UI CACHE - filled only when a log is OPENED. So the evidence behind this
+    // inference was not "what the athlete has logged", it was "which history screens they have
+    // looked at since the card loaded", and opening an old report changed a live prescription with
+    // no new training and no settings touched. Their reproduction: a pushdown moving 60 -> 65.
+    //
+    // S.exHist is the same evidence, authoritative and always loaded: recordHistory() files one
+    // record per exercise per session carrying the heaviest completed weight and every set's weight
+    // beside it. The principle in the comment above is unchanged and finally true - it reads what
+    // was TRAINED. It is also better informed, because the old regex could only reach the first
+    // number on a report line while ws carries them all.
+    try{
+      (histFor(name)||[]).forEach(function(r){
+        if(!r) return;
+        if(Array.isArray(r.ws)) r.ws.forEach(function(v){ if(typeof v==='number') ws.push(v); });
+        else if(typeof r.w==='number') ws.push(r.w);
+      });
+    }catch(e){}
     var lp=(S.lastPerf||{})[name]; if(lp && lp.w>0) ws.push(lp.w);
     ws=ws.filter(function(x){ return x>0; });
     if(ws.length<2) return null;
@@ -18369,6 +18624,42 @@ async function opsQuiesce(ms){
 // read that resolves late can tell it is no longer the operation in charge and stand down
 // instead of assigning its stale result over whoever is on screen (findings N6, L5).
 var LOADGEN=0;
+// FIFTH AUDIT 2026-09-14 (finding X01). rosterSwitch() sets ROSTER.active synchronously - which is
+// right, a tap must take effect on the tap - then blanks S to S_BLANK, and only THEN awaits
+// opsQuiesce() and load(). For the length of those two awaits the live NAMESPACE is the incoming
+// athlete while the live STATE is template defaults.
+//
+// Anything that calls save() in that window writes DEFAULTS into the incoming athlete's drawer.
+// That is their reproduction exactly: a 400 lb squat max reading 220 afterwards, which is not a
+// corrupted number but PLAN_DEFAULT's number.
+//
+// opsQuiesce() is the guard, it is bounded at 2500 ms, and rosterSwitch discards its answer - so a
+// slow save proceeds regardless. Rather than lengthen a timeout (which only moves the window), the
+// state itself refuses to be written while it is a placeholder. There is nothing in it to lose:
+// by construction it is the blank template.
+//
+// A counter rather than a boolean, so nested or overlapping swaps cannot clear each other's guard,
+// and every setter uses try/finally so a thrown load can never leave it stuck on.
+var PROFILE_SWAPPING=0, PLACEHOLDER_SIG=null;
+function swapBegin(){ PROFILE_SWAPPING++;
+  try{ PLACEHOLDER_SIG=JSON.stringify(S_BLANK); }catch(e){ PLACEHOLDER_SIG=null; } }
+function swapEnd(){ if(PROFILE_SWAPPING>0) PROFILE_SWAPPING--;
+  if(PROFILE_SWAPPING===0) PLACEHOLDER_SIG=null; }
+function profileLoading(){ return PROFILE_SWAPPING>0; }
+// Is the live state STILL the untouched blank standing in for someone whose load has not landed?
+//
+// The first version of this guard refused EVERY save while a swap was in flight. That is too
+// strict and it broke a real contract: rosterflow builds an athlete's plan immediately after the
+// switch - field-caught behaviour from 2026-09-02 - and that save is legitimate new work for the
+// CORRECT athlete. Refusing it reported a built plan as unassessed.
+//
+// What must never reach storage is the placeholder ITSELF: template defaults written over a real
+// drawer. Comparing against the blank signature says exactly that and nothing more. The stringify
+// only runs while a swap is actually in flight, so the ordinary save path is untouched.
+function placeholderNow(){
+  try{ if(PROFILE_SWAPPING<=0 || !PLACEHOLDER_SIG) return false;
+       return JSON.stringify(S)===PLACEHOLDER_SIG; }catch(e){ return false; }
+}
 function nextLoadGen(){ return ++LOADGEN; }
 function loadGenCurrent(g){ return g===LOADGEN; }
 // AUDIT 2026-09-11 (finding R01). load() used to answer every caller with `undefined`, whether
@@ -18384,6 +18675,10 @@ function loadResult(status, key, gen){
 }
 async function saveNow(){
   try{
+    // X01, same rule as save(). This is the CHECKED path - it returns an answer - so it answers
+    // false rather than silently doing nothing; a caller that believes a placeholder was filed is
+    // the false-success shape this file has been removing everywhere else.
+    if(placeholderNow()) return false;
     var st=readStamp();
     if(SYNC_READY && st && st.id!==TAB_ID && st.t>LAST_SYNC){
       if(!STALE_WARNED){ STALE_WARNED=true; try{ render(); }catch(e){}
@@ -18424,6 +18719,9 @@ function commitFailLine(why){
   return 'this device is out of space';
 }
 function save(){ try{
+  // X01. Never write the PLACEHOLDER. See placeholderNow() - this refuses a state that is still
+  // byte-identical to the blank template during a swap, and nothing else.
+  if(placeholderNow()) return;
   var st=readStamp();
   // Never cry stale before loading. Anything that saves during boot runs before load() has
   // read the stored stamp, and would see any existing write as "newer" - warning a perfectly
@@ -18768,12 +19066,37 @@ async function saveSessionLog(quiet){
   // F07. Take the operation's context before any await. Everything after the write must be
   // committed to THIS profile or to nothing at all.
   const __op=opCtx('bank');
+  // FIFTH AUDIT 2026-09-14 (finding X02). These three passes write EVIDENCE - strength estimates,
+  // performance counters, exercise history - into live state, and they run before the session
+  // document exists. P01 already moved autoCalibrate() to after the write for this exact reason,
+  // and the comment saying so is four lines down; the evidence those passes produce never got the
+  // same treatment.
+  //
+  // So a failed write left the card telling the athlete, correctly, that nothing was filed - while
+  // keeping the evidence. Their reproduction: a squat session failed to save, and banking an
+  // unrelated accessory session the next day carried that evidence to disk and moved the squat max
+  // 200 -> 230. A max that moved on a session that does not exist.
+  //
+  // The ordering is not the defect and is left alone: sessionShape() and report() read what these
+  // passes produce, so running them later would write a document describing evidence it does not
+  // contain. The LIFETIME was the defect. The three stores are snapshotted here and restored on
+  // every path that does not end in a filed document - a draft that never became a session never
+  // happened, which is what the athlete already believes.
+  var __ev=null;
+  try{ __ev={ e1rmH:JSON.stringify(S.e1rmH||{}), e1rm:JSON.stringify(S.e1rm||{}),
+              perf:JSON.stringify(S.perf||{}),   exHist:JSON.stringify(S.exHist||{}) }; }catch(e){ __ev=null; }
+  function __evRollback(){
+    try{ if(!__ev) return;
+      S.e1rmH=JSON.parse(__ev.e1rmH); S.e1rm=JSON.parse(__ev.e1rm);
+      S.perf=JSON.parse(__ev.perf);   S.exHist=JSON.parse(__ev.exHist);
+    }catch(e){ oops('evRollback',e); }
+  }
   try{ updateE1RM(); recordPerf(); recordHistory(); }catch(e){ oops("saveSessionLog",e); }
   // PROGRESSION AUDIT 2026-09-12 (finding P01, ordering). autoCalibrate() used to run HERE, before
   // the session document was written - so a max could move on the strength of a session that then
   // failed to persist, and it moved on whatever profile happened to be on screen when the write
   // came back. It now runs after the write has succeeded and inside the owned path, below.
-  if(!storageOK){ opEnd(__op); if(!quiet) alertToast('Storage unavailable on this device'); return false; }
+  if(!storageOK){ __evRollback(); opEnd(__op); if(!quiet) alertToast('Storage unavailable on this device'); return false; }
   // FIELD 2026-09-12 (Jerry). This key is why back-dating works at all: the session files under
   // the date on the field, so yesterday's work lands on yesterday. Banking locks dayKey() -
   // cycle|week|day - which has never been tied to the calendar, so today's training day is freed
@@ -18814,6 +19137,7 @@ async function saveSessionLog(quiet){
     if(__dw && !__dw.ok && (__dw.status==='stale' || __dw.status==='unseen')){
       // A different copy of this card banked or corrected this same session. Refusing is the whole
       // point; saying so plainly is what makes the refusal useful rather than mysterious.
+      __evRollback();                           // X02: nothing was filed, so nothing was learned
       if(opOwns(__op)) S.notes=noteBefore;
       opEnd(__op);
       if(!quiet) alertToast('This session was already filed somewhere else \u2014 nothing was '
@@ -18822,6 +19146,7 @@ async function saveSessionLog(quiet){
       return false;
     }
     if(wrote===false){
+      __evRollback();                           // X02: nothing was filed, so nothing was learned
       if(opOwns(__op)) S.notes=noteBefore;      // give them their notes back, nothing was filed
       opEnd(__op);
       if(!quiet) alertToast('Could not save \u2014 this device is out of space. Back up to a file, then clear an old block.');
@@ -18874,6 +19199,20 @@ async function saveSessionLog(quiet){
     // that used to fail unnoticed while the athlete was told the session was saved.
     var _c=await commitState();
     await refreshLogs();
+    // FIFTH AUDIT 2026-09-14 (finding X01). Two more awaits have just gone by. The ownership check
+    // above was made before them, and everything below - adaptRun(), which rewrites training maxes
+    // and saves them, and render() - mutates the LIVE globals. Their words: "checks ownership after
+    // its first write, but not after later awaits."
+    //
+    // The bookkeeping is already durable (commitState succeeded or is reported below), so there is
+    // nothing further to commit for the departed profile; what must not happen is adaptation
+    // running against whoever is on screen now.
+    if(!opOwns(__op)){
+      opEnd(__op);
+      try{ render(); }catch(e){}
+      if(!quiet) try{ alertToast('Session filed under the profile it was logged in.', 5000); }catch(e){}
+      return true;
+    }
     if(!_c.ok){
       // Say exactly what is and is not true. The session itself is filed: that write was checked
       // above and it succeeded, so the work is not lost and re-banking will not duplicate it -
@@ -19320,13 +19659,25 @@ function renderInner(){
   h+='<div class="pickers"><div class="chiprow">'+PLAN.days.map(x=>{
     var wd=schedFor(x.code);
     var done=false; try{ done=sessionLogged(S.week, x.code); }catch(e){}
-    return '<div class="chip'+(x.code===S.day?' on':'')+(x.code===__td?' today':'')+'" data-day="'+x.code+'">'
-      +x.code+(done?'<span style="color:var(--green);font-weight:800">\u2713</span>':'')
-      +(wd?'<span class="chipwd">'+wd+'</span>':'')+'</div>'; }).join('')+'</div></div>';
-  h+='<div class="tabrow" role="tablist" aria-label="Sections">'+[['MAX','You'],['RATE','Rate'],['CAL','Calendar'],['PLAN','Plan'],['LIB','Library']]
+    // DESIGN AUDIT 2026-09-13 (D04/D05). Pointer-only, and the CURRENT day was indicated by
+    // colour alone - so a screen reader announced all six identically. aria-pressed carries the
+    // selection, and the label spells out what the letter and the tick actually mean.
+    return '<div class="chip'+(x.code===S.day?' on':'')+(x.code===__td?' today':'')+'" data-day="'+x.code+'"'
+      +' role="button" tabindex="0" aria-pressed="'+(x.code===S.day?'true':'false')+'"'
+      +' aria-label="Day '+x.code+(wd?' \u00b7 '+wd:'')+(done?' \u00b7 logged':'')+(x.code===__td?' \u00b7 next session':'')+'">'
+      +x.code+(done?'<span style="color:var(--green);font-weight:800" aria-hidden="true">\u2713</span>':'')
+      +(wd?'<span class="chipwd" aria-hidden="true">'+wd+'</span>':'')+'</div>'; }).join('')
+      +'</div></div>';
+  // DESIGN AUDIT 2026-09-13 (D06). These declared role="tab" and implemented about half of what
+  // that promises: five tab stops instead of one, no panel named, no arrow-key movement. The audit
+  // gives the choice and for this card it is not close - each of these REPLACES the screen and the
+  // card re-renders from scratch, which is navigation, not a tab strip. Naming it correctly is a
+  // smaller change than building the missing contract, and leaves nothing to be half-right about.
+  // aria-current="page" is what marks the section you are in; it was colour alone before.
+  h+='<nav class="tabrow" aria-label="Sections">'+[['MAX','You'],['RATE','Rate'],['CAL','Calendar'],['PLAN','Plan'],['LIB','Library']]
       .concat((typeof adminAllowed==='function' && adminAllowed())? [['ADMIN','Admin']] : []).map(function(t2){
-    return '<div class="tab'+(S.day===t2[0]?' on':'')+'" data-day="'+t2[0]+'" role="tab" tabindex="0"'
-      +' aria-selected="'+(S.day===t2[0]?'true':'false')+'">'+t2[1]+'</div>'; }).join('')+'</div>';
+    return '<button type="button" class="tab'+(S.day===t2[0]?' on':'')+'" data-day="'+t2[0]+'"'
+      +(S.day===t2[0]?' aria-current="page"':'')+'>'+t2[1]+'</button>'; }).join('')+'</nav>';
   var __isTraining=PLAN.days.some(function(dd){ return dd.code===S.day; });
   if(__isTraining){
     h+=weekHeadHTML();
@@ -19437,8 +19788,8 @@ function renderInner(){
       +'</div></div>';
     h+='<div class="sub" id="benchSec" style="margin-top:12px">'+BENCH.anchorLabel+'</div>';
     h+='<div class="ex" id="benchCard"><div class="ex-head">'
-     +'<div class="ed-row" style="margin-top:2px"><div class="ed-label">Date</div><input type="date" class="dtin" id="r2d" value="'+localDate()+'"></div>'
-     +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Time (mm:ss)</div><input class="dtin" id="r2t" placeholder="'+BENCH.placeholder+'" inputmode="numeric"></div>'
+     +'<div class="ed-row" style="margin-top:2px"><div class="ed-label">Date</div><input type="date" class="dtin" id="r2d" aria-label="Date of this benchmark" value="'+localDate()+'"></div>'
+     +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Time (mm:ss)</div><input class="dtin" id="r2t" aria-label="Time in minutes and seconds" placeholder="'+BENCH.placeholder+'" inputmode="numeric"></div>'
      +'<div class="ed-row" style="margin-top:8px"><div class="daybtn" data-r2go="1" style="background:var(--amber);color:var(--amber-ink,#111);border-color:var(--amber)">Log '+BENCH.short+'</div></div>';
     (function(){ const L=last2MR(); const P=runPaces();
       if(L&&P){ h+='<div class="cue" style="padding:6px 0 0;color:var(--amber)">Assessed: '+fmtPace(P.t2)+' on '+L.d+' = '+fmtPace(P.mile)+' per mile - Group '+P.group+' - easy '+fmtPace(P.easyLo)+'-'+fmtPace(P.easyHi)+' - tempo '+fmtPace(P.tempo)+' - 400m '+P.i400+'s</div>';
@@ -19448,10 +19799,10 @@ function renderInner(){
     h+='</div></div>';
     h+='<div class="sub" id="bcompSec" style="margin-top:12px">Body composition</div>';
     h+='<div class="ex"><div class="ex-head">'
-     +'<div class="ed-row" style="margin-top:2px"><div class="ed-label">Date</div><input type="date" class="dtin" id="bcd" value="'+localDate()+'"></div>'
-     +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Weight ('+uLbl()+')</div><input class="dtin" id="bcw" placeholder="'+(isKg()?'90':'200')+'" inputmode="decimal"></div>'
-     +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Body fat %</div><input class="dtin" id="bcf" placeholder="20" inputmode="decimal"></div>'
-     +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Device</div><input class="dtin" id="bcs" placeholder="scale, InBody, Bod Pod..." value="'+((bcLast()&&bcLast().src)||'')+'"></div>'
+     +'<div class="ed-row" style="margin-top:2px"><div class="ed-label">Date</div><input type="date" class="dtin" id="bcd" aria-label="Date of this body composition measurement" value="'+localDate()+'"></div>'
+     +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Weight ('+uLbl()+')</div><input class="dtin" id="bcw" aria-label="Weight in '+uLbl()+'" placeholder="'+(isKg()?'90':'200')+'" inputmode="decimal"></div>'
+     +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Body fat %</div><input class="dtin" id="bcf" aria-label="Body fat percentage" placeholder="20" inputmode="decimal"></div>'
+     +'<div class="ed-row" style="margin-top:6px"><div class="ed-label">Device</div><input class="dtin" id="bcs" aria-label="Device used to measure" placeholder="scale, InBody, Bod Pod..." value="'+((bcLast()&&bcLast().src)||'')+'"></div>'
      +'<div class="ed-row" style="margin-top:8px"><div class="daybtn" data-bcgo="1" style="background:var(--amber);color:var(--amber-ink,#111);border-color:var(--amber)">Log scan</div></div>';
     (function(){ const L=bcLast();
       if(!L){ h+='<div class="cue" style="padding:6px 0 0">Log a scan or a scale reading. Fat-free mass is computed for you \u2014 it is the number that shows muscle being kept while weight moves.</div>'; }
@@ -19489,8 +19840,11 @@ function renderInner(){
            } else { for(let v=45; v<=500; v+=5){ wopts+='<option value="'+v+'"'+(c.w===v?' selected':'')+'>'+v+' lb</option>'; } }
            const ropts=[1,2,3,4,5,6,8,10].map(r=>'<option value="'+r+'"'+((c.r||3)===r?' selected':'')+'>x'+r+' RM</option>').join('');
            return '<div class="ed-row" style="margin-top:8px;gap:6px;flex-wrap:wrap">'
-             +'<select class="dtin" data-rmw="'+mi.k+'" style="margin-top:0;flex:1.3;min-width:0">'+wopts+'</select>'
-             +'<select class="dtin" data-rmr="'+mi.k+'" style="margin-top:0;width:96px">'+ropts+'</select>'
+             // DESIGN AUDIT 2026-09-13 (D05). Five identical PAIRS of dropdowns, one pair per
+             // main lift, none of them named - by voice or by screen reader they were ten
+             // interchangeable controls. The lift's name is what tells them apart.
+             +'<select class="dtin" data-rmw="'+mi.k+'" aria-label="'+esc(mi.name)+' \u2014 weight lifted in the rep-max test" style="margin-top:0;flex:1.3;min-width:0">'+wopts+'</select>'
+             +'<select class="dtin" data-rmr="'+mi.k+'" aria-label="'+esc(mi.name)+' \u2014 reps completed in the rep-max test" style="margin-top:0;width:96px">'+ropts+'</select>'
              +(e? '<div class="cue" style="flex-basis:100%;padding:4px 0 0">'+WV(c.w)+' x '+(c.r||3)+' estimates a 1RM of '+WV(e)+'</div><div class="daybtn" data-mxapply="'+mi.k+'" data-v="'+sug+'" style="background:var(--amber);color:var(--amber-ink);border-color:var(--amber)">Set max '+WV(sug)+'</div>' : '')
              +'</div>';
          })()
@@ -19558,8 +19912,11 @@ function renderInner(){
   try{ h+=recoveryNote(); }catch(e){}
   h+='<div class="block rdyblock" style="margin-top:10px"><h3>Readiness \u2014 20 seconds, before the first bar</h3>'
     +'<div class="ed-row"><div class="ed-label">Sleep</div><div class="step"><button data-rdy="sleep" data-d="-1" aria-label="One hour less sleep">\u2212</button><div class="val mono">'+((rToday&&S.ready.sleep!=null)?S.ready.sleep:'\u2014')+'h</div><button data-rdy="sleep" data-d="1" aria-label="One hour more sleep">+</button></div></div>'
-    +'<div class="ed-row"><div class="ed-label">Soreness</div><div class="rirchips">'+[1,2,3,4,5].map(v=>'<button class="rc'+((rToday&&S.ready.sore===v)?' on':'')+'" data-rdys="'+v+'">'+v+'</button>').join('')+'</div></div>'
-    +'<div class="ed-row"><div class="ed-label">Stress</div><div class="rirchips">'+[1,2,3,4,5].map(v=>'<button class="rc'+((rToday&&S.ready.stress===v)?' on':'')+'" data-rdyx="'+v+'">'+v+'</button>').join('')+'</div></div>'
+    // DESIGN AUDIT 2026-09-13 (D05). The selection lived in a CSS class, so the chosen chip was
+    // announced exactly like the four the athlete did not choose. aria-pressed carries it, the row
+    // is a named group, and each chip says what its number means instead of reading as a bare "3".
+    +'<div class="ed-row"><div class="ed-label" id="rdyLblSore">Soreness</div><div class="rirchips" role="group" aria-labelledby="rdyLblSore">'+[1,2,3,4,5].map(v=>'<button class="rc'+((rToday&&S.ready.sore===v)?' on':'')+'" data-rdys="'+v+'" aria-pressed="'+((rToday&&S.ready.sore===v)?'true':'false')+'" aria-label="Soreness '+v+' of 5">'+v+'</button>').join('')+'</div></div>'
+    +'<div class="ed-row"><div class="ed-label" id="rdyLblStress">Stress</div><div class="rirchips" role="group" aria-labelledby="rdyLblStress">'+[1,2,3,4,5].map(v=>'<button class="rc'+((rToday&&S.ready.stress===v)?' on':'')+'" data-rdyx="'+v+'" aria-pressed="'+((rToday&&S.ready.stress===v)?'true':'false')+'" aria-label="Stress '+v+' of 5">'+v+'</button>').join('')+'</div></div>'
     +(RL&&rToday? '<div class="cue" style="padding:8px 0 0;color:'+(RL[0]==='GREEN'?'var(--green)':RL[0]==='YELLOW'?'var(--amber)':'var(--red)')+'">'+RL[0]+' \u00b7 '+RL[1]+'</div>'
                : '<div class="exnote" style="padding:6px 0 0">Answer all three \u2014 the card adjusts today\u2019s barbell loads automatically.</div>')
     +'</div>';
@@ -19640,7 +19997,7 @@ function renderInner(){
         }); }catch(e){}
         var opts=ex.subs.filter(function(s){ return !inUse[s] || st.sub===s; });
         if(!opts.length) return '';
-        return '<select class="dtin swapsel" data-swap="'+i+'">'
+        return '<select class="dtin swapsel" data-swap="'+i+'" aria-label="Swap '+esc(ex.name)+' for another movement">'
           +'<option value=""'+(subbed?'':' selected')+'>'+esc(ex.name)+' (planned)</option>'
           +opts.map(s=>'<option value="'+s+'"'+(st.sub===s?' selected':'')+'>'+s+'</option>').join('')
           +'</select>';
@@ -19688,7 +20045,8 @@ function renderInner(){
       // look). Swap stays - trade any movement, no reason asked.
       +'<div class="ed-row" style="padding:0 12px 8px;margin-top:0"><div class="ed-label" style="width:auto">Load?</div>'
       +'<div class="feelchips" style="flex:0 1 260px">'
-      +FEELS.map((f,fv)=>'<button class="fc'+(st.feel===fv?' on':'')+'" data-feelbtn="'+i+'" data-fv="'+fv+'">'+f+'</button>').join('')
+      // DESIGN AUDIT 2026-09-13 (D05). Same defect, same repair.
+      +FEELS.map((f,fv)=>'<button class="fc'+(st.feel===fv?' on':'')+'" data-feelbtn="'+i+'" data-fv="'+fv+'" aria-pressed="'+(st.feel===fv?'true':'false')+'">'+f+'</button>').join('')
       +'</div></div>'
       +(!subbed && ex.cue? '<div class="cue">Cue \u2014 '+ex.cue+'</div>':'')
       +((ex.note && (!goalDef() || !ex.wk))? '<div class="exnote">'+ex.note+'</div>':'')
@@ -19748,8 +20106,8 @@ function renderInner(){
   });
 
   h+='<div class="block"><h3>Session date & time</h3><div class="cardio-row">'
-    +'<input type="date" id="sdate" class="dtin" value="'+S.when.date+'">'
-    +'<input type="time" id="stime" class="dtin" value="'+S.when.time+'">'
+    +'<input type="date" id="sdate" class="dtin" aria-label="Session date" value="'+S.when.date+'">'
+    +'<input type="time" id="stime" class="dtin" aria-label="Session time" value="'+S.when.time+'">'
     +'<div class="toggle" id="nowBtn">Now</div>'
     +'<span class="lockfree" style="display:contents">'
     +'<div class="toggle'+(S.sound?' on':'')+'" id="soundT">\ud83d\udd0a '+(S.sound?'On':'Off')+'</div>'
@@ -19765,15 +20123,26 @@ function renderInner(){
   else if((typeof isPreviewing==='function') && isPreviewing()) {}
   else h+='<div class="block lockfree"><h3>Bodyweight</h3>'
     +(function(){ const st=wlStats();
-      let top='<div class="cardio-row"><input type="number" step="0.1" inputmode="decimal" id="bwIn" class="dtin" style="max-width:110px" placeholder="'+uLbl()+'" value="'+(st&&st.last?WV1(st.last.w):'')+'">'
-        +'<input type="date" id="bwDate" class="dtin" value="'+localDate()+'">'
+      let top='<div class="cardio-row"><input type="number" step="0.1" inputmode="decimal" id="bwIn" class="dtin" style="max-width:110px" aria-label="Bodyweight in '+uLbl()+'" placeholder="'+uLbl()+'" value="'+(st&&st.last?WV1(st.last.w):'')+'">'
+        +'<input type="date" id="bwDate" class="dtin" aria-label="Date this bodyweight was measured" value="'+localDate()+'">'
         +'<div class="toggle" id="bwLog">Log</div></div>';
       let mid='';
-      if(st){ mid+='<div style="font-size:12px;color:var(--dim);margin-top:8px">Last: <span class="mono" style="color:#F5F3E7">'+st.last.w.toFixed(1)+'</span> ('+st.last.d+')';
-        if(st.a7!=null) mid+=' &nbsp;7d avg: <span class="mono" style="color:#F5F3E7">'+st.a7.toFixed(1)+'</span>';
-        if(st.delta!=null){ const dd=st.delta; const col=Math.abs(dd)<0.05?'#A9AD8E':(dd<0?'var(--green)':'#D4AF37'); mid+=' &nbsp;vs prior 7d: <span class="mono" style="color:'+col+'">'+(dd>0?'+':'')+dd.toFixed(1)+'</span>'; }
+      // DESIGN AUDIT 2026-09-13 (D01). Every one of these was raw stored POUNDS printed three
+      // inches under an input showing the same weight in kilograms, and not one of them named
+      // its unit. WV1 is the factual converter - a pure multiply, no plate grid, no equipment
+      // setting - which is what a RECORDED weight needs and what separates this from DS10.
+      if(st){ const U=uLbl();
+        mid+='<div style="font-size:12px;color:var(--dim);margin-top:8px">Last: <span class="mono" style="color:var(--chalk)">'+WV1(st.last.w).toFixed(1)+' '+U+'</span> ('+st.last.d+')';
+        if(st.a7!=null) mid+=' &nbsp;7d avg: <span class="mono" style="color:var(--chalk)">'+WV1(st.a7).toFixed(1)+' '+U+'</span>';
+        // The delta converts too: WV1 has no offset, so it is correct on a difference and keeps
+        // the sign. The "no real change" threshold is judged on the DISPLAYED number, not on
+        // pounds - otherwise a delta that reads 0.0 kg can still be coloured as a gain.
+        if(st.delta!=null){ const dd=WV1(st.delta); const col=Math.abs(dd)<0.05?'var(--faint)':(dd<0?'var(--green)':'var(--amber)'); mid+=' &nbsp;vs prior 7d: <span class="mono" style="color:'+col+'">'+(dd>0?'+':'')+dd.toFixed(1)+' '+U+'</span>'; }
         mid+='</div>'+wlSpark();
-        const hist=wlSorted().slice(-10).reverse().map(x=>'<div class="cardio-row" style="margin-top:4px;font-size:12px"><span class="mono" style="min-width:92px">'+x.d+'</span><span class="mono">'+x.w.toFixed(1)+'</span><div class="toggle" data-bwdel="'+x.d+'" style="padding:2px 8px;font-size:11px">'+(armDel===('bw:'+x.d)?'sure?':'x')+'</div></div>').join('');
+        // DESIGN AUDIT 2026-09-13 (D01). Same defect, longest life: this is the list an athlete
+        // scrolls back through months later. The delete control gets a real name while we are
+        // here - it was a bare "x" with no indication of WHAT it deletes (D05).
+        const hist=wlSorted().slice(-10).reverse().map(x=>'<div class="cardio-row" style="margin-top:4px;font-size:12px"><span class="mono" style="min-width:92px">'+x.d+'</span><span class="mono">'+WV1(x.w).toFixed(1)+' '+uLbl()+'</span><button type="button" class="toggle" data-bwdel="'+x.d+'" aria-label="'+(armDel===('bw:'+x.d)?'Confirm delete':'Delete')+' the bodyweight logged on '+x.d+'" style="padding:2px 8px;font-size:11px">'+(armDel===('bw:'+x.d)?'sure?':'x')+'</button></div>').join('');
         mid+='<details style="margin-top:6px"><summary style="font-size:12px;color:var(--dim)">History ('+st.n+')</summary>'+hist+'</details>';
       } else { mid='<div style="font-size:12px;color:var(--dim);margin-top:8px">Log daily on wake. Trend reads the 7-day average, not single days.</div>'; }
       return top+mid; })()
@@ -19781,7 +20150,7 @@ function renderInner(){
   const cElapsed = S.cardio.tacc + (S.cardio.tstart? Date.now()-S.cardio.tstart : 0);
   const CM=cmode();
   h+='<div class="block"><h3>Add exercise - Day '+S.day+'</h3>'
-   +'<div class="cardio-row"><select class="dtin swapsel" id="cxName" style="flex:1;margin-top:0">'
+   +'<div class="cardio-row"><select class="dtin swapsel" id="cxName" aria-label="Exercise to add" style="flex:1;margin-top:0">'
    +'<option value="">Pick an exercise</option>'
    +'<optgroup label="Push"><option>Bench Press</option><option>Incline DB Press</option><option>Flat DB Press</option><option>Machine Chest Press</option><option>Pec Deck Fly</option><option>Cable Fly</option><option>Overhead Press</option><option>DB Shoulder Press</option><option>Machine Shoulder Press</option><option>Lateral Raises</option><option>Front Raises</option></optgroup>'
    +'<optgroup label="Pull"><option>Cable Rows</option><option>Lat Pulldown</option><option>Straight-Arm Pulldown</option><option>DB Row</option><option>Chest-Supported Row</option><option>Machine Row</option><option>Assisted Pull-up</option><option>Face Pulls</option><option>Rear Delt Fly</option><option>Shrugs</option></optgroup>'
@@ -19790,14 +20159,14 @@ function renderInner(){
    +'<optgroup label="Core / Carry"><option>Hanging Leg Raises</option><option>Cable Crunch</option><option>Plank</option><option>Ab Wheel</option><option>Farmer Carry</option><option>Back Extension</option></optgroup>'
    +'<option value="__other">Other (type name)</option>'
    +'</select></div>'
-   +'<input class="dtin" id="cxNameTxt" placeholder="Type exercise name" style="display:none;margin-top:6px">'
+   +'<input class="dtin" id="cxNameTxt" aria-label="Exercise name" placeholder="Type exercise name" style="display:none;margin-top:6px">'
    +'<div class="cardio-row" style="margin-top:6px">'
-   +'<select class="dtin swapsel" id="cxLoad" style="max-width:90px;margin-top:0">'+'<option value="BW">BW</option>'+Array.from({length:50},(x,k)=>(k+1)*5).map(v=>'<option'+(v===25?' selected':'')+'>'+v+'</option>').join('')+'</select>'
-   +'<select class="dtin swapsel" id="cxHand" style="max-width:110px;margin-top:0"><option value="">Total</option><option value="ph">Per hand</option></select>'
+   +'<select class="dtin swapsel" id="cxLoad" aria-label="Weight for the added exercise" style="max-width:90px;margin-top:0">'+'<option value="BW">BW</option>'+Array.from({length:50},(x,k)=>(k+1)*5).map(v=>'<option'+(v===25?' selected':'')+'>'+v+'</option>').join('')+'</select>'
+   +'<select class="dtin swapsel" id="cxHand" aria-label="Total weight or per hand" style="max-width:110px;margin-top:0"><option value="">Total</option><option value="ph">Per hand</option></select>'
    +'</div>'
    +'<div class="cardio-row" style="margin-top:6px">'
-   +'<select class="dtin swapsel" id="cxSets" style="max-width:80px;margin-top:0">'+[1,2,3,4,5,6].map(v=>'<option'+(v===3?' selected':'')+'>'+v+'</option>').join('')+'</select>'
-   +'<select class="dtin swapsel" id="cxReps" style="flex:1;margin-top:0">'+['5','6','8','10','12','15','20','6-8','8-10','8-12','10-12','12-15','15-20','AMRAP'].map(v=>'<option'+(v==='10'?' selected':'')+'>'+v+'</option>').join('')+'</select>'
+   +'<select class="dtin swapsel" id="cxSets" aria-label="Number of sets" style="max-width:80px;margin-top:0">'+[1,2,3,4,5,6].map(v=>'<option'+(v===3?' selected':'')+'>'+v+'</option>').join('')+'</select>'
+   +'<select class="dtin swapsel" id="cxReps" aria-label="Reps per set" style="flex:1;margin-top:0">'+['5','6','8','10','12','15','20','6-8','8-10','8-12','10-12','12-15','15-20','AMRAP'].map(v=>'<option'+(v==='10'?' selected':'')+'>'+v+'</option>').join('')+'</select>'
    +'<div class="toggle" id="cxAdd">Add</div></div>'
    +'<div style="font-size:11px;color:var(--dim);margin-top:6px">Sets x reps here are the block1 default - an active goal preset overrides them like any accessory. Customs ride the report. Removing one deletes its logged sets for this week.</div>'
    +'</div>';
@@ -19805,7 +20174,7 @@ function renderInner(){
   else if(!((typeof isPreviewing==='function') && isPreviewing())) h+=cardioBlockHTML();
   if(typeof isVisiting==='function' && isVisiting()) h+=visitedNotesHTML();
   else if(!((typeof isPreviewing==='function') && isPreviewing()))
-    h+='<div class="block"><h3>Session notes</h3><textarea id="notes" placeholder="Anything off? Pain, sleep, gear, substitutions.">'+esc(S.notes)+'</textarea></div>';
+    h+='<div class="block"><h3>Session notes</h3><textarea id="notes" aria-label="Session notes" placeholder="Anything off? Pain, sleep, gear, substitutions.">'+esc(S.notes)+'</textarea></div>';
   h+='<div class="block"><h3 style="margin:0 0 8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:700">Session logs <span class="stchip '+(storageOK===true?'ok':storageOK===false?'bad':'')+'">'
     +(storageOK===true?'Storage \u2713':storageOK===false?'Storage unavailable':'checking\u2026')+'</span></h3>'
     +streakHTML()
@@ -19817,9 +20186,21 @@ function renderInner(){
   if(logKeys.length===0) h+='<div class="hint" style="font-size:11px;color:var(--faint);margin-top:6px">No saved sessions yet. Copying a report also saves it automatically.</div>';
   else h+=logListHTML();
   h+='</div>';
-  h+='<div class="rules">One working weight per lift. Warm-ups never near failure. Every set RIR 2, last set RIR 1. '
-    +'Hit all reps at target → the card adds +10 barbell / +5 else next time. Bar loads = 45 + tens (no 2.5s in this gym). '
-    +'Weight feels wrong? Tap it to adjust, then tag it with the Load? chips — your report feeds the next block.</div>';
+  // DESIGN AUDIT 2026-09-13 (D08). This stated one gym's equipment as universal law: "+10 barbell
+  // / +5 else" and "Bar loads = 45 + tens (no 2.5s in this gym)", printed unchanged to a kg
+  // athlete, to an athlete who had configured microplates, and under every goal. Those are not
+  // rules of training - they are this card's settings, and they were wrong for anyone who had
+  // changed them. The numbers now come from where they actually live.
+  h+=(function(){
+    var U=uLbl();
+    var barStep=wStepDisp(true), elseStep=wStepDisp(false);
+    var barW=isKg()? 20 : 45;
+    return '<div class="rules">One working weight per lift. Warm-ups never near failure. '
+      +'Every set RIR 2, last set RIR 1. '
+      +'Hit all reps at target → the card adds +'+barStep+' '+U+' on the bar, +'+elseStep+' '+U+' elsewhere. '
+      +'Bar loads are built from the '+barW+' '+U+' bar and your smallest jump ('+barStep+' '+U+') \u2014 change that in Settings. '
+      +'Weight feels wrong? Tap it to adjust, then tag it with the Load? chips \u2014 your report feeds the next block.</div>';
+  })();
   h+=dayUtilHTML();
   app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){}
 }
@@ -19853,7 +20234,7 @@ function logRow(k, mm){
   return '<div class="logrow lockfree" data-log="'+k+'"><span class="log-date mono">'+when+what+'</span>'
     +'<span class="log-meta">'+(c? (c.time||'') : 'tap to view')+'</span>'
     +'<button class="xbtn'+(armDel==='log:'+k?' armed':'')+'" data-logdel="'+k+'" style="'
-    +(armDel==='log:'+k?'width:auto;padding:0 10px;background:var(--red);color:#fff;border-color:var(--red);':'')+'">'
+    +(armDel==='log:'+k?'width:auto;padding:0 10px;background:var(--red);color:var(--red-ink);border-color:var(--red);':'')+'">'
     +(armDel==='log:'+k?'Sure?':'\u00d7')+'</button></div>'
     +((logOpen===k && c)? '<div class="logview">'+(c.report? c.report.replace(/</g,'&lt;') : 'could not load')+'</div>' : '');
 }
@@ -19950,7 +20331,8 @@ function setEditorHTML(i, ex, st){
           +'<div class="val mono" data-edtype="1" role="button" tabindex="0" style="cursor:pointer;text-decoration:underline dotted">'+reps+'</div>'
           +'<button data-e="reps" data-d="'+stp+'">+'+(stp>1?stp:'')+'</button></div></div>'; })())
     +((hEx||isStartProgram())? '' : '<div class="ed-row"><div class="ed-label">RIR</div><div class="rirchips">'
-    +[0,1,2,3,4].map(r=>'<button class="rc'+(s.rir===r?' on':'')+'" data-rir="'+r+'">'+(r===4?'4+':r)+'</button>').join('')
+    // DESIGN AUDIT 2026-09-13 (D05). Same defect, same repair.
+    +[0,1,2,3,4].map(r=>'<button class="rc'+(s.rir===r?' on':'')+'" data-rir="'+r+'" aria-pressed="'+(s.rir===r?'true':'false')+'" aria-label="'+(r===4?'4 or more reps in reserve':r+' rep'+(r===1?'':'s')+' in reserve')+'">'+(r===4?'4+':r)+'</button>').join('')
     +'</div></div>')
     +(function(){ const numeric = st.sub? true : ex.loadNum!=null;
        const wb = st.sub? (st.w!=null? st.w:null) : (numeric? curLoad(ex,st): null);
@@ -19967,7 +20349,7 @@ function setEditorHTML(i, ex, st){
        }
        return '<div class="ed-row"><div class="ed-label">Weight (this set)</div><select class="dtin" data-swt="1" style="margin-top:0;flex:1">'+o+'</select></div>';
      })()
-    +'<div class="ed-row"><div class="ed-label">'+(hEx?'Effort':'Bar speed')+'</div><div class="feelchips" style="flex:0 1 200px"><button class="fc'+(s.g?' on':'')+'" data-grind="1">'+(hEx?'Grindy \u2014 shook the whole way':'Grindy \u2014 moved like a max')+'</button></div></div>'
+    +'<div class="ed-row"><div class="ed-label">'+(hEx?'Effort':'Bar speed')+'</div><div class="feelchips" style="flex:0 1 200px"><button class="fc'+(s.g?' on':'')+'" data-grind="1" aria-pressed="'+(s.g?'true':'false')+'">'+(hEx?'Grindy \u2014 shook the whole way':'Grindy \u2014 moved like a max')+'</button></div></div>'
     +'<div class="ed-row" style="gap:8px;margin-top:2px"><button class="ed-done" data-sdone="1" style="flex:2">Done</button><button class="ed-done" data-sreset="1" style="flex:1;background:transparent;border:1px solid var(--line);color:var(--faint)">'+(hEx?'Re-clock \u2014 hold again':'Reset set')+'</button></div></div>';
 }
 
@@ -20244,7 +20626,14 @@ function wire(){
   document.querySelectorAll('[data-calload]').forEach(el=>el.onclick=()=>{ openLog(el.dataset.calload); });
   const pf=document.getElementById('pHFt'); if(pf) pf.onchange=()=>{S.profile.hFt=Math.max(4,Math.min(7,parseInt(pf.value)||5));save();render();};
   const pi=document.getElementById('pHIn'); if(pi) pi.onchange=()=>{S.profile.hIn=Math.max(0,Math.min(11,parseInt(pi.value)||0));save();render();};
-  const pw=document.getElementById('pWt'); if(pw) pw.onchange=()=>{S.profile.wt=Math.max(80,Math.min(400,inLb(pw.value)||200));save();render();};
+  // DESIGN AUDIT 2026-09-13 (found alongside D01, not in the audit). This was
+  // `inLb(pw.value)||200`: an empty or unreadable field parses to NaN, `NaN||200` is 200, and
+  // clearing the box silently replaced the athlete's stored bodyweight with 200 lb. A field that
+  // cannot be read now changes NOTHING and puts the stored value back on screen.
+  const pw=document.getElementById('pWt'); if(pw) pw.onchange=()=>{
+    const v=inLb(pw.value);
+    if(!isFinite(v)||v<=0){ pw.value=WV1(S.profile.wt); alertToast('Enter a weight in '+uLbl()); return; }
+    S.profile.wt=Math.max(80,Math.min(400,v));save();render();};
   const pg=document.getElementById('pGoal'); if(pg) pg.onchange=()=>{S.profile.goal=pg.value;save();render();};
   document.querySelectorAll('[data-mxapply]').forEach(b=>b.onclick=()=>{
     if(!mxEdit){ alertToast('Maxes are locked \u2014 tap Edit above to change them'); return; }
@@ -21110,7 +21499,7 @@ function adhocHTML(){
         : (L3&&L3.eligible&&C.timing==='end'? ' (skill only \u2014 run tired, so it stays away from your maxes)'
           : (L3&&L3.eligible&&C.total>10? ' (over 10 reps \u2014 outside the validated table, so no max estimate from it)'
             : ', plus the starting anchor for '+esc(C.ex))))+'.</div>'
-     +'<div class="daybtn" data-ahsave="1" style="margin-top:12px;display:inline-block;padding:10px 16px;background:var(--green);color:#fff;border-color:var(--green)">Save it</div>'
+     +'<div class="daybtn" data-ahsave="1" style="margin-top:12px;display:inline-block;padding:10px 16px;background:var(--green);color:var(--green-ink);border-color:var(--green)">Save it</div>'
      +'<div class="daybtn" data-ahcancel="1" style="margin-top:12px;margin-left:8px;display:inline-block;padding:10px 16px">Discard</div>';
   }
   return h+'</div>';
@@ -21169,7 +21558,9 @@ function rateHTML(){
     }
     if(R.rate!=null){
       var col=R.rate>=1?'var(--green)':(R.rate<=-1?'var(--red)':'var(--dim)');
-      h+='<br>Rate <span class="mono" style="font-weight:800;color:'+col+'">'+(R.rate>0?'+':'')+(isKg()? Math.round(R.rate*0.45359237*10)/10 : R.rate)+' '+uLbl()+'/week</span>'
+      // X09. Correct already, but written out longhand - and this expression IS WV1(). Calling
+      // the shared formatter means the Rate tab and the adaptation log cannot disagree later.
+      h+='<br>Rate <span class="mono" style="font-weight:800;color:'+col+'">'+(R.rate>0?'+':'')+WV1(R.rate)+' '+uLbl()+'/week</span>'
         +' <span style="color:'+col+'">\u00b7 '+rateWord(R.rate)+'</span>'
         +' <span style="color:var(--dim)">('+R.n+' sessions over '+R.span+' days)</span>';
     } else {
@@ -21505,8 +21896,20 @@ function calHTML(){
     // calendar projection of where week 6 "should" fall
     const deload=!!(e && e.tag && new RegExp('^W'+PLAN.weeks+'B').test(e.tag));
     let bg='transparent', fg='var(--faint)', bd='1px solid var(--line)';
-    if(e && e.days.length){ bg='var(--green)'; fg='#0d1108'; bd='1px solid var(--green)'; }
-    else if(deload){ bg='transparent'; fg='var(--amber)'; bd='1px dashed var(--amber)'; }
+    // DESIGN AUDIT 2026-09-13 (D03, extended). This dark ink was picked against the LIGHT
+    // greens of the night themes and never rechecked against the dark greens of the day ones,
+    // where it fails in all ten - 2.970:1 on Iron day. It is the number on a trained day, the
+    // single most-read mark on the calendar.
+    //
+    // DESIGN AUDIT 2026-09-13 (D07). These were a chain: logged first, deload in an `else if`.
+    // A banked final-week day HAS a log by definition, so it always took the first branch and the
+    // dashed deload border the legend promises could never render. Training status and program
+    // phase are different facts about the same day and both get to be true; the deload also gets
+    // a WORD, because a border style tells a screen reader nothing.
+    var __logged=!!(e && e.days.length);
+    if(__logged){ bg='var(--green)'; fg='var(--green-ink)'; bd='1px solid var(--green)'; }
+    if(deload){ bd=(__logged? '2px dashed var(--green-ink)' : '1px dashed var(--amber)');
+                if(!__logged) fg='var(--amber)'; }
     // pain outlines left with the pain feature (c131); scheduled/missed arrived with the
     // block-calendar work (c139) - marks only exist where training days are actually known
     var schedHere=false; try{ schedHere=calTrainDays().indexOf(new Date(iso+'T12:00:00').getDay())>-1
@@ -21516,10 +21919,19 @@ function calHTML(){
       else if(iso<today) fg='var(--red)';
     }
     var accEnd=!!(S.access && S.access.until===iso);   // ACCESS (v216): the day access runs out
-    if(accEnd && !(e&&e.days.length)){ bd='2px solid var(--red)'; }
-    h+='<div data-calday="'+iso+'" style="min-height:44px;border:'+bd+';border-radius:8px;background:'+bg
+    if(accEnd && !__logged){ bd='2px solid var(--red)'; }
+    // The cell's whole meaning was carried by colour and border style. It now says it in words
+    // too - one name covering every state the cell is in, so a day that is logged AND a deload AND
+    // today reads as all three instead of as a bare number.
+    var __say=[String(d)];
+    if(__logged) __say.push('trained \u00b7 '+e.days.join(', '));
+    if(deload) __say.push('deload week');
+    if(isToday) __say.push('today');
+    if(accEnd) __say.push('access runs out');
+    h+='<div data-calday="'+iso+'" role="button" tabindex="0" aria-label="'+esc(__say.join(' \u00b7 '))+'"'
+      +' style="min-height:44px;border:'+bd+';border-radius:8px;background:'+bg
       +';padding:3px 2px;text-align:center;cursor:pointer;'+(isToday?'box-shadow:0 0 0 2px var(--amber);':'')+'">'
-      +'<div class="mono" style="font-size:12px;font-weight:700;color:'+fg+'">'+d
+      +'<div class="mono" style="font-size:12px;font-weight:700;color:'+fg+'" aria-hidden="true">'+d
       +'</div>'
       +(accEnd? '<div style="font-size:8px;font-weight:800;color:var(--red);letter-spacing:.04em">ACCESS</div>' : '')
       +(e&&e.days.length? '<div style="font-size:10px;font-weight:800;color:'+fg+'">'+e.days.join('')+'</div>':'')
@@ -22314,6 +22726,37 @@ async function restoreBackup(file){
       alertToast(__failed? 'Restore INCOMPLETE \u2014 '+__failed+' item(s) failed to write' : 'Backup restored \u2713'); }
     else alertToast('Restore failed \u2014 bad file'); }
 }
+// DESIGN AUDIT 2026-09-13 (finding D04). ONE bridge for every role="button" in the card.
+//
+// An earlier audit raised this about Settings and it was fixed there, on that one element, with a
+// note that is still accurate: role and tabindex describe a button, they do not build one. The
+// card has forty-seven elements carrying role="button" and one of them answered the keyboard. A
+// delegated listener closes the class instead of the instance, and covers anything added later
+// without anyone having to remember this.
+//
+// Enter fires on keydown and Space on keyup - a native button behaves that way, and Space's
+// keydown default has to be suppressed or the page scrolls out from under the press.
+(function(){
+  function act(ev){
+    var t=ev.target; if(!t || !t.closest) return null;
+    var el=t.closest('[role="button"]'); if(!el) return null;
+    // Natives already do this; doing it again would fire twice.
+    if(/^(BUTTON|A|SUMMARY|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return null;
+    if(el.__setWired) return null;                       // Settings has its own handler already
+    if(el.getAttribute('aria-disabled')==='true') return null;
+    if(el.tabIndex<0) return null;                       // not reachable on purpose
+    return el;
+  }
+  document.addEventListener('keydown',function(ev){
+    var el=act(ev); if(!el) return;
+    if(ev.key==='Enter'){ ev.preventDefault(); el.click(); }
+    else if(ev.key===' '||ev.key==='Spacebar'){ ev.preventDefault(); }   // hold the scroll
+  });
+  document.addEventListener('keyup',function(ev){
+    var el=act(ev); if(!el) return;
+    if(ev.key===' '||ev.key==='Spacebar'){ ev.preventDefault(); el.click(); }
+  });
+})();
 document.addEventListener('click',function(e){ const t=e.target; if(!t) return;
   if(t.id==='bwLog'){ const wEl=document.getElementById('bwIn'), dEl=document.getElementById('bwDate');
     const w=inLb(wEl&&wEl.value); const d=(dEl&&dEl.value)||localDate();
@@ -22775,8 +23218,11 @@ function updateE1RM(){
     if(dayAgg[k]) return;                          // has evidence this pass: the write loop files it
     var arr=S.e1rmH[k];
     if(!Array.isArray(arr)) return;
+    // X06. Same rule, and this branch DELETES rather than replaces - so setting a set back to
+    // pending after testing a max removed the measured single entirely. A retraction withdraws
+    // what THIS PASS concluded; it has no authority over a number the athlete actually lifted.
     var ix=-1;
-    for(var z=0;z<arr.length;z++){ if(arr[z] && arr[z].d===__hd){ ix=z; break; } }
+    for(var z=0;z<arr.length;z++){ if(arr[z] && arr[z].d===__hd && !arr[z].t){ ix=z; break; } }
     if(ix>-1){ arr.splice(ix,1); touched[k]=1; }   // retracted, and the rolling best is recomputed
   });
   // Write each key's day exactly once, replacing whatever was there for that date.
@@ -22784,7 +23230,11 @@ function updateE1RM(){
     var pt=dayAgg[k];
     if(!S.e1rmH[k]) S.e1rmH[k]=[];
     var hArr=S.e1rmH[k];
-    var hix=hArr.findIndex(function(x){ return x.d===pt.d; });
+    // FIFTH AUDIT 2026-09-14 (finding X06). This matched on DATE alone, so it replaced whatever
+    // was filed for today - including a measured single tested this morning, which became an
+    // estimate from this evening's working sets. That is their reproduction: 250 measured, 185
+    // stored. This pass owns the ESTIMATE for a date; it does not own the date.
+    var hix=hArr.findIndex(function(x){ return x.d===pt.d && !x.t; });
     var rec={d:pt.d, v:pt.v, r:pt.r, c:pt.c, n:pt.n};
     if(pt.sub){ rec.sub=1; rec.of=pt.of; }        // provenance: this was a substitution
     if(hix>-1) hArr[hix]=rec; else { hArr.push(rec); hArr.sort(function(a,b){ return a.d<b.d?-1:1; }); }
@@ -22825,7 +23275,19 @@ function suggestMax(k){
   // recommendation about today.
   const e=S.e1rm[k]; if(!e) return null;
   try{
-    var __ref=new Date((S.when.date||localDate())+'T12:00:00').getTime();
+    // DS12 REOPENED 2026-09-14. This measured against S.when.date alone, and an estimate NEWER
+    // than the session's date counted as future-dated and suppressed the suggestion entirely.
+    // Both ways that happens are ordinary use, not corruption:
+    //   - a BACK-DATED session (the 2026-09-12 feature) sets S.when.date into the past, so
+    //     evidence banked since is "ahead" of it;
+    //   - shiftDate() reports yesterday until 3am, so anything dated by localDate() in that
+    //     window is a day ahead of the session date.
+    // Staleness here is a question about TODAY - the suggestion is about the next bar load - so
+    // the clock is the later of the session date and the real date. A genuinely future-dated
+    // estimate is still refused; that is what this guard was actually for.
+    var __sess=new Date((S.when.date||localDate())+'T12:00:00').getTime();
+    var __today=new Date(localDate()+'T12:00:00').getTime();
+    var __ref=Math.max(isFinite(__sess)? __sess : __today, __today);
     var __t=e.date? new Date(String(e.date)+'T12:00:00').getTime() : NaN;
     if(!isFinite(__t)) return null;                        // undated: not evidence about today
     var __age=(__ref-__t)/86400000;
@@ -22930,7 +23392,9 @@ function printPlanHTML(){
   var h='<div class="sheet">';
   h+='<div class="sh-head"><div><div class="sh-mark">'+brandMark(120,'ink')+'</div><div class="sh-title">Training Card \u00b7 Full Plan</div>'
     +'<div class="sh-who">'+esc(PLAN.block)+'</div>'
-    +'<div class="sh-meta">'+(S.profile? (S.profile.hFt+"'"+S.profile.hIn+'" \u00b7 '+S.profile.wt+' lb \u00b7 ') : '')
+    // DESIGN AUDIT 2026-09-13 (D01). Hardcoded lb on a sheet the athlete prints and carries.
+    // Nothing parses this, so unlike report() it simply follows the athlete's unit.
+    +'<div class="sh-meta">'+(S.profile? (S.profile.hFt+"'"+S.profile.hIn+'" \u00b7 '+WV1(S.profile.wt)+' '+uLbl()+' \u00b7 ') : '')
     +'Starts '+PLAN.start+' \u00b7 printed '+localDate()+'</div></div>'
     +'<div class="sh-r"><div class="sh-wk">'+PLAN.weeks+'<span> weeks</span></div>'
     +'<div class="sh-dates">final week is the deload</div>'
@@ -22993,7 +23457,8 @@ function buildPlanModel(){
       rir:String(ex.rir||'-'), rest:String(ex.rest||'-'), loads:planLoadsRow(ex), cue:String(ex.cue||''), warm:String(ex.warmup||'') }));
     days.push({code:d.code,title:d.title,heads:heads,lw:lw,rows:rows});
   });
-  return { title:'Training Plan', sub:(S.profile? (S.profile.hFt+String.fromCharCode(39)+S.profile.hIn+String.fromCharCode(34)+' - '+S.profile.wt+' lb - Goal: '+(goalDef()? goalDef().label : 'Block 1')) : '')+' - generated '+localDate(), boxes:['Cycle: 6-week block - final week is the deload (2 sets per exercise, light loads).',
+  // DESIGN AUDIT 2026-09-13 (D01). Same hardcoded lb, same reasoning as the printed sheet.
+  return { title:'Training Plan', sub:(S.profile? (S.profile.hFt+String.fromCharCode(39)+S.profile.hIn+String.fromCharCode(34)+' - '+WV1(S.profile.wt)+' '+uLbl()+' - Goal: '+(goalDef()? goalDef().label : 'Block 1')) : '')+' - generated '+localDate(), boxes:['Cycle: 6-week block - final week is the deload (2 sets per exercise, light loads).',
     COPY.rampPlain,
     'Cooldown after: 3-5 min easy walk, stretch the muscles trained (2 x 30s each), 90 seconds of slow long-exhale breathing.'],
     days:days, footer:'Deload week: 2 sets per exercise at the deload load. Hit every rep at target RIR, then add load next cycle. Generated by your training card.' };
@@ -23201,7 +23666,23 @@ function condSessionHTML(){
 }
 function report(){
   const d=dayObj();
-  const lines=['SESSION REPORT · Block '+cyc()+' · Day '+S.day+' W'+S.week+' · '+S.when.date+(S.when.time?' '+fmtTime(S.when.time):'')];
+  // DESIGN AUDIT 2026-09-13 (D01, report path). Every weight below is stored POUNDS - bodyweight,
+  // profile and every set load alike - and only two of them said so, which left a kg athlete
+  // reading a page of pounds with nothing on it to say which unit it was.
+  //
+  // The numbers are DECLARED, not converted, and that is deliberate. reportAsOf() REGENERATES a
+  // stored report from its saved context, so a unit-aware report() would make a historical record
+  // print different numbers because of a setting flipped afterwards - D01's own defect, pointed at
+  // the archive. Whether a kg athlete should get a kg report is a product decision with a
+  // migration question attached; it is on the open list, not decided here.
+  //
+  // The declaration goes on the HEADER LINE rather than on a line of its own, and that is not
+  // cosmetic. shapeFromReport() reconstructs a session by walking the report line by line, skips
+  // only what DOC_SKIP matches, and returns null - discarding the ENTIRE log - the moment one line
+  // does not parse as a movement. A new unlabelled line would have made every report generated
+  // after this build unreconstructable. The header already matches DOC_SKIP, and no parser reads
+  // fields out of it.
+  const lines=['SESSION REPORT · Block '+cyc()+' · Day '+S.day+' W'+S.week+' · '+S.when.date+(S.when.time?' '+fmtTime(S.when.time):'')+' · all weights in lb'];
   const RL2=readyLabel();
   if(RL2 && S.ready && S.ready.date===S.when.date) lines.push('Readiness: '+readyScore()+'/6 ('+RL2[0]+')'+(readyMult()!==1?' \u2014 barbell loads auto-adjusted':''));
   if(S.ready && S.ready.date!==S.when.date && S.ready.date===shiftDate()) lines.push('Readiness (entered today; session date mismatch): '+readyScore()+'/6');
@@ -24896,11 +25377,17 @@ function ONB_build(){
 }
 
 </script>
-<!-- Cloudflare Web Analytics. Counts anonymous page opens so we know the card is being used.
-     Cookie-free, no fingerprinting, no cross-site tracking, and it never sees a single lift -
-     the token below is the whole payload and it is public by design. Disclosed in Terms s4 and
-     listed as a service in s6. Offline it simply fails to load, which is why the number is a
-     floor and not the truth. -->
-<script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2eeb762c8168428baea7a63f3f0f60b3"}'></script>
+<!-- FIFTH AUDIT 2026-09-14 (finding X16), Jerry's decision the same day. A Cloudflare Web
+     Analytics beacon loaded here from static.cloudflareinsights.com on every open. It set no
+     cookie, but it was a request to a third party on every launch, carrying the athlete's IP
+     address and the page out of the app - while the Terms said nothing is transmitted anywhere and
+     the FAQ said the card runs on airplane mode.
+
+     It is REMOVED rather than disclosed. What it was for - knowing whether anyone is actually
+     training with this - is already answered by the counters the access service keeps, which are
+     named field by field in Terms section 5. Nothing was worth a claim the card could not make.
+
+     DO NOT RESTORE THIS without changing Terms sections 4 and 5 and the offline FAQ in the same
+     commit. The wording below is only true while this is absent. -->
 </body>
 </html>

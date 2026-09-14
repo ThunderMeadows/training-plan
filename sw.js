@@ -12,9 +12,32 @@
 //   SHELL  card-shell-<build>   replaced on every deploy. Cheap to refetch.
 //   MEDIA  card-media-v1        SURVIVES deploys. Cleared only by an explicit request from the
 //                               card, or by the browser under storage pressure.
-const BUILD = 'v237e';
-const SHELL = 'card-shell-' + BUILD;
-const MEDIA = 'card-media-v1';
+const BUILD = 'v237g';
+// FIFTH AUDIT 2026-09-14 (finding X15). Cache storage is per ORIGIN, not per scope. With names
+// like 'card-shell-<build>' and ownership matching /^card-/, a second Deadstop under a different
+// path on the same host - a beta build, a staging copy, another athlete's fork on the same GitHub
+// Pages user site - deleted this one's shell on every activation, and both shared a single media
+// cache whose 120-entry trim they then fought over.
+//
+// The reasoning that fixed this once is already in this file: "A service worker owns its own caches
+// and nothing else." Ownership was narrowed to the card and not to the INSTALL. The scope tag is
+// what makes the name identify one install, so two can coexist without touching each other.
+const SCOPE_TAG = (function () {
+  try {
+    var p = new URL(self.registration.scope).pathname || '/';
+    var t = p.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return t || 'root';
+  } catch (e) { return 'root'; }
+})();
+const SHELL = 'card-shell-' + SCOPE_TAG + '-' + BUILD;
+const MEDIA = 'card-media-' + SCOPE_TAG + '-v1';
+// X14. The catalog lived in MEDIA, and trimMedia() evicts oldest-first. Cache.keys() is insertion
+// order and the catalog is fetched BEFORE any clip, so it was the oldest entry and the FIRST thing
+// dropped at the cap - leaving 120 videos and nothing that says they exist, which a cold offline
+// start cannot recover from. It is metadata about what EXISTS, not about what was downloaded, so it
+// gets its own cache: survives deploys, never trimmed, and kept when downloads are cleared.
+const CATALOG = 'card-catalog-' + SCOPE_TAG + '-v1';
+const CATALOG_URL = '/clips/index.json';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './apple-touch-icon.png',
   './icon-192.png', './icon-512.png', './icon-maskable-192.png', './icon-maskable-512.png'];
 
@@ -33,36 +56,77 @@ self.addEventListener('install', e => {
 // has always used; anything else on the origin is somebody else's and is left alone.
 //
 // F20: and within our own caches, the media cache is not a build artifact. It is kept.
-const CACHE_OWNED = /^card-/;
-const CACHE_KEEP = new Set([SHELL, MEDIA]);
+// X15. Ownership is now this INSTALL's caches, not every card cache on the origin.
+const CACHE_OWNED = new RegExp('^card-(?:shell|media|catalog)-' + SCOPE_TAG + '-');
+const CACHE_KEEP = new Set([SHELL, MEDIA, CATALOG]);
+// Caches written before scope tagging - 'card-v222-v236', 'card-shell-v237f', 'card-media-v1' and
+// anything else this app has used. They cannot be attributed to an install, so they are migrated
+// and then deleted ONLY under X13's rule - see rescueClipsFromOldCaches.
+//
+// Legacy is defined as SUBTRACTION, not as a list of old names. A first attempt matched
+// /^card-(?:shell-v|media-v)/ and missed 'card-v222-v236' entirely - the actual v236 name - so
+// nothing migrated and nothing was cleaned up. Widening it to /^card-/ would have been worse: that
+// matches ANOTHER install's scoped caches and would delete them, which is X15 reintroduced by the
+// patch that fixes X15. So: ours, or nobody's, and never somebody else's.
+const CACHE_SCOPED_ANY = /^card-(?:shell|media|catalog)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*-/;
+function isLegacyCache(name) {
+  return /^card-/.test(name) && !CACHE_SCOPED_ANY.test(name);
+}
 
 // Upgrading from v236 or earlier, the clips an athlete downloaded are sitting in that build's
 // shell cache, and this activation is about to delete it. Move them into the media cache FIRST.
 // Without this, splitting the caches would cost every existing athlete their downloads exactly
 // once - the very loss F20 is about - and they would have no way to tell it from a bug.
+// FIFTH AUDIT 2026-09-14 (finding X13). This swallowed every failure - the per-clip put, and the
+// whole function - and activation then deleted the old caches regardless. The old comment said "a
+// failed migration costs a re-download, never the shell", and that is precisely the assumption that
+// was wrong: when the cache being deleted holds the ONLY offline copy, a failed migration costs the
+// clip. Worse, a put fails on a device near its storage limit, which is the same device least able
+// to refetch over mobile data.
+//
+// It now RETURNS the set of caches it emptied completely. A cache is deletable only if every clip
+// in it reached the media cache, or it held none. Anything still holding media is left where it is
+// and tried again on the next activation - storage that will be reclaimed later, rather than
+// downloads that will not come back.
 async function rescueClipsFromOldCaches() {
+  const drained = new Set();
   try {
-    const names = (await caches.keys()).filter(k => CACHE_OWNED.test(k) && !CACHE_KEEP.has(k));
-    if (!names.length) return;
+    const names = (await caches.keys())
+      .filter(k => (CACHE_OWNED.test(k) || isLegacyCache(k)) && !CACHE_KEEP.has(k));
+    if (!names.length) return drained;
     const media = await caches.open(MEDIA);
+    const catalog = await caches.open(CATALOG);
     for (const name of names) {
-      const old = await caches.open(name);
-      for (const req of await old.keys()) {
-        if (req.url.indexOf('/clips/') < 0) continue;
-        if (await media.match(req)) continue;                 // already migrated
-        const res = await old.match(req);
-        if (storable(res)) { try { await media.put(req, res.clone()); } catch (x) {} }
-      }
+      let complete = true;
+      try {
+        const old = await caches.open(name);
+        for (const req of await old.keys()) {
+          if (req.url.indexOf('/clips/') < 0) continue;
+          const isCatalog = req.url.indexOf(CATALOG_URL) > -1;
+          const target = isCatalog ? catalog : media;
+          if (await target.match(req)) continue;              // already migrated
+          const res = await old.match(req);
+          if (!storable(res)) continue;                       // nothing recoverable here
+          try { await target.put(req, res.clone()); }
+          catch (x) { complete = false; }                     // THE CLIP IS STILL ONLY IN `old`
+        }
+      } catch (e) { complete = false; }                       // could not read it: assume it holds something
+      if (complete) drained.add(name);
     }
-  } catch (e) { /* a failed migration costs a re-download, never the shell */ }
+  } catch (e) { /* nothing drained; activation below deletes nothing */ }
+  return drained;
 }
 
 self.addEventListener('activate', e => {
+  // X13. Only caches the migration emptied are deleted. One that still holds a clip stays, and is
+  // retried next activation - storage reclaimed late beats downloads lost now.
+  // X15. And only this install's caches, plus legacy ones the migration could fully drain.
   e.waitUntil(rescueClipsFromOldCaches()
-    .then(() => caches.keys())
-    .then(keys => Promise.all(keys
-      .filter(k => !CACHE_KEEP.has(k) && CACHE_OWNED.test(k))
-      .map(k => caches.delete(k))))
+    .then(drained => caches.keys().then(keys => Promise.all(keys
+      .filter(k => !CACHE_KEEP.has(k))
+      .filter(k => CACHE_OWNED.test(k) || isLegacyCache(k))
+      .filter(k => drained.has(k))
+      .map(k => caches.delete(k)))))
     .then(() => self.clients.claim()));
 });
 
@@ -96,7 +160,9 @@ async function putIfStorable(cacheName, req, res) {
 async function trimMedia() {
   try {
     const c = await caches.open(MEDIA);
-    const keys = await c.keys();
+    // X14. Belt and braces: the catalog has its own cache now, but a copy written by a previous
+    // build still sits in MEDIA on existing installs, and it must not be what the cap evicts.
+    const keys = (await c.keys()).filter(k => k.url.indexOf(CATALOG_URL) < 0);
     if (keys.length <= MEDIA_MAX_ENTRIES) return;
     for (const k of keys.slice(0, keys.length - MEDIA_MAX_ENTRIES)) await c.delete(k);
   } catch (e) {}
@@ -174,17 +240,22 @@ self.addEventListener('fetch', e => {
   // F20: and ONLY a successful response is cached. v236 cached whatever came back, so a 503
   // during a deploy replaced a good manifest with an error and then served that error offline,
   // for as long as the build lasted.
-  if (e.request.url.indexOf('/clips/index.json') > -1) {
+  // X14. The catalog is written to and served from CATALOG, which is never trimmed. In MEDIA it
+  // was the oldest entry and therefore the first evicted at the 120-entry cap, leaving a phone full
+  // of videos and no index that says they are there.
+  if (e.request.url.indexOf(CATALOG_URL) > -1) {
     e.respondWith(
       fetch(e.request).then(async res => {
         if (storable(res)) {
           const copy = res.clone();
-          e.waitUntil(putIfStorable(MEDIA, e.request, copy));
+          e.waitUntil(putIfStorable(CATALOG, e.request, copy));
           return res;
         }
-        const hit = await caches.match(e.request, { cacheName: MEDIA });
+        const hit = await caches.match(e.request, { cacheName: CATALOG })
+                 || await caches.match(e.request, { cacheName: MEDIA });   // pre-split copy
         return hit || res;                    // a stale good manifest beats a fresh broken one
-      }).catch(() => caches.match(e.request, { cacheName: MEDIA }))
+      }).catch(async () => (await caches.match(e.request, { cacheName: CATALOG }))
+                        || (await caches.match(e.request, { cacheName: MEDIA })))
     );
     return;
   }
@@ -236,6 +307,10 @@ self.addEventListener('fetch', e => {
 // Media outlives deploys now, so there has to be a way to get rid of it that is not "uninstall".
 self.addEventListener('message', e => {
   const d = e.data || {};
+  // X14. CATALOG is deliberately NOT cleared here. Clearing downloads means "remove the videos I
+  // have saved"; the catalog is the list of videos that EXIST, it is a few kilobytes, and it is the
+  // first thing a cold offline start needs. Deleting it would make the next offline open show an
+  // empty library rather than a set of clips available for download.
   if (d.type === 'CLEAR_MEDIA') {
     e.waitUntil(caches.delete(MEDIA).then(ok => {
       try { e.source && e.source.postMessage({ type: 'MEDIA_CLEARED', ok: !!ok }); } catch (x) {}
