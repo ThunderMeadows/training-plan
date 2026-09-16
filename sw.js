@@ -12,7 +12,7 @@
 //   SHELL  card-shell-<build>   replaced on every deploy. Cheap to refetch.
 //   MEDIA  card-media-v1        SURVIVES deploys. Cleared only by an explicit request from the
 //                               card, or by the browser under storage pressure.
-const BUILD = 'v237k';
+const BUILD = 'v238';
 // FIFTH AUDIT 2026-09-14 (finding X15). Cache storage is per ORIGIN, not per scope. With names
 // like 'card-shell-<build>' and ownership matching /^card-/, a second Deadstop under a different
 // path on the same host - a beta build, a staging copy, another athlete's fork on the same GitHub

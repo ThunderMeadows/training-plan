@@ -4460,7 +4460,20 @@ const AC_MAX_JUMP=0.15;     // never move a max more than 15% at once
 // That caution belongs in what counts as evidence, not in a hidden multiplier. The consequence is
 // that auto-calibration now prescribes heavier for a novice than it did, and that is ON THE
 // BATCH 4 LIST for the qualified strength and conditioning review, not settled here.
-const MAX_HAIRCUT=0.95;
+// FOLD 2026-09-16 (Jerry's call). This used to be applied at PRESCRIPTION time: an estimate
+// became a "programming max" 5% below it, and every percentage was written against that lower
+// number. Two numbers, an invisible multiplier, and no explanation on the screen where either
+// appeared.
+//
+// The 5% is now folded INTO the percentages - every one of them, in the same change - so the
+// weight on the bar is unchanged and there is one number left: the athlete's max as their own
+// sets estimate it. Nothing multiplies it any more.
+//
+// The constant survives for exactly one purpose: converting athletes who are still carrying a
+// programming max. See the FOLD_V migration in load(). Do not reintroduce it anywhere else.
+const FOLD_SCALE=0.95;
+const FOLD_V=1;                 // bump ONLY if the stored meaning changes again
+const MAX_HAIRCUT=1;            // retained so any caller that still multiplies is a no-op
 // P02. Rep context of the evidence calibration prefers. A set of ten estimates a lower single than
 // a set of eight at the same strength - the card's own release notes say so - and pooling them
 // walked a max down through a volume block. CHOSEN, not validated: 8 is the line the card's own
@@ -4580,7 +4593,9 @@ function autoCalibrate(){
       // FIELD 2026-09-13 (Jerry). This was
       //     var factor=(S.onb&&S.onb.exp==='vet')?0.90:(S.onb&&S.onb.exp==='some'?0.87:0.85);
       // while pvStart() and suggestMax() both used 0.95 for the same conversion. See MAX_HAIRCUT.
-      var want=Math.round(med*MAX_HAIRCUT/5)*5;
+      // FOLD 2026-09-16: was med*MAX_HAIRCUT. The median estimate IS the max now; the 5% lives
+      // in the percentages instead, so cutting here would apply it twice.
+      var want=Math.round(med/5)*5;
       var cur=S.maxes[k];
       if(!cur||!want) return;
       var delta=(want-cur)/cur;
@@ -8121,7 +8136,10 @@ function adWeakLink(lift){
 // same number. The comment below used to claim autoCalibrate() applied the same haircut. It did
 // not - it used 0.85/0.87/0.90 - and a comment asserting agreement is exactly how three paths
 // drift apart without anyone noticing. There is one number now, so the claim is structural.
-var PV_HAIRCUT=MAX_HAIRCUT;   // a tested 1RM becomes a programming max at 95% - his call, and the
+// FOLD 2026-09-16: a tested 1RM is now used AS the max, because the percentages already carry
+// the 5%. Left at 1 so the two call sites below read unchanged and cannot drift apart again.
+var PV_HAIRCUT=1;             // was 0.95 - a tested 1RM became a programming max. See FOLD_SCALE.
+var PV_HAIRCUT_NOTE=1;        // a tested 1RM becomes a programming max at 95% - his call, and the
                               // same haircut suggestMax() and autoCalibrate() apply to an estimate
 var PV_BAD=2;          // CHOSEN: two failed sessions, not one. One bad day is sleep or stress,
                        // not load. That a window is needed is sourced; that it is 2 is a choice.
@@ -12740,7 +12758,7 @@ function sheetWho(){
 }
 function sheetMaxes(){
   var out=[];
-  try{ MAXINFO.forEach(function(m){ if(S.maxes&&S.maxes[m.k]!=null) out.push(m.name+' '+S.maxes[m.k]); }); }catch(e){}
+  try{ MAXINFO.forEach(function(m){ if(S.maxes&&S.maxes[m.k]!=null) out.push(m.name+' '+mxShow(S.maxes[m.k])); }); }catch(e){}
   return out.join('  \u00b7  ');
 }
 function weekSheetHTML(w){
@@ -16089,7 +16107,7 @@ function wireFocus(){
     if(Math.abs(dx)>62 && Math.abs(dx)>Math.abs(dy)*1.6) setFocus(focusIdx()+(dx<0?1:-1)); }; }
 
 
-var PLAN = {"block": "Starter Block - Full Body Strength", "start": "2026-08-16", "weeks": 6, "maxes": {"bench": 210.0, "ohp": 105.0, "squat": 220.0, "dead": 250.0, "row": 170.0}, "days": [{"code": "A", "title": "Push - Heavy", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "5", "load": "165", "loadNum": 165.0, "rir": "2, last set 1", "note": "78% of a 210 programming max", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [235, 235, 245, 245, 255, 135], "maxKey": "bench", "pct": [0.78333, 0.78333, 0.81667, 0.81667, 0.85, 0.45]}, {"name": "Overhead Press", "sets": 3, "reps": "8", "load": "75", "loadNum": 75.0, "rir": "2", "note": "Barbell - your other lagging lift. W1-2: eights. W3-4: ride reps to 9-10 at 75. W5: 80.", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [105, 105, 105, 105, 115, 55], "maxKey": "ohp", "pct": [0.7, 0.7, 0.7, 0.7, 0.76667, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Strict. No swinging.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Rope Pushdowns", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Straight-Bar Pushdown", "Overhead Rope Extension", "Bench Dips"], "cue": "Pin the elbows, split the rope at the bottom.", "wk": [30, 30, 35, 35, 40, 20], "maxKey": null, "pct": null}]}, {"code": "B", "title": "Pull - Heavy", "exercises": [{"name": "Barbell Row", "sets": 4, "reps": "5", "load": "135", "loadNum": 135.0, "rir": "2, last set 1", "note": "78% of a 170 programming max", "perHand": false, "barbell": true, "deload": 75, "rest": "3:00", "warmup": "bar x10, 70 x5, 100 x3", "subs": ["Machine Row", "Cable Rows", "Single-Arm DB Row", "Chest-Supported Row"], "cue": "Hinge to about 45 degrees, pull to the belt line, ribs down - no heaving.", "wk": [135, 135, 140, 140, 145, 75], "maxKey": "row", "pct": [0.78333, 0.78333, 0.81667, 0.81667, 0.85, 0.45]}, {"name": "Cable Rows", "sets": 4, "reps": "8", "load": "100", "loadNum": 100.0, "rir": "2, last set 1", "note": "Pause a beat at the squeeze.", "perHand": false, "barbell": false, "deload": 60, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [140, 140, 150, 150, 160, 85], "maxKey": null, "pct": null}, {"name": "Lat Pulldown", "sets": 4, "reps": "8", "load": "90", "loadNum": 90.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 55, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [130, 130, 140, 140, 150, 80], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "Fixed bars in 10s, no 55. Double progression: ride reps 8->10 at 60, then jump to 70.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [60, 60, 60, 70, 70, 35], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "10", "load": "45", "loadNum": 45.0, "rir": "1", "note": "35 broke form when pre-fatigued; start 30.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 4, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "C", "title": "Legs - Squat Priority", "exercises": [{"name": "Back Squat", "sets": 4, "reps": "5", "load": "170", "loadNum": 170.0, "rir": "2, last set 1", "note": "78% of 220. All four sets at 170 - do not climb.", "perHand": false, "barbell": true, "deload": 100, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [245, 245, 255, 265, 275, 145], "maxKey": "squat", "pct": [0.77778, 0.77778, 0.80952, 0.84127, 0.87302, 0.46032]}, {"name": "Leg Press", "sets": 3, "reps": "12", "load": "125", "loadNum": 125.0, "rir": "2", "note": "Extra quad volume for the lagging lift. Log your starting weight. Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 75, "rest": "2:00", "warmup": "", "subs": ["Hack Squat", "Bulgarian Split Squat", "Goblet Squat"], "cue": "Whole foot pressing, knees track the toes, never slam lockout.", "wk": [180, 190, 200, 210, 220, 110], "maxKey": null, "pct": null}, {"name": "Romanian Deadlift", "sets": 3, "reps": "8", "load": "135", "loadNum": 135.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "", "subs": ["DB Romanian Deadlift", "Good Morning", "Back Extension"], "cue": "Hips back until the hamstrings scream, bar drags the thighs.", "wk": [195, 205, 215, 225, 235, 115], "maxKey": null, "pct": null}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Replaces hip thrust - glutes already get squat, leg press, RDL and lunges on this day, while hamstrings had only one direct slot all week. Seated for the lengthened position. Dial to RIR 1.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 5, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "10-15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "D", "title": "Push - Volume", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "10", "load": "145", "loadNum": 145.0, "rir": "2, last set 1", "note": "68% of 210", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [205, 205, 215, 215, 225, 115], "maxKey": "bench", "pct": [0.68333, 0.68333, 0.71667, 0.71667, 0.75, 0.38333]}, {"name": "Overhead Press", "sets": 3, "reps": "10", "load": "65", "loadNum": 65.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [95, 95, 95, 105, 105, 55], "maxKey": "ohp", "pct": [0.63333, 0.63333, 0.63333, 0.7, 0.7, 0.36667]}, {"name": "Incline DB Press", "sets": 3, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [55, 55, 60, 60, 65, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 4, "reps": "15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Overhead Rope Extension", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Upgraded from pushdowns on this day - overhead position grows the long head substantially more (Maeo 2023). Start 25 and dial to RIR 1; it will feel much lighter than pushdowns.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Elbows by your ears, full stretch behind the head, squeeze to lockout.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "E", "title": "Pull - Volume", "exercises": [{"name": "Barbell Row", "sets": 3, "reps": "8", "load": "115", "loadNum": 115.0, "rir": "2, last set 1", "note": "68% of a 170 programming max", "perHand": false, "barbell": true, "deload": 70, "rest": "2:00", "warmup": "bar x10, 70 x5, 100 x3", "subs": ["Machine Row", "Cable Rows", "Single-Arm DB Row", "Chest-Supported Row"], "cue": "Hinge to about 45 degrees, pull to the belt line, ribs down - no heaving.", "wk": [115, 115, 120, 120, 125, 70], "maxKey": "row", "pct": [0.68, 0.68, 0.71, 0.71, 0.74, 0.42]}, {"name": "Lat Pulldown", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Cable Rows", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [50, 50, 50, 60, 60, 30], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 4, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "F", "title": "Legs - Deadlift Focus", "exercises": [{"name": "Conventional Deadlift", "sets": 3, "reps": "6", "load": "165", "loadNum": 165.0, "rir": "3-4", "note": "65% of 250, deliberately easy. W1-2 groove the pattern at 165, then 180 / 190 / 200.", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "95 x5, 130 x3, 150 x1", "subs": ["Trap Bar Deadlift", "Rack Pull", "DB Romanian Deadlift"], "cue": "Wedge in, pull the slack out, push the floor away.", "wk": [235, 235, 255, 275, 285, 135], "maxKey": "dead", "pct": [0.65278, 0.65278, 0.70833, 0.76389, 0.79167, 0.375]}, {"name": "Back Squat", "sets": 3, "reps": "10", "load": "150", "loadNum": 150.0, "rir": "2", "note": "68% of 220. Second squat exposure - skill practice for the weak lift.", "perHand": false, "barbell": true, "deload": 90, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [215, 215, 225, 225, 235, 125], "maxKey": "squat", "pct": [0.68254, 0.68254, 0.71429, 0.71429, 0.74603, 0.39683]}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Seated beats lying for hamstring growth - hip flexed puts the hamstrings at length (Maeo 2021, +14 vs +9 percent). 70 is a guess anchor - dial to RIR 1 first session.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 5, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Lateral Band Walk", "sets": 2, "reps": "15 per side", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "Coverage fix - abductors were carried entirely by squats and never trained directly. Cheap glute-medius insurance for the knees under a heavy squat.", "perHand": false, "barbell": false, "deload": null, "rest": "1:00", "warmup": "", "subs": ["Cable Hip Abduction", "Hip Abduction Machine"], "cue": "Band above the knees, half-squat, step wide - do not let the knees fall in.", "wk": null, "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}]}], "builtOn": "2026-08-16", "v": 19};
+var PLAN = {"block": "Starter Block - Full Body Strength", "start": "2026-08-16", "weeks": 6, "maxes": {"bench": 221, "ohp": 111, "squat": 232, "dead": 263, "row": 179}, "days": [{"code": "A", "title": "Push - Heavy", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "5", "load": "165", "loadNum": 165.0, "rir": "2, last set 1", "note": "74% of a 221 max", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [235, 235, 245, 245, 255, 135], "maxKey": "bench", "pct": [0.744163, 0.744163, 0.775836, 0.775836, 0.8075, 0.4275]}, {"name": "Overhead Press", "sets": 3, "reps": "8", "load": "75", "loadNum": 75.0, "rir": "2", "note": "Barbell - your other lagging lift. W1-2: eights. W3-4: ride reps to 9-10 at 75. W5: 80.", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [105, 105, 105, 105, 115, 55], "maxKey": "ohp", "pct": [0.665, 0.665, 0.665, 0.665, 0.728336, 0.348336]}, {"name": "Incline DB Press", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [60, 60, 65, 65, 70, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Strict. No swinging.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Rope Pushdowns", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Straight-Bar Pushdown", "Overhead Rope Extension", "Bench Dips"], "cue": "Pin the elbows, split the rope at the bottom.", "wk": [30, 30, 35, 35, 40, 20], "maxKey": null, "pct": null}]}, {"code": "B", "title": "Pull - Heavy", "exercises": [{"name": "Barbell Row", "sets": 4, "reps": "5", "load": "135", "loadNum": 135.0, "rir": "2, last set 1", "note": "74% of a 179 max", "perHand": false, "barbell": true, "deload": 75, "rest": "3:00", "warmup": "bar x10, 70 x5, 100 x3", "subs": ["Machine Row", "Cable Rows", "Single-Arm DB Row", "Chest-Supported Row"], "cue": "Hinge to about 45 degrees, pull to the belt line, ribs down - no heaving.", "wk": [135, 135, 140, 140, 145, 75], "maxKey": "row", "pct": [0.744163, 0.744163, 0.775836, 0.775836, 0.8075, 0.4275]}, {"name": "Cable Rows", "sets": 4, "reps": "8", "load": "100", "loadNum": 100.0, "rir": "2, last set 1", "note": "Pause a beat at the squeeze.", "perHand": false, "barbell": false, "deload": 60, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [140, 140, 150, 150, 160, 85], "maxKey": null, "pct": null}, {"name": "Lat Pulldown", "sets": 4, "reps": "8", "load": "90", "loadNum": 90.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 55, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [130, 130, 140, 140, 150, 80], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "8-10", "load": "45", "loadNum": 45.0, "rir": "2, last set 1", "note": "Fixed bars in 10s, no 55. Double progression: ride reps 8->10 at 60, then jump to 70.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [60, 60, 60, 70, 70, 35], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "10", "load": "45", "loadNum": 45.0, "rir": "1", "note": "35 broke form when pre-fatigued; start 30.", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 4, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "C", "title": "Legs - Squat Priority", "exercises": [{"name": "Back Squat", "sets": 4, "reps": "5", "load": "170", "loadNum": 170.0, "rir": "2, last set 1", "note": "78% of 220. All four sets at 170 - do not climb.", "perHand": false, "barbell": true, "deload": 100, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [245, 245, 255, 265, 275, 145], "maxKey": "squat", "pct": [0.738891, 0.738891, 0.769044, 0.799206, 0.829369, 0.437304]}, {"name": "Leg Press", "sets": 3, "reps": "12", "load": "125", "loadNum": 125.0, "rir": "2", "note": "Extra quad volume for the lagging lift. Log your starting weight. Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 75, "rest": "2:00", "warmup": "", "subs": ["Hack Squat", "Bulgarian Split Squat", "Goblet Squat"], "cue": "Whole foot pressing, knees track the toes, never slam lockout.", "wk": [180, 190, 200, 210, 220, 110], "maxKey": null, "pct": null}, {"name": "Romanian Deadlift", "sets": 3, "reps": "8", "load": "135", "loadNum": 135.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "", "subs": ["DB Romanian Deadlift", "Good Morning", "Back Extension"], "cue": "Hips back until the hamstrings scream, bar drags the thighs.", "wk": [195, 205, 215, 225, 235, 115], "maxKey": null, "pct": null}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Replaces hip thrust - glutes already get squat, leg press, RDL and lunges on this day, while hamstrings had only one direct slot all week. Seated for the lengthened position. Dial to RIR 1.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 5, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "10-15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "D", "title": "Push - Volume", "exercises": [{"name": "Bench Press", "sets": 4, "reps": "10", "load": "145", "loadNum": 145.0, "rir": "2, last set 1", "note": "68% of 210", "perHand": false, "barbell": true, "deload": 80, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 150 x1", "subs": ["DB Bench Press", "Machine Chest Press", "Smith Bench Press"], "cue": "Leg drive before the bar moves - squeeze the floor away.", "wk": [205, 205, 215, 215, 225, 115], "maxKey": "bench", "pct": [0.649164, 0.649164, 0.680836, 0.680836, 0.7125, 0.364163]}, {"name": "Overhead Press", "sets": 3, "reps": "10", "load": "65", "loadNum": 65.0, "rir": "2", "note": "", "perHand": false, "barbell": true, "deload": 45, "rest": "3:00", "warmup": "bar x10, 50 x5, 65 x3", "subs": ["Seated DB Shoulder Press", "Machine Shoulder Press", "Arnold Press"], "cue": "Glutes locked, ribs down - press around your face, finish behind your ears.", "wk": [95, 95, 95, 105, 105, 55], "maxKey": "ohp", "pct": [0.601663, 0.601663, 0.601663, 0.665, 0.665, 0.348336]}, {"name": "Incline DB Press", "sets": 3, "reps": "10-12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "2:00", "warmup": "", "subs": ["Incline Barbell Press", "Machine Incline Press", "Weighted Dips"], "cue": "Elbows at 45, drive the bells together at the top without clanking.", "wk": [55, 55, 60, 60, 65, 35], "maxKey": null, "pct": null}, {"name": "Lateral Raises", "sets": 4, "reps": "15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Cable Lateral Raise", "Machine Lateral Raise", "Plate Lateral Raise"], "cue": "Lead with the elbows, pour the pitcher - nothing above shoulder height.", "wk": [15, 15, 15, 20, 20, 10], "maxKey": null, "pct": null}, {"name": "Overhead Rope Extension", "sets": 3, "reps": "12-15", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Upgraded from pushdowns on this day - overhead position grows the long head substantially more (Maeo 2023). Start 25 and dial to RIR 1; it will feel much lighter than pushdowns.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Elbows by your ears, full stretch behind the head, squeeze to lockout.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "E", "title": "Pull - Volume", "exercises": [{"name": "Barbell Row", "sets": 3, "reps": "8", "load": "115", "loadNum": 115.0, "rir": "2, last set 1", "note": "65% of a 179 max", "perHand": false, "barbell": true, "deload": 70, "rest": "2:00", "warmup": "bar x10, 70 x5, 100 x3", "subs": ["Machine Row", "Cable Rows", "Single-Arm DB Row", "Chest-Supported Row"], "cue": "Hinge to about 45 degrees, pull to the belt line, ribs down - no heaving.", "wk": [115, 115, 120, 120, 125, 70], "maxKey": "row", "pct": [0.646, 0.646, 0.6745, 0.6745, 0.703, 0.399]}, {"name": "Lat Pulldown", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Pull-Ups", "Neutral-Grip Pulldown", "Single-Arm Pulldown"], "cue": "Elbows to the ribs, chest to the bar - no lean-back rowing.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Cable Rows", "sets": 4, "reps": "12", "load": "70", "loadNum": 70.0, "rir": "2, last set 1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Single-Arm DB Row", "Machine Row", "Barbell Row"], "cue": "Chest tall, pull to the belt line, one-second squeeze.", "wk": [100, 100, 110, 110, 120, 60], "maxKey": null, "pct": null}, {"name": "Straight Bar Curl", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["EZ-Bar Curl", "DB Curl", "Cable Curl"], "cue": "Elbows welded to your sides - if they drift forward, the set is over.", "wk": [50, 50, 50, 60, 60, 30], "maxKey": null, "pct": null}, {"name": "Hammer Curls", "sets": 3, "reps": "12", "load": "45", "loadNum": 45.0, "rir": "1", "note": "", "perHand": true, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Rope Hammer Curl", "Cross-Body Hammer Curl", "DB Reverse Curl"], "cue": "Squeeze the handles hard; slow on the way down.", "wk": [30, 30, 30, 30, 35, 20], "maxKey": null, "pct": null}, {"name": "Face Pulls", "sets": 4, "reps": "15-20", "load": "45", "loadNum": 45.0, "rir": "1", "note": "Coverage fix - rear delts had zero direct work while you press four times a week. Shoulder insurance for a 250 bench. Rest 1:00, keep it quick.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:00", "warmup": "", "subs": [], "cue": "Pull the rope to your eyebrows, elbows high, thumbs pointing behind you at the finish.", "wk": null, "maxKey": null, "pct": null}]}, {"code": "F", "title": "Legs - Deadlift Focus", "exercises": [{"name": "Conventional Deadlift", "sets": 3, "reps": "6", "load": "165", "loadNum": 165.0, "rir": "3-4", "note": "65% of 250, deliberately easy. W1-2 groove the pattern at 165, then 180 / 190 / 200.", "perHand": false, "barbell": true, "deload": 95, "rest": "3:00", "warmup": "95 x5, 130 x3, 150 x1", "subs": ["Trap Bar Deadlift", "Rack Pull", "DB Romanian Deadlift"], "cue": "Wedge in, pull the slack out, push the floor away.", "wk": [235, 235, 255, 275, 285, 135], "maxKey": "dead", "pct": [0.620141, 0.620141, 0.672913, 0.725695, 0.752086, 0.35625]}, {"name": "Back Squat", "sets": 3, "reps": "10", "load": "150", "loadNum": 150.0, "rir": "2", "note": "68% of 220. Second squat exposure - skill practice for the weak lift.", "perHand": false, "barbell": true, "deload": 90, "rest": "3:00", "warmup": "bar x10, 95 x5, 130 x3, 160 x1", "subs": ["Front Squat", "Hack Squat", "Goblet Squat"], "cue": "Big air, brace like a punch is coming, knees out - depth before load.", "wk": [215, 215, 225, 225, 235, 125], "maxKey": "squat", "pct": [0.648413, 0.648413, 0.678575, 0.678575, 0.708728, 0.376989]}, {"name": "Seated Leg Curl", "sets": 3, "reps": "12", "load": "50", "loadNum": 50.0, "rir": "1", "note": "Seated beats lying for hamstring growth - hip flexed puts the hamstrings at length (Maeo 2021, +14 vs +9 percent). 70 is a guess anchor - dial to RIR 1 first session.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": [], "cue": "Toes flexed, not pointed - squeeze hard at the top, control the return.", "wk": null, "maxKey": null, "pct": null}, {"name": "Standing Calf Raise", "sets": 5, "reps": "15", "load": "65", "loadNum": 65.0, "rir": "1", "note": "Starting anchor - dial to RIR 2 first session; your report locks the real number. Planned ramp shifts once your first report locks the real number.", "perHand": false, "barbell": false, "deload": 45, "rest": "1:30", "warmup": "", "subs": ["Seated Calf Raise", "Leg-Press Calf Press", "Single-Leg DB Calf Raise"], "cue": "Dead pause at the bottom stretch; no bouncing the tendon.", "wk": [90, 90, 100, 100, 110, 55], "maxKey": null, "pct": null}, {"name": "Lateral Band Walk", "sets": 2, "reps": "15 per side", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "Coverage fix - abductors were carried entirely by squats and never trained directly. Cheap glute-medius insurance for the knees under a heavy squat.", "perHand": false, "barbell": false, "deload": null, "rest": "1:00", "warmup": "", "subs": ["Cable Hip Abduction", "Hip Abduction Machine"], "cue": "Band above the knees, half-squat, step wide - do not let the knees fall in.", "wk": null, "maxKey": null, "pct": null}, {"name": "Hanging Leg Raises", "sets": 3, "reps": "15", "load": "bodyweight", "loadNum": null, "rir": "1", "note": "", "perHand": false, "barbell": false, "deload": null, "rest": "1:30", "warmup": "", "subs": ["Captains Chair Leg Raise", "Lying Leg Raises", "Cable Crunch"], "cue": "Curl the pelvis up - it is not a leg swing.", "wk": null, "maxKey": null, "pct": null}]}], "builtOn": "2026-08-16", "v": 19};
 var PLAN_DEFAULT=null; try{ PLAN_DEFAULT=JSON.parse(JSON.stringify(PLAN)); }catch(e){}
 const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 // FIELD-CAUGHT 2026-09-02: both cards share one origin, and the Training Card's PERSONAL
@@ -16100,7 +16118,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v237k';
+const BUILD = 'v238';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -17366,13 +17384,13 @@ function defReps(ex){
 }
 const GOALS = {
  block1:null,
- strength:{label:'Strength',sets:5,reps:'3',pct:[.80,.825,.85,.875,.90,.55],restMain:'4:00',accReps:'6-8',accSets:3,restAcc:'2:00',
+ strength:{label:'Strength',sets:5,reps:'3',pct:[0.76,0.78375,0.8075,0.83125,0.855,0.5225],restMain:'4:00',accReps:'6-8',accSets:3,restAcc:'2:00',
    cardio:'Strength block: 2\u00d720 min zone 2 per week \u2014 keep the engine, spare the legs.'},
- power:{label:'Power',sets:5,reps:'3',pct:[.70,.725,.75,.775,.80,.50],restMain:'3:00',accReps:'6-8',accSets:3,restAcc:'2:00',
+ power:{label:'Power',sets:5,reps:'3',pct:[0.665,0.68875,0.7125,0.73625,0.76,0.475],restMain:'3:00',accReps:'6-8',accSets:3,restAcc:'2:00',
    cardio:'Power block: bar speed is the point \u2014 every rep moves FAST. Cardio 1\u20132\u00d715 min easy, no more.'},
- hypertrophy:{label:'Hypertrophy',sets:4,reps:'8',pct:[.675,.70,.725,.75,.775,.50],restMain:'2:00',accReps:'10-15',accSets:4,restAcc:'1:30',
+ hypertrophy:{label:'Hypertrophy',sets:4,reps:'8',pct:[0.64125,0.665,0.68875,0.7125,0.73625,0.475],restMain:'2:00',accReps:'10-15',accSets:4,restAcc:'1:30',
    cardio:'Hypertrophy block: 2\u20133\u00d720 min zone 2 \u2014 enough for health, little enough to grow.'},
- endurance:{label:'Muscular Endurance',sets:3,reps:'15',pct:[.50,.525,.55,.575,.60,.40],restMain:'0:45',accReps:'15-20',accSets:3,restAcc:'0:30',
+ endurance:{label:'Muscular Endurance',sets:3,reps:'15',pct:[0.475,0.49875,0.5225,0.54625,0.57,0.38],restMain:'0:45',accReps:'15-20',accSets:3,restAcc:'0:30',
    cardio:'Endurance block: 4\u20135\u00d730 min zone 2, one longer session weekly. Short rests are part of the training.'},
  // HIS CALL 2026-09-10. "Raise towards maintenance intensity with volume trimming."
  // The old cut scheme dropped load to 65-75% and cut rest to 1:30 - lighter lifting with less
@@ -17382,9 +17400,9 @@ const GOALS = {
  // now sits at maintenance (75-82.5%, sixes), rest goes UP so those sets stay honest, and the
  // volume comes down instead - three main sets, two accessory sets, tighter accessory reps.
  // Less work, done heavy, plus the cardio that actually creates the deficit.
- cut:{label:'Lose Weight',sets:3,reps:'6',pct:[.75,.775,.80,.80,.825,.50],restMain:'2:30',accReps:'8-12',accSets:2,restAcc:'1:30',
+ cut:{label:'Lose Weight',sets:3,reps:'6',pct:[0.7125,0.73625,0.76,0.76,0.78375,0.475],restMain:'2:30',accReps:'8-12',accSets:2,restAcc:'1:30',
    cardio:'Cut: 4\u20135\u00d730\u201340 min zone 2. The deficit does the losing \u2014 lifting is here to keep your muscle.'},
- build:{label:'Build Muscle',sets:4,reps:'10',pct:[.65,.675,.70,.725,.75,.50],restMain:'2:00',accReps:'10-15',accSets:4,restAcc:'1:30',
+ build:{label:'Build Muscle',sets:4,reps:'10',pct:[0.6175,0.64125,0.665,0.68875,0.7125,0.475],restMain:'2:00',accReps:'10-15',accSets:4,restAcc:'1:30',
    cardio:'Lean gain: 2\u00d720 min zone 2. Small calorie surplus, big patience \u2014 the scale should crawl, not jump.'}
 };
 function goalDef(){ return GOALS[(S.profile&&S.profile.goal)||'block1']||null; }
@@ -17761,6 +17779,17 @@ function uLbl(){ return isKg()? 'kg' : 'lb'; }
 // below that (light dumbbells). It used to round every kg value to 0.5, so an accessory stored
 // at 100 lb read 45.5 kg - a number no plate makes. His rule, 2026-09-05: common kg plate
 // numbers, not uncommon ones. 62.5 is a bar load; 45.5 is not.
+// FOLD 2026-09-16. A migrated max carries full precision on purpose - it is what keeps 98.9% of
+// prescriptions byte-identical through the fold - but nobody should ever SEE 326.3157894736842.
+// Every site that puts a max on a screen or in an export goes through here. Sites that feed
+// plateRound() do not need it and deliberately keep the precision.
+function mxShow(v){
+  if(typeof v!=='number' || !isFinite(v)) return v;
+  var d=WV(v);
+  if(typeof d!=='number') return d;
+  // Whole pounds. In kg one decimal survives, because half a kilo is a plate that exists.
+  return isKg()? Math.round(d*10)/10 : Math.round(d);
+}
 function WV(lb){
   if(!isKg()) return lb;
   var kg=lb*0.45359237;
@@ -17809,6 +17838,9 @@ function wStepLb(bar){ return isKg()? toLb(bar? kgJump():2.5) : (bar? jumpLb():5
 function wStepDisp(bar){ return isKg()? (bar? kgJump():2.5) : (bar? jumpLb():5); }
 function jumpLb(){ return (S&&S.jump)||5; }   // 10 = pairs of 5s, 5 = 2.5s (default), 2.5 = microplates
 function plateRound(x){
+  // 2026-09-16. Six decimal places is far finer than any plate and far coarser than float noise,
+  // so a value that is mathematically ON a step lands on it instead of one ulp below.
+  if(typeof x==='number' && isFinite(x)) x=Math.round(x*1e6)/1e6;
   if(isKg()){ const kinc=kgJump(), kk=Math.round((x*0.45359237-20)/kinc);
     return toLb(Math.max(20, 20+kinc*kk)); }
   const inc=jumpLb();
@@ -19666,6 +19698,10 @@ function undoToast(msg, fn, ms){
   __toastT=setTimeout(hide, ms||5000);
 }
 async function load(){ const DEF=JSON.parse(JSON.stringify(S));
+  // FOLD 2026-09-16. DEF is a copy of whoever was loaded BEFORE this call, and it is merged under
+  // the saved profile - so a migration stamp left on the live state would be inherited by the next
+  // athlete and skip their conversion. Only a SAVED profile may claim to have been converted.
+  try{ delete DEF.foldV; }catch(e){}
   // AUDIT 2026-09-11 (findings L5, N6, N8). Three failures shared one cause: this function
   // awaited a read and then assigned the result to the global S with no check that it was still
   // the load in charge, and no distinction between "nothing saved" and "the read failed".
@@ -19742,6 +19778,42 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(S.jumpV!==2){ if(S.jump===10) S.jump=5; S.jumpV=2; }
   if(S.breathe==null) S.breathe=false;
   if(!S.maxes) S.maxes=Object.assign({}, PLAN.maxes);
+  // FOLD 2026-09-16 (Jerry's call). S.maxes used to hold a PROGRAMMING max - the athlete's own
+  // estimate already cut by 5% - and every percentage was written against that. Now it holds the
+  // raw max and the 5% lives in the percentages, so the weight on the bar is unchanged.
+  //
+  // Three things were denominated in the old number and all three convert together:
+  //   S.maxes          the max itself
+  //   S.genPlan        a generated plan carries its OWN percentage ladders, authored against it
+  //   S.mxProv         an open probation remembers the max it replaced, and its floor
+  //
+  // RUNNING THIS TWICE WOULD QUIETLY DROP EVERY ATHLETE 5%, so the stamp is written unconditionally
+  // - including for a brand-new card with nothing to convert - and checked before anything moves.
+  // A card that has never seen this build converts once; every boot after that, this is one
+  // comparison and a return.
+  if(S.foldV!==FOLD_V){
+    try{
+      if(S.maxes) Object.keys(S.maxes).forEach(function(k){
+        var v=S.maxes[k];
+        if(typeof v==='number' && isFinite(v) && v>0) S.maxes[k]=v/FOLD_SCALE;
+      });
+      if(S.genPlan && Array.isArray(S.genPlan.days)) S.genPlan.days.forEach(function(d){
+        ((d&&d.exercises)||[]).forEach(function(ex){
+          if(ex && Array.isArray(ex.pct))
+            ex.pct=ex.pct.map(function(p){ return (typeof p==='number')? p*FOLD_SCALE : p; });
+        });
+      });
+      if(S.genPlan && S.genPlan.maxes) S.genPlan.maxes=Object.assign({}, S.maxes);
+      if(S.mxProv) Object.keys(S.mxProv).forEach(function(k){
+        var p=S.mxProv[k]; if(!p) return;
+        ['from','floor','start'].forEach(function(f){
+          if(typeof p[f]==='number' && isFinite(p[f]) && p[f]>0) p[f]=p[f]/FOLD_SCALE;
+        });
+        // `tested` is a real single the athlete lifted. It was never cut and is not converted.
+      });
+    }catch(e){ try{ oops('foldMigrate',e); }catch(e2){} }
+    S.foldV=FOLD_V;
+  }
   if(!S.profile) S.profile={hFt:5,hIn:9,wt:200,goal:'block1'};
   if(S.ready===undefined) S.ready=null;
   if(!S.e1rm) S.e1rm={};
@@ -20131,8 +20203,8 @@ function renderInner(){
       const jump = Math.abs(m-base)/base > 0.10;
       h+='<div class="ex"><div class="ex-head">'
         +'<div class="ex-name">'+mi.name+'</div>'
-        +'<div class="target-label">Programming max \u2014 a heavy single you could hit today, not your all-time PR</div>'
-        +'<div class="ex-rx"><span class="load mono">'+WV(m)+'<small> '+uLbl()+'</small></span>'
+        +'<div class="target-label">Max \u2014 a heavy single you could hit today, not your all-time PR</div>'
+        +'<div class="ex-rx"><span class="load mono">'+mxShow(m)+'<small> '+uLbl()+'</small></span>'
         +(mxEdit? (function(){ var md=isKg()? toLb(2.5):5, ml=isKg()?'2.5':'5';
             return '<div class="step"><button data-mx="'+mi.k+'" data-d="-'+md+'">−'+ml+'</button><div class="val mono" style="min-width:20px"></div><button data-mx="'+mi.k+'" data-d="'+md+'">+'+ml+'</button></div>'; })():'')+'</div>'
         +'<div class="sleeve-label">drives '+mi.lifts+' \u00b7 this week\u2019s top set: '+(prev!=null? WV(prev)+' '+uLbl():'\u2014')+'</div>'
@@ -20179,7 +20251,7 @@ function renderInner(){
              +'. This lift will not climb while it is on trial. If it does not hold it steps back '
              +'to '+WV(p.floor)+' '+uLbl()+', which you have already trained.</div>'; })()
         +(mxEdit? '<div class="ed-row" style="margin-top:8px">'
-             +'<div class="cue" style="flex-basis:100%;padding:0 0 4px">Tested a real 1RM? Enter it and the card programs from it at '+Math.round(PV_HAIRCUT*100)+'%.</div>'
+             +'<div class="cue" style="flex-basis:100%;padding:0 0 4px">Tested a real 1RM? Enter it and every working weight is worked out from it.</div>'
              +'<input class="ed-in" id="tm'+mi.k+'" type="number" inputmode="decimal" placeholder="tested 1RM" style="width:110px">'
              +'<div class="daybtn" data-tmax="'+mi.k+'">Use it</div></div>' : '')
         +(jump? '<div class="cue" style="padding:6px 0 0">Big move from '+WV(base)+' \u2014 The card will want receipts before trusting this.</div>':'')
@@ -21043,7 +21115,7 @@ function wire(){
     // He asked for this to be the path when a TEST BEATS the engine. Below the current max it is
     // almost always a typo or the wrong unit, and silently cutting every barbell load is the one
     // outcome worth refusing outright - the steppers are right there if he means it.
-    if(pm<=cur){ alertToast('That programs to '+WV(pm)+' '+uLbl()+', at or under your current '+WV(cur)+'. Use \u2212 and + if you meant to lower it.'); return; }
+    if(pm<=cur){ alertToast('That is '+mxShow(pm)+' '+uLbl()+', at or under your current '+mxShow(cur)+'. Use \u2212 and + if you meant to lower it.'); return; }
     pvStart(k, tested); mxTouched[k]=1; save(); render();
     alertToast('Tested '+WV(tested)+' '+uLbl()+' \u2014 programming max '+WV(pm)+'. On trial for '+PV_OK+' clean sessions.');
   });
@@ -21177,7 +21249,9 @@ function wire(){
   document.querySelectorAll('[data-mx]').forEach(b=>b.onclick=()=>{
     if(!mxEdit) return;
     const k=b.dataset.mx; mxTouched[k]=1;   // hand-set: stop offering to overwrite it
-    S.maxes[k]=Math.max(45, S.maxes[k]+(+b.dataset.d)); save(); render();
+    // FOLD 2026-09-16: a migrated max carries decimals. Stepping it by hand snaps back to whole
+    // pounds, so an athlete who adjusts their own number never inherits the migration's precision.
+    S.maxes[k]=Math.max(45, Math.round(S.maxes[k]+(+b.dataset.d))); save(); render();
   });
   document.querySelectorAll('[data-week]').forEach(el=>el.onclick=()=>{S.week=+el.dataset.week;save();render();});
   document.querySelectorAll('[data-swap]').forEach(el=>el.onchange=()=>{
@@ -21941,7 +22015,7 @@ function rateHTML(){
   (typeof MAXINFO!=='undefined'?MAXINFO:[]).forEach(function(mi){
     var R=rateFor(mi.k), cur=(S.maxes||{})[mi.k];
     h+='<div class="block"><h3>'+esc(mi.name)+'</h3><div style="font-size:13px;line-height:1.7">';
-    h+='Programming max <span class="mono" style="font-weight:800">'+(cur!=null? WV(cur)+' '+uLbl():'\u2014')+'</span>';
+    h+='Max <span class="mono" style="font-weight:800">'+(cur!=null? mxShow(cur)+' '+uLbl():'\u2014')+'</span>';
     if(R.latest){
       var exp=!(S.onb&&S.onb.exp==='new');
       var b=e1rmBand(R.latest.v, exp);
@@ -23703,7 +23777,8 @@ function suggestMax(k){
     if(__age<0 || __age>E1_WINDOW) return null;            // future-dated, or older than the window
   }catch(err){ return null; }
   // FIELD 2026-09-13: was a literal 0.95 in two places here. Same conversion, same constant.
-  const sugg=isKg()? toLb(Math.round(e.val*MAX_HAIRCUT*0.45359237/2.5)*2.5) : Math.round(e.val*MAX_HAIRCUT/5)*5;
+  // FOLD 2026-09-16: the estimate IS the suggestion now. See FOLD_SCALE.
+  const sugg=isKg()? toLb(Math.round(e.val*0.45359237/2.5)*2.5) : Math.round(e.val/5)*5;
   return sugg>=S.maxes[k]+5? {sugg:sugg, e:e.val} : null;
 }
 function painAlt(ex,st){
@@ -24525,15 +24600,15 @@ function PG_pct(goal, isPriority){
             pct:G.pct.slice(),
             sets:isPriority? G.sets+1 : G.sets};
   }
-  if(goal==='strength')  return {reps:'5', rir:'2, last set 1', pct:[.75,.75,.80,.80,.85,.45], sets:isPriority?4:3};
-  if(goal==='power')     return {reps:'3', rir:'3 throughout \u2014 every rep fast', pct:[.68,.70,.72,.74,.76,.45], sets:isPriority?5:4};
+  if(goal==='strength')  return {reps:'5', rir:'2, last set 1', pct:[0.7125,0.7125,0.76,0.76,0.8075,0.4275], sets:isPriority?4:3};
+  if(goal==='power')     return {reps:'3', rir:'3 throughout \u2014 every rep fast', pct:[0.646,0.665,0.684,0.703,0.722,0.4275], sets:isPriority?5:4};
   if(goal==='hypertrophy'||goal==='muscle')
-                         return {reps:'8', rir:'2, last set 1', pct:[.67,.67,.70,.72,.75,.42], sets:isPriority?4:3};
-  if(goal==='build')     return {reps:'10',rir:'2, last set 1', pct:[.65,.65,.68,.70,.72,.42], sets:isPriority?4:3};
+                         return {reps:'8', rir:'2, last set 1', pct:[0.6365,0.6365,0.665,0.684,0.7125,0.399], sets:isPriority?4:3};
+  if(goal==='build')     return {reps:'10',rir:'2, last set 1', pct:[0.6175,0.6175,0.646,0.665,0.684,0.399], sets:isPriority?4:3};
   if(goal==='cut'||goal==='lean')
-                         return {reps:'8', rir:'2 throughout',  pct:[.65,.65,.68,.70,.72,.40], sets:3};
-  if(goal==='endurance') return {reps:'15',rir:'2 throughout',  pct:[.50,.52,.55,.57,.60,.38], sets:3};
-  return                       {reps:'6', rir:'2, last set 1', pct:[.70,.70,.73,.75,.78,.42], sets:3};
+                         return {reps:'8', rir:'2 throughout',  pct:[0.6175,0.6175,0.646,0.665,0.684,0.38], sets:3};
+  if(goal==='endurance') return {reps:'15',rir:'2 throughout',  pct:[0.475,0.494,0.5225,0.5415,0.57,0.361], sets:3};
+  return                       {reps:'6', rir:'2, last set 1', pct:[0.665,0.665,0.6935,0.7125,0.741,0.399], sets:3};
 }
 // Snap a barbell load to something that can actually be built from plates: the card's own
 // plateRound knows the gym's jump size and kg mode, so use it when it is there.
