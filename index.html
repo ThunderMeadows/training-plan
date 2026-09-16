@@ -4490,6 +4490,44 @@ function planMaxDriven(){
     return false;
   }catch(e){ return false; }
 }
+// The evidence auto-calibration is entitled to reason from, for one lift. Lifted out of
+// autoCalibrate 2026-09-16 so the engine's spent-marker and the athlete's veto are computed from
+// exactly the same window and the same filters. Two slightly different copies of this would be a
+// defect that only surfaced months later, on somebody's real training.
+function acWindow(k){
+  try{
+    var H=((S.e1rmH||{})[k]||[]).filter(function(x){
+      // measured session-date to session-date, like every other evidence window - wall-clock
+      // maths made morning sets invisible to auto-calibration until after noon
+      var age=(new Date(shiftDate()+'T12:00:00').getTime()-new Date(x.d+'T12:00:00').getTime())/86400000;
+      return age>=0 && age<=28; });
+    if(H.length<AC_MIN_SETS) return null;
+    // RIR judgement is most reliable close to failure, so prefer that evidence when there is
+    // enough of it and fall back to everything only when there is not.
+    var near=H.filter(function(x){ return x.r!=null && x.r<=2; });
+    if(near.length>=AC_MIN_SETS) H=near;
+    // PROGRESSION AUDIT (finding P02), reported from the field by Jerry 2026-09-13. The same rule
+    // one line up, applied to rep context. A ten-rep set estimates a lower single than an
+    // eight-rep set off the same strength; taking the median across both walked a max DOWN
+    // through a volume block while the athlete was setting personal records. Heavy evidence
+    // extrapolates least, so calibration reads that when there is enough of it - and falls back
+    // to everything when there is not, so a lift only ever trained in the ten-to-twelve range is
+    // still calibrated from its own evidence rather than frozen.
+    //
+    // KNOWN LIMIT, measured on Jerry's own backup 2026-09-16: only 2 of his 9 bench points carry
+    // `n` at all, because the field postdates them. Three are required, so this filter does not
+    // fire for him and his ten-rep days are still pooled with his five-rep days. Reported.
+    var heavy=H.filter(function(x){ return x.n!=null && +x.n<=AC_REP_MAX; });
+    if(heavy.length>=AC_MIN_SETS) H=heavy;
+    return H;
+  }catch(e){ return null; }
+}
+// What that evidence IS, independent of who is reading it. This is what the athlete's veto is
+// keyed on: they rejected a conclusion about these points, and that stands until the points change.
+function acEvidenceSig(k){
+  var H=acWindow(k); if(!H) return null;
+  return H.map(function(x){ return x.d+':'+x.v+':'+(x.c==null?1:x.c); }).join(',');
+}
 function autoCalibrate(){
   try{
     // FIELD 2026-09-10. "Im ahead but i need the engine to keep up." He rowed 155x8 for weeks
@@ -4507,25 +4545,8 @@ function autoCalibrate(){
     var changed=[];
     Object.keys(S.maxes||{}).forEach(function(k){
       if(pvOn(k)) return;   // a tested max under probation is not second-guessed by the estimator
-      var H=(S.e1rmH[k]||[]).filter(function(x){
-        // measured session-date to session-date, like every other evidence window - wall-clock
-        // maths made morning sets invisible to auto-calibration until after noon
-        var age=(new Date(shiftDate()+'T12:00:00').getTime()-new Date(x.d+'T12:00:00').getTime())/86400000;
-        return age>=0 && age<=28; });
-      if(H.length<AC_MIN_SETS) return;
-      // RIR judgement is most reliable close to failure, so prefer that evidence when there is
-      // enough of it and fall back to everything only when there is not.
-      var near=H.filter(function(x){ return x.r!=null && x.r<=2; });
-      if(near.length>=AC_MIN_SETS) H=near;
-      // PROGRESSION AUDIT (finding P02), reported from the field by Jerry 2026-09-13. The same rule
-      // one line up, applied to rep context. A ten-rep set estimates a lower single than an
-      // eight-rep set off the same strength; taking the median across both walked a max DOWN
-      // through a volume block while the athlete was setting personal records. Heavy evidence
-      // extrapolates least, so calibration reads that when there is enough of it - and falls back
-      // to everything when there is not, so a lift only ever trained in the ten-to-twelve range is
-      // still calibrated from its own evidence rather than frozen.
-      var heavy=H.filter(function(x){ return x.n!=null && +x.n<=AC_REP_MAX; });
-      if(heavy.length>=AC_MIN_SETS) H=heavy;
+      var H=acWindow(k);
+      if(!H) return;
       // median of recent estimates: one fluke set should not move a training max
       // PROGRESSION AUDIT 2026-09-12 (finding P01). This computes a target from the EVIDENCE but
       // caps the step against the CURRENT max, so the same four points walked a 200 lb max to
@@ -4536,9 +4557,24 @@ function autoCalibrate(){
       // point's date, value and struggle flag - is recorded per lift when a change is applied, and
       // identical evidence is never spent again. A new session, a correction, or a point ageing
       // out of the window all change the signature and permit one further bounded step.
-      var sig=H.map(function(x){ return x.d+':'+x.v+':'+(x.c==null?1:x.c); }).join(',');
+      var ev=H.map(function(x){ return x.d+':'+x.v+':'+(x.c==null?1:x.c); }).join(',');
+      // FIELD 2026-09-16 (Jerry), from his own backup. His bench sat at 280 while this same
+      // function, run over the SAME six points, wanted 310 - and it could not say so, because the
+      // evidence was marked spent. It had been spent on 2026-09-12 by a DIFFERENT BUILD, before
+      // the calibration arithmetic was repaired. Nothing in the marker recorded that.
+      //
+      // A signature that records only WHAT was decided from, and never WHO decided, means every
+      // repair to this function is unreachable for every decision the broken version already made.
+      // The stamp is what lets a repaired engine look once at a window it has not itself judged.
+      // Unchanged evidence under an unchanged build is still spent, so P01 stays closed: re-saving
+      // one session still earns nothing.
+      var sig=(typeof BUILD!=='undefined'? BUILD : '?')+'|'+ev;
       if(!S.acSeen) S.acSeen={};
       if(S.acSeen[k]===sig) return;                  // already spent; re-saving earns nothing
+      // ...but an athlete who PUT A CHANGE BACK has decided, and a new build does not overrule
+      // them. Their veto is keyed on the evidence alone, so it stands until the evidence itself
+      // changes - which is exactly as long as their disagreement is about anything real.
+      if(S.acVeto && S.acVeto[k]===ev) return;
       var vals=H.map(function(x){ return x.v; }).sort(function(a,b){ return a-b; });
       var med=vals[Math.floor(vals.length/2)];
       // FIELD 2026-09-13 (Jerry). This was
@@ -8331,6 +8367,13 @@ function adaptUndoOne(i){
   try{
     var log=S.adLog||[], a=log[i];
     if(!adUndoable(a)) return false;
+    // 2026-09-16. Putting a calibration back is the athlete disagreeing with a conclusion drawn
+    // from a particular set of evidence. Recorded against that evidence, so the build stamp added
+    // to S.acSeen cannot quietly re-apply, on the next update, a change they explicitly reversed.
+    if(a.kind==='calib' && a.lift){
+      try{ var __ev=acEvidenceSig(a.lift);
+        if(__ev){ if(!S.acVeto) S.acVeto={}; S.acVeto[a.lift]=__ev; } }catch(e){}
+    }
     if((a.kind==='stall'||a.kind==='rate'||a.kind==='layoff'||a.kind==='prov'||a.kind==='calib')
        && S.maxes && a.from!=null && a.to!=null && S.maxes[a.lift]!=null){
       var cur=S.maxes[a.lift];
@@ -16057,7 +16100,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v237j';
+const BUILD = 'v237k';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
