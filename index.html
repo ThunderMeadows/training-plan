@@ -270,7 +270,11 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 .stchip.ok{color:var(--green);background:var(--green-soft);} .stchip.bad{color:var(--red);background:var(--red-soft);}
 
 /* ---------- footer ---------- */
-.footer{position:fixed;left:0;right:0;bottom:0;
+/* --vvdy: how far the bottom the athlete can SEE is from the bottom the browser lays out to.
+   Set on :root by the glue near paintFoot(). Every bar anchored to the bottom composes it, and
+   composes it INTO its own transform rather than having one assigned over the top - see the
+   toast's centring and the calculator button's press state below. */
+.footer{position:fixed;left:0;right:0;bottom:0;transform:translateY(var(--vvdy,0px));
   background:linear-gradient(180deg,rgba(241,242,240,0),var(--bg) 30%);
   padding:16px 16px calc(18px + env(safe-area-inset-bottom));}
 .footer-inner{max-width:520px;margin:0 auto;display:flex;gap:10px;}
@@ -284,7 +288,9 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 /* z-index 300: above the report panel (240) and every other sheet the card opens from, below the
    disclaimer gate (410). Without it the toast rendered UNDER whatever the athlete was reading and
    a successful copy looked like a dead button. */
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:110px;background:var(--chalk);
+/* The centring and the viewport offset are ONE transform. An earlier version of the glue
+   assigned el.style.transform directly; doing that here would have un-centred every toast. */
+.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(var(--vvdy,0px));bottom:110px;background:var(--chalk);
   color:var(--bg);border-radius:var(--r-sm);padding:13px 18px;font-size:14px;font-weight:700;opacity:0;
   transition:opacity .2s;pointer-events:none;z-index:300;box-shadow:var(--shadow);}
 .toast.show{opacity:1;}
@@ -429,13 +435,18 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
 @media (prefers-reduced-motion:reduce){.hifive .hf-palm,.hifive.on .hf-palm,.hifive.on .hf-ring{animation:none;}}
 
 /* floating calculator: right edge, thumb height, above the rest chip so it works during rest */
+/* FIELD 2026-09-16: the deck bar was drawn ABOVE this button in his screenshot, though this
+   button is anchored 96px higher. The bar was being moved and this was not - the glue's reach was
+   two selectors long. The :active rule has to carry the offset too, or the button drops to the
+   layout bottom for as long as a finger is on it. */
 .calcfab{position:fixed;right:10px;top:auto;bottom:calc(96px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;z-index:78;
   background:var(--panel);border:2px solid var(--line);color:var(--dim);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transform:translateY(var(--vvdy,0px));
   box-shadow:0 6px 18px -8px rgba(0,0,0,.45);transition:transform .15s,background .2s,color .2s;}
-.calcfab:active{transform:scale(.92);}
+.calcfab:active{transform:translateY(var(--vvdy,0px)) scale(.92);}
 .calcfab.on{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);}
 .calcpanel{position:fixed;right:12px;left:12px;bottom:12px;max-width:330px;margin-left:auto;z-index:79;
+  transform:translateY(var(--vvdy,0px));
   background:var(--panel);border:2px solid var(--line);border-radius:16px;padding:12px;
   box-shadow:0 18px 44px -12px rgba(0,0,0,.55);}
 .calc-hd{display:flex;justify-content:space-between;align-items:center;font-size:11px;
@@ -1112,6 +1123,7 @@ td.c-n.now{font-weight:700;}
 
 
 .stbar{position:fixed;left:10px;right:10px;bottom:14px;z-index:75;display:flex;align-items:center;gap:9px;
+  transform:translateY(var(--vvdy,0px));
   background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--red);
   border-radius:12px;padding:9px 12px;box-shadow:0 10px 26px -14px rgba(0,0,0,.5);
   font-family:ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
@@ -5257,7 +5269,20 @@ function wuSets(ex, target, st){
     return [];
   }
   var written=wuParse(ex&&ex.warmup);
-  if(written.length) return written;
+  if(written.length){
+    // HIS ASK 2026-09-16. A written ladder was authored ONCE, when the plan was generated, against
+    // that plan's own week-1 number. A goal re-prescribes that number and nothing rebuilt the
+    // ladder, so four of the six goals warmed up AT OR ABOVE the working set - Muscular Endurance
+    // worked at 105 and warmed up to 150.
+    //
+    // Two reasons to rebuild, and the second holds with or without a goal: a ladder that reaches
+    // the working weight is not a warm-up, it is a heavier set.
+    var goalDriven=false;
+    try{ goalDriven=!!(goalDef() && !isStartProgram() && (ex.maxKey||ex.pct)); }catch(e){}
+    var topW=0; written.forEach(function(s){ if(typeof s.w==='number' && s.w>topW) topW=s.w; });
+    var reaches=(typeof target==='number' && target>0 && topW>=target);
+    if(!goalDriven && !reaches) return written;
+  }
   if(ex&&ex.barbell) return wuDerive(target);
   var eq=exEquip(ex&&ex.name);
   if(eq==='dumbbell'||eq==='machine'||eq==='cable') return wuDeriveLight(target, eq);
@@ -14814,6 +14839,71 @@ function histBestE1(n){ var b=null;
   histFor(n).forEach(function(x){ if(x.e1!=null && (!b || x.e1>b.e1)) b=x; }); return b; }
 function histBest(n){ var a=histFor(n), b=null;
   a.forEach(function(x){ if(x.w!=null&&(!b||x.w>b.w)) b=x; }); return b; }
+// FIELD 2026-09-16 (Jerry). "It needs to be the same type of training volume ... it's never gonna
+// be equivalent and the number is gonna be off."
+//
+// What KIND of training a rep target is. This lived inside goalTag() and was reachable only on a
+// coach-built plan; it is named here because the reference line has to describe a PAST day by the
+// work it contained, and two copies of a classification are two chances to disagree.
+function repQuality(t){
+  if(typeof t!=='number' || !(t>0)) return null;
+  if(t<=5)  return 'STRENGTH';
+  if(t<=8)  return 'HYPERTROPHY';
+  if(t<=12) return 'MUSCLE';
+  return 'ENDURANCE';
+}
+// The rep target of a list of logged reps. A set logged as 'hit' stores the TARGET rather than a
+// count, so a session run as written is already a row of its own target; a session with shortfalls
+// is that row with some entries below it. The MODE is taken rather than the max or the first, so
+// one short set at the end of a hard day does not re-label the session as a different kind of
+// training, and ties go to the higher value because shortfalls only ever fall BELOW the target.
+function repsTarget(list){
+  var counts={}, best=null, bestN=0;
+  (list||[]).forEach(function(v){
+    if(typeof v!=='number' || !(v>0)) return;
+    counts[v]=(counts[v]||0)+1;
+    if(counts[v]>bestN || (counts[v]===bestN && best!=null && v>best)){ bestN=counts[v]; best=v; }
+  });
+  return best;
+}
+// The rep target of a stored session. New records carry `rt`; older ones are read from their reps.
+function histTarget(rec){
+  try{
+    if(!rec) return null;
+    if(typeof rec.rt==='number' && rec.rt>0) return rec.rt;
+    return repsTarget(rec.sets);
+  }catch(e){ return null; }
+}
+// The most recent session of this movement at THIS rep target, ignoring today's own entry.
+// Exact match by Jerry's decision 2026-09-16: a ten-rep day and a twelve-rep day are different
+// training and stay separate, even though it means waiting a session for the first reference.
+function histLastLike(name, target, notDate){
+  try{
+    if(typeof target!=='number' || !(target>0)) return null;
+    var H=histFor(name)||[];
+    for(var i=H.length-1;i>=0;i--){
+      var r=H[i]; if(!r || r.w==null) continue;
+      if(notDate && r.d===notDate) continue;
+      if(histTarget(r)===target) return r;
+    }
+  }catch(e){}
+  return null;
+}
+// The heaviest session at THIS rep target. "Your best here" used to be the best weight across every
+// day type, so a five-rep best stood as the number to chase on a ten-rep day - and since that line
+// only draws when today is within 6% of the best, an incomparable heavy day removed it entirely.
+function histBestLike(name, target){
+  try{
+    if(typeof target!=='number' || !(target>0)) return null;
+    var b=null;
+    (histFor(name)||[]).forEach(function(x){
+      if(!x || x.w==null) return;
+      if(histTarget(x)!==target) return;
+      if(!b || x.w>b.w) b=x;
+    });
+    return b;
+  }catch(e){ return null; }
+}
 // Volume per set where the weights are known. A session done at three different loads was
 // being multiplied by one of them; older records have no ws and fall back to the single weight.
 function histVolume(x){
@@ -14863,7 +14953,11 @@ function recordHistory(){
       if(x.w!=null&&(bw==null||x.w>bw)) bw=x.w;
       if(x.e1!=null&&(be==null||x.e1>be)) be=x.e1;
       var v=histVolume(x); if(bv==null||v>bv) bv=v; });
-    var rec={d:date, w:(typeof w==='number'?w:null), sets:reps, ws:ws, e1:e1};
+    // FIELD 2026-09-16 (Jerry). The rep TARGET of the session, so a later screen can compare
+    // like with like instead of comparing a five-rep day to a ten-rep day and calling the
+    // difference progress. Stored rather than inferred from here on; histTarget() below infers it
+    // for everything logged before today.
+    var rec={d:date, w:(typeof w==='number'?w:null), sets:reps, ws:ws, e1:e1, rt:(typeof tgt==='number'&&tgt>0? tgt : null)};
     var vol=histVolume(rec);
     if(prior.length){
       if(rec.w!=null&&bw!=null&&rec.w>bw) out.push({ex:nm,kind:'weight',val:rec.w,prev:bw});
@@ -15729,15 +15823,42 @@ function howtoFor(n){ return HOWTO[n]||''; }
 // v221: a removed movement is out of the day, so it is out of the focus walk too - otherwise
 // stepping through the session lands on a row that only says OUT.
 function dayLive(){ try{ return dayObj().exercises.filter(function(e){ return !isOut(e.name); }); }catch(e){ return []; } }
-function focusMax(){ try{ var n=dayLive().length; return n||1; }catch(e){ return 1; } }
+// FIELD 2026-09-16 (Jerry): his card read "Exercise 6 of 5".
+//
+// There are two index spaces in a day and they are not the same one:
+//
+//     S.focus / focusIdx()  are positions in the LIVE day - what dayLive() returns
+//     exKey / exDone / exState / d.exercises[i]  are positions in the RAW plan
+//
+// They agree until something is removed from the day, and then they differ by the number removed
+// above that point. liveRaw() is the ONLY place the two meet: the raw positions of the movements
+// actually being trained, in order. Live index in, raw index out.
+//
+// S.focus is a LIVE index everywhere, without exception. Making it raw would have been a smaller
+// change and a wrong one - a raw focus can point at a movement that is not in the day, and then
+// the focus walk has to decide what to show, which is the same ambiguity moved somewhere else.
+// The live list is the day the athlete is actually doing, and a position in it is the only thing
+// "exercise 3 of 6" can honestly mean.
+//
+// Storage is untouched: exKey() keeps its RAW index, so removing a movement still cannot move
+// anybody's logged sets. That is why this converts at the point of use instead of renumbering.
+function liveRaw(){
+  try{
+    var out=[];
+    dayObj().exercises.forEach(function(e,i){ if(!isOut(e.name)) out.push(i); });
+    return out;
+  }catch(e){ return []; }
+}
+// The RAW position of the movement at a LIVE position - the plan entry and the storage key.
+function rawAt(f){ var m=liveRaw(); if(!m.length) return 0; if(f==null||f<0) f=0; if(f>=m.length) f=m.length-1; return m[f]; }
+function focusMax(){ try{ var n=liveRaw().length; return n||1; }catch(e){ return 1; } }
+// Returns a LIVE index. It always fed S.focus, which is read as live, but walked the RAW array
+// under a LIVE bound - so after a calendar move, a day change or a restore, the card opened on the
+// wrong movement whenever anything had been removed above it.
 function firstOpenFocus(){
   try{
-    var d=dayObj(), m=focusMax();
-    for(var i=0;i<m;i++){
-      var ex=d.exercises[i]; if(!ex) continue;
-      if(typeof isOut==='function' && isOut(ex.name)) continue;   // swapped out at this gym
-      if(!exDone(i)) return i;
-    }
+    var m=liveRaw();
+    for(var f=0;f<m.length;f++){ if(!exDone(m[f])) return f; }
   }catch(e){}
   return 0;
 }
@@ -15758,9 +15879,12 @@ function exCounts(i){
     return true;
   }catch(e){ return true; }
 }
+// This ran `for(i=0;i<focusMax();i++)` over d.exercises - a LIVE bound indexing the RAW array, so
+// it stopped short of the movements at the end of the day AND counted removed ones inside the
+// bound. Hence "Exercise 6 of 5". It walks the day itself now.
 function sessionPct(){
-  var m=focusMax(), n=0, t=0;
-  for(var i=0;i<m;i++){ if(!exCounts(i)) continue; t++; if(exDone(i)) n++; }
+  var n=0, t=0;
+  liveRaw().forEach(function(r){ if(!exCounts(r)) return; t++; if(exDone(r)) n++; });
   return {done:n, total:t};
 }
 // ---- a session with nothing in it is not a session -------------------------
@@ -15815,9 +15939,12 @@ function sessionHasWork(){
 function deckHeadHTML(){
   var d=dayObj(), f=focusIdx(), p=sessionPct(), open=(S.view==='deck');
   var dots='';
-  for(var i=0;i<d.exercises.length;i++){
-    dots+='<i class="'+(exDone(i)?'done':(i===f?'now':''))+'" aria-hidden="true"></i>';
-  }
+  // One pip per movement IN THE DAY. This ran the whole raw list, so a removed movement kept its
+  // dot, and `i===f` compared a raw index against a live one - the "you are here" pip sat on the
+  // wrong movement.
+  liveRaw().forEach(function(r,fi){
+    dots+='<i class="'+(exDone(r)?'done':(fi===f?'now':''))+'" aria-hidden="true"></i>';
+  });
   return '<div class="deckhead lockfree">'
    // DESIGN AUDIT 2026-09-13 (D04). The pips are a PICTURE of progress; the strip is the control.
    // Announcing eleven anonymous children and no operable parent is backwards, so the children are
@@ -15835,10 +15962,17 @@ function deckHeadHTML(){
 function deckHTML(){
   var d=dayObj(), f=focusIdx(), h='';
   h+='<div class="deckwrap">';
+  // FIELD 2026-09-16 (Jerry). Every row here is a LIVE movement, but each was labelled with its RAW
+  // plan position and that is what a tap handed to setFocus(), which reads live. With one movement
+  // removed from a five-movement day, THREE of the four remaining rows opened the movement below
+  // the one tapped. The last row landed correctly only because the clamp pulled it back - which is
+  // exactly why the first version of the probe, which tapped only the last row, found nothing.
+  var fi=-1;
   d.exercises.forEach(function(ex,i){
     var st=null; try{ st=S.data[exKey(i)]; }catch(e){}
     var done=exDone(i), started=exStarted(i), out=false;
     try{ out=isOut(ex.name); }catch(e){}
+    if(!out) fi++;
     // His rule, 2026-09-08: "if your removing a prescribed exercise and replacing it... it
     // hides or doesnt show on the days training because it shows as skipped but its
     // distracting and doesnt actually have to be there if the athlete is deciding to change
@@ -15850,7 +15984,7 @@ function deckHTML(){
     var pills='';
     if(out) pills='<span class="pill sk">SKIPPED</span>';
     else if(done) pills='<span class="pill dn">DONE</span>';
-    else if(i===f) pills='<span class="pill up">UP NOW</span>';
+    else if(fi===f) pills='<span class="pill up">UP NOW</span>';
     else if(started) pills='<span class="pill st">STARTED</span>';
     var mini='';
     if(st&&!out){ st.sets.forEach(function(s){ mini+='<i class="'+(s.st==='pend'?'':(s.st==='hit'?'h':'d'))+'"></i>'; }); }
@@ -15865,8 +15999,8 @@ function deckHTML(){
       ctl+='<span class="drbtn exx'+(armed?' warn':'')+'" data-exout="'+i+'" title="'+(ex.custom?'Delete this added exercise':'Remove from today (restorable)')+'">'+(armed?'Sure?':'\u2715')+'</span>';
     }
 
-    h+='<div class="deckrow'+(i===f?' cur':'')+(done?' fin':'')+'" data-focus="'+i+'" style="animation-delay:'+(i*28)+'ms">'
-     +'<div class="dr-n">'+(i+1)+'</div>'
+    h+='<div class="deckrow'+(fi===f?' cur':'')+(done?' fin':'')+'" data-focus="'+fi+'" style="animation-delay:'+(fi*28)+'ms">'
+     +'<div class="dr-n">'+(fi+1)+'</div>'
      +'<div class="dr-b"><div class="dr-t">'+esc(st&&st.sub?st.sub:ex.name)+' '+pills+'</div>'
      +'<div class="dr-s">'
         // the role belongs on the LIST most of all: this is where the day is scanned and where
@@ -15923,7 +16057,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v237g';
+const BUILD = 'v237j';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -17229,11 +17363,9 @@ function goalTag(ex){
     if(!g){
       var r=null;
       try{ r=defReps(ex); }catch(e){}
-      if(typeof r!=='number' || !(r>0)) return null;
-      if(r<=5)  return 'STRENGTH';
-      if(r<=8)  return 'HYPERTROPHY';
-      if(r<=12) return 'MUSCLE';
-      return 'ENDURANCE';
+      // 2026-09-16: this classification now lives in repQuality(), because the reference line
+      // beneath the working weight has to name a PAST day the same way this badge names today's.
+      return repQuality(r);
     }
     var short={ 'Muscular Endurance':'ENDURANCE', 'Lose Weight':'FAT LOSS',
                 'Build Muscle':'MUSCLE', 'Hypertrophy':'HYPERTROPHY',
@@ -17666,14 +17798,98 @@ function estAccessory(n){
   v=Math.max(fx.min||step, Math.round(v/step)*step);
   return {val:v, conf:r[6], unit:r[5], base:r[3]};
 }
+// The prescribed rep range as numbers. "10-15" is {lo:10,hi:15}; a bare "8" is {lo:8,hi:8}.
+function repRange(ex){
+  try{
+    var s=String(exReps(ex));
+    var m=s.match(/(\d+)\s*[-–]\s*(\d+)/);
+    if(m) return {lo:+m[1], hi:+m[2]};
+    var n=s.match(/\d+/);
+    if(n) return {lo:+n[0], hi:+n[0]};
+  }catch(e){}
+  return null;
+}
+// The effort the prescription asks for, as a number the RIR table can use. "2, last set 1" is 2.
+// Both directions of a conversion use the same value, so what is held constant is the athlete's
+// strength and what changes is the rep count.
+function exRIRNum(ex){
+  try{
+    var m=String((ex&&ex.rir)!=null? ex.rir : '').match(/\d+/);
+    var v=m? parseInt(m[0],10) : 2;
+    if(!isFinite(v)||v<0) v=0;
+    if(v>E1_MAXRIR) v=E1_MAXRIR;
+    return v;
+  }catch(e){ return 2; }
+}
+// HIS ASK 2026-09-16: "when the athlete selects muscular endurance or other goals, this definitely
+// should automatically adjust their ENTIRE session."
+//
+// It did not. This read S.lastPerf - ONE weight per movement, at whatever rep target it happened to
+// be set - and nothing downstream ever asked what the prescription is now. Rope Pushdowns logged at
+// 60 lb for eights were prescribed at 60 lb for 6-8 under Strength AND 60 lb for 15-20 under
+// Muscular Endurance. The card asked for twenty reps at a weight it chose for six.
+//
+// That is FLD01 on the other side of the wall: that finding was the DISPLAY comparing a five-rep
+// day to a ten-rep day, this is the PRESCRIPTION doing it.
+//
+// HIS DECISION, asked and answered 2026-09-16 - convert where it is honest, ask where it is not:
+//
+//   logged   the athlete has trained this movement AT this rep target. Measured, exact.
+//   conv     no history at this target, but both targets are inside the 1-10 range RIR_PCT is
+//            defined for, so the weight converts through the card's own table. No new number.
+//   stale    neither - which is every 12-15 and 15-20 prescription, because the table stops at ten
+//            and refuses to be extrapolated. The anchor is shown and NAMED as being for different
+//            work, and accNote() asks for a dial-in. A number nothing backs is worse than a
+//            question.
+//   est      never trained, never logged: the old ratio estimate off a main lift, unchanged.
 function accAnchor(ex){
   if(ex.maxKey) return null;                       // main lifts run off percentages
   const nm=ex.name;
+  var want=null; try{ want=defReps(ex); }catch(e){}   // bottom of the range: where double
+                                                      // progression is meant to start
+  var rng=null; try{ rng=repRange(ex); }catch(e){}
+  // 1. comparable work, actually performed.
+  try{
+    if(typeof histLastLike==='function' && typeof want==='number' && want>0){
+      var like=histLastLike(nm, want, (S.when&&S.when.date));
+      if(like && like.w!=null && like.w>0) return {val:like.w, src:'logged', conf:'high', rt:want};
+    }
+  }catch(e){}
+
   const LP=(S.lastPerf||{})[nm];
   // AUDIT 2026-09-06: a stored zero or negative weight - a bodyweight movement logged with a
   // number, a mangled restore - was taken as a real anchor. It scaled the ladder to nothing and
   // the card prescribed the smallest weight the implement makes, 5 lb, labelled "logged".
-  if(LP && LP.w!=null && LP.w>0) return {val:LP.w, src:'logged', conf:'high'};
+  if(LP && LP.w!=null && LP.w>0){
+    var had=null;
+    try{
+      var digits=String(LP.r==null?'':LP.r).match(/\d+/g);
+      had=(typeof repsTarget==='function')? repsTarget((digits||[]).map(Number)) : null;
+    }catch(e){}
+    // The anchor is already the right kind of work, or we cannot tell what kind it was.
+    //
+    // CAUGHT BY grindtest 2026-09-16, and it was a real regression rather than a rotted test. An
+    // earlier cut asked `had===want`, comparing the anchor's reps to the BOTTOM of the range - so
+    // an athlete who had just topped an 8-12 range at twelves looked like a different kind of
+    // training, took the conversion path, and skipped double progression entirely. Every case in
+    // grindtest held at 200 lb. Topping the range is the normal, wanted state; it is not a change
+    // of training.
+    //
+    // A session is comparable when its reps fall INSIDE the prescribed range. Only work outside the
+    // range is a different quality, and only that converts.
+    if(had==null || rng==null) return {val:LP.w, src:'logged', conf:'high', rt:had};
+    if(had>=rng.lo && had<=rng.hi) return {val:LP.w, src:'logged', conf:'high', rt:had};
+    // 2. convert, but only inside the table.
+    try{
+      var rir=exRIRNum(ex);
+      var est=e1rmFrom(LP.w, had, rir);
+      var got=(est!=null)? loadForReps(est, want, rir) : null;
+      if(got!=null && got>0)
+        return {val:got, src:'conv', conf:'high', rt:want, from:had, fromW:LP.w};
+    }catch(e){}
+    // 3. cannot be converted honestly. Say so rather than pretend.
+    return {val:LP.w, src:'stale', conf:'high', rt:had, from:had, want:want};
+  }
   const e=estAccessory(nm);
   if(!e) return null;
   return {val:e.val, src:'est', conf:e.conf, base:e.base};
@@ -17752,7 +17968,20 @@ function inferStep(name){
     }catch(e){}
     var lp=(S.lastPerf||{})[name]; if(lp && lp.w>0) ws.push(lp.w);
     ws=ws.filter(function(x){ return x>0; });
-    if(ws.length<2) return null;
+    // 2026-09-16. This counted SAMPLES where it needs DISTINCT WEIGHTS, and the same session is
+    // read twice - once out of S.exHist, once off S.lastPerf. So one logged 60 satisfied "at least
+    // two" and every test below passed, because 60 is a multiple of ten AND of five AND of 2.5.
+    // A single weight cannot tell you what the rack offers; it is one point, and a step is a gap
+    // between two points.
+    //
+    // The damage was not theoretical. An athlete who had only ever logged 20 lb dumbbells was
+    // credited with a rack that moves in TENS, so the card would never offer them the 25s that
+    // exist on every rack - and X08's own reproduction of this function was a prescription moving
+    // 60 -> 65 with no new training. Found here because it silently cancelled the goal conversion
+    // above: every converted accessory rounded straight back to the weight it started from.
+    var uniq=ws.filter(function(x,i){ return ws.indexOf(x)===i; });
+    if(uniq.length<2) return null;
+    ws=uniq;
     if(ws.every(function(x){ return x%10===0; })) return 10;
     if(ws.every(function(x){ return x%5===0; })) return 5;
     if(ws.every(function(x){ return (x*2)%5===0; })) return 2.5;
@@ -17773,6 +18002,28 @@ function fixedStep(ex){
 }
 function accLoad(ex){
   const A=accAnchor(ex); if(!A) return null;
+  // 2026-09-16. A converted or not-yet-comparable anchor is a STARTING weight, not evidence. The
+  // double-progression machinery below reads S.lastPerf against the CURRENT rep range, and a
+  // session performed at a different rep target can neither confirm nor deny that the range was
+  // topped - so it must not be allowed to ratchet, cap or escape off it. The ladder starts again
+  // from the new weight, which is what beginning a different kind of training actually is.
+  if(A.src==='conv' || A.src==='stale'){
+    var v=A.val;
+    try{
+      var fxc=fixedStep(ex);
+      // NEAREST step, which is what accLoad's own ladder does three lines down - not the floor.
+      // Checked rather than assumed: a 60 lb x 8 anchor at RIR 1 estimates a 79 lb max, which the
+      // table puts at 58.8 lb for tens. On a stack that offers 50 or 60, flooring gives 50 - 11%
+      // light, a wasted session - while 60 is 2% over the estimate and the athlete simply works up
+      // through the range, which is what double progression is. Flooring also collapses badly when
+      // the step is coarse relative to the weight: a 19.5 lb estimate on an inferred 10 lb step
+      // floors to 10, a 49% cut. Rounding is bounded at half a step in both directions.
+      v = fxc ? Math.max(fxc, Math.round(v/fxc)*fxc)
+        : ex.barbell ? plateRound(v)
+        : Math.max(5, Math.round(v/5)*5);
+    }catch(e){}
+    return v;
+  }
   var __heldForEffort=false;      // P05: was the load held because the athlete was at their limit?
   const w=ex.wk;
   if(!w || w[0]==null || !isFinite(w[0]) || w[0]<=0) return A.val;
@@ -17949,6 +18200,18 @@ function accProgNote(ex){
 }
 function accNote(ex){
   const A=accAnchor(ex);
+  // 2026-09-16. The goal changed what this movement is FOR, and the athlete is owed that in words
+  // rather than left to notice a weight that does not suit the reps beside it.
+  if(A && A.src==='conv'){
+    return '<div class="sleeve-label">'+esc(ex.name)+' is '+esc(String(exReps(ex)))+' reps now, not '
+      +A.from+' \u2014 this is your '+WV(A.fromW)+' '+uLbl()+' converted to the new rep target. '
+      +'Adjust it if it feels wrong and the card anchors off what you actually lift.</div>';
+  }
+  if(A && A.src==='stale'){
+    return '<div class="sleeve-label">this weight was set for '+A.from+' reps \u2014 today asks for '
+      +esc(String(exReps(ex)))+'. That is too far apart to convert honestly, so set a weight you '
+      +'could stop about two reps short of at '+A.want+', and log it. The card takes it from there.</div>';
+  }
   if(A && A.src==='logged'){
     var sa=''; try{ sa=accStallAdvice(ex); }catch(e){}
     if(sa) return sa;
@@ -20024,7 +20287,13 @@ function renderInner(){
       +(function(){
          try{
            if(isDeload()) return '';
-           var bb=histBest(dispName); if(!bb || bb.w==null) return '';
+           // FIELD 2026-09-16 (Jerry). Was histBest() - the heaviest session at ANY rep target - so
+           // on a ten-rep day the number to chase was a five-rep best, and because this line only
+           // appears within 6% of the best, a heavy five-rep day did not mislabel it, it removed
+           // it. Same rule as the reference line below: a best is only a best among comparable
+           // work.
+           var __t=null; try{ __t=defReps(ex); }catch(e){}
+           var bb=histBestLike(dispName, __t); if(!bb || bb.w==null) return '';
            if(typeof w!=='number' || w<=0) return '';
            if(w>bb.w) return '';                       // already past it; the star below says so
            var r=w/bb.w;
@@ -20033,9 +20302,45 @@ function renderInner(){
              +(bb.d? ' \u00b7 '+bb.d : '')+'</div>';
          }catch(e){ return ''; }
        })()
-      +(function(){ const LP=(S.lastPerf||{})[dispName]; if(!LP||LP.d===S.when.date) return '';
-         const beat=(typeof w==='number' && LP.w!=null && w>LP.w);
-         return '<div class="sleeve-label">last logged '+LP.d+': '+(LP.w!=null? WV(LP.w)+' '+uLbl()+' \u2014 ':'')+LP.r+(beat?' \u00b7 \u2605 heavier today':'')+'</div>'; })()
+      // FIELD 2026-09-16 (Jerry). This read S.lastPerf - ONE record per exercise, whichever session
+      // was most recent - so on a strength day it showed the muscle-endurance day, and the star
+      // fired because today's five-rep weight beat a ten-rep weight. On his own numbers: 240 x 5
+      // shown against 225 x 10 as "heavier today", when his last strength day was 265.
+      //
+      // S.lastPerf is NOT re-pointed: it is the accessory anchor accLoad() builds prescriptions
+      // from, and changing it would change programming rather than presentation. This reads the
+      // history instead, and only for display.
+      +(function(){
+         try{
+           var __t=null; try{ __t=defReps(ex); }catch(e){}
+           var __lbl=repQuality(__t);
+           var __kind=__lbl? esc(__lbl)+' day' : 'session';
+           var __line=function(d,wt,reps){
+             var __beat=(typeof w==='number' && wt!=null && w>wt);
+             return '<div class="sleeve-label">last '+__kind+' '+d+': '
+               +(wt!=null? WV(wt)+' '+uLbl()+(reps? ' \u2014 ':'') : '')+(reps||'')
+               +(__beat?' \u00b7 \u2605 heavier today':'')+'</div>';
+           };
+           var __like=histLastLike(dispName, __t, S.when.date);
+           if(__like)
+             return __line(__like.d, __like.w, (__like.sets||[]).filter(function(v){ return v!=null; }).join(','));
+
+           // Nothing comparable in history. The anchor can outlive the record - history keeps 80
+           // sessions per movement and an import may carry no history at all - so read the anchor's
+           // own reps before deciding what it was. Calling a genuinely comparable day "a different
+           // kind of day" would be this same defect pointing the other way.
+           var LP=(S.lastPerf||{})[dispName];
+           if(!LP || LP.d===S.when.date) return '';
+           var __lpReps=String(LP.r==null?'':LP.r).match(/\d+/g);
+           var __lpT=repsTarget((__lpReps||[]).map(Number));
+           if(__lpT!=null && __t!=null && __lpT===__t) return __line(LP.d, LP.w, LP.r);
+
+           return '<div class="sleeve-label">no '+(__lbl? esc(__lbl)+' ':'comparable ')
+             +'day logged yet \u00b7 last was '+LP.d+': '
+             +(LP.w!=null? WV(LP.w)+' '+uLbl()+' \u2014 ':'')+LP.r
+             +' <span style="color:var(--faint)">(different kind of day)</span></div>';
+         }catch(e){ return ''; }
+       })()
       +(function(){ try{ return adRecentCueHTML(ex); }catch(e){ return ''; } })()
       +'</div>'
       + weightEditorHTML(i,ex,st)
@@ -20437,20 +20742,64 @@ function dayUtilHTML(){
 // iOS pins position:fixed to the LAYOUT viewport, not the one on screen. Open the keyboard
 // (weight editor, notes) or zoom, and the visual viewport shrinks and pans - the deck bar
 // then floats mid-screen while scrolling (field bug 2026-08-31). Whenever the two viewports
-// disagree, translate the bars to hug the bottom the athlete can actually see.
+// disagree, offset the bars to hug the bottom the athlete can actually see.
+//
+// FIELD 2026-09-16 (Jerry), with a screenshot: "there are times where the bottom header gets stuck
+// in the middle of the screen." Three defects, and his screenshot showed two of them.
+//
+//   1. THE LATCH. The old coalescer was `if(!raf) raf=requestAnimationFrame(place)`, and `raf` was
+//      cleared only inside place(). A frame that never runs left the token set FOREVER and every
+//      later event was silently dropped. A frame that never runs is a phone locking between sets,
+//      which is what a rest timer is for. The bar kept its offset until the card was reloaded.
+//   2. THE REACH. `.footer,.stbar` - two elements. His screenshot has the deck bar drawn ABOVE the
+//      calculator button, which is anchored 96px higher: the bar moved, the button did not.
+//   3. NO RE-MEASURE ON RESUME. iOS does not reliably fire a viewport event when an app comes back,
+//      and visualViewport 'scroll' does not fire for ordinary document scrolling at all - only
+//      while zoomed. A stale offset had no ordinary interaction that would correct it.
+//
+// The offset is now ONE custom property on :root and each bar composes it in its own rule. That is
+// what makes widening the reach safe: assigning el.style.transform would have destroyed the
+// transforms those elements already carry - the toast's translateX(-50%), the calculator button's
+// press scale. It also means a bar rendered AFTER the last viewport event inherits the right
+// offset, which an inline style could never do.
 (function(){
   var vv=window.visualViewport; if(!vv || !vv.addEventListener) return;
-  var raf=0;
+  var pend=0, last=null;
   function place(){
-    raf=0;
+    if(!pend) return;          // someone else already did this turn's work
+    pend=0;
     var dy=(vv.offsetTop+vv.height)-window.innerHeight;
-    var t=(Math.abs(dy)>1)? 'translateY('+dy+'px)' : '';
-    document.querySelectorAll('.footer,.stbar').forEach(function(el){ el.style.transform=t; });
+    // A reading larger than the viewport, or not a number at all, is a bad measurement rather than
+    // a layout instruction. Refuse it instead of moving a bar off the screen on the strength of it.
+    var lim=window.innerHeight||0;
+    if(!isFinite(dy) || (lim>0 && Math.abs(dy)>lim)) dy=0;
+    var t=(Math.abs(dy)>1)? dy+'px' : '0px';
+    if(t===last) return;
+    last=t;
+    try{ document.documentElement.style.setProperty('--vvdy', t); }catch(e){}
   }
-  function ask(){ if(!raf) raf=requestAnimationFrame(place); }
+  // Both paths clear the same flag, so whichever arrives first does the work and the other is a
+  // no-op. Timers are throttled while an app is backgrounded but they FIRE on resume; a cancelled
+  // animation frame never does, which is the whole of defect 1.
+  function ask(){
+    if(pend) return;
+    pend=1;
+    try{ requestAnimationFrame(place); }catch(e){}
+    setTimeout(place, 120);
+  }
   vv.addEventListener('resize', ask);
   vv.addEventListener('scroll', ask);
+  // Ordinary document scrolling does not raise a visualViewport event on iOS. Passive, so this can
+  // never delay a scroll.
+  try{ window.addEventListener('scroll', ask, {passive:true}); }catch(e){ window.addEventListener('scroll', ask); }
   window.addEventListener('orientationchange', function(){ setTimeout(ask,300); });
+  // Coming back is exactly when a stale offset has to be corrected. Placed twice: once now, and
+  // once after the frame iOS spends settling its own chrome.
+  function wake(){ ask(); setTimeout(ask,250); }
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState!=='hidden') wake(); });
+  window.addEventListener('pageshow', wake);
+  window.addEventListener('focus', wake);
+  ask();                       // and once at startup, rather than waiting for an event that may not come
 })();
 function paintFoot(){ var el=document.getElementById('footInner'); if(!el) return;
   // setup owns the screen: no deck under it (field 2026-09-03, "NEXT Overhead Press" under the welcome)
@@ -23070,6 +23419,23 @@ function e1rmFrom(weight, reps, rir){
   var pct=RIR_PCT[rir][reps-1];
   if(!pct) return null;
   return Math.round(weight/(pct/100));
+}
+// The same table read the other way: what load does this estimated max support for `reps` at
+// `rir`? Added 2026-09-16 so a goal change can move an accessory's weight when it moves the rep
+// target, without inventing a percentage to do it with.
+//
+// It refuses in exactly the places e1rmFrom() refuses, and for the same reason. The chart is
+// defined for 1-10 reps at 0-4 RIR. A fifteen-rep or twenty-rep prescription is OUTSIDE it, and
+// the honest answer there is not a number - it is to say so and ask the athlete to set the weight.
+function loadForReps(est, reps, rir){
+  if(!(est>0)) return null;
+  reps=Math.round(reps); rir=Math.round(rir);
+  if(reps<1||reps>E1_MAXREPS) return null;
+  if(rir<0) rir=0;
+  if(rir>E1_MAXRIR) return null;
+  var pct=RIR_PCT[rir][reps-1];
+  if(!pct) return null;
+  return est*(pct/100);
 }
 // Confidence band on that estimate. Trained lifters sit around +/-4%; novices are wider
 // because RIR accuracy is a trained skill (Helms 2016 advises novices not to base
