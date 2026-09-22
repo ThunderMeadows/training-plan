@@ -4982,6 +4982,19 @@ function landOnTraining(){
   try{
     if(!PLAN || !PLAN.days || !PLAN.days.length) return false;
     var was=S.day+'|'+S.week;
+    // FIELD 2026-09-16. This used to go straight to the tab branch below, which calls
+    // nextSession() - and nextSession() takes its WEEK from timeWeek(), so on day 8 of a block it
+    // returns week 2 whatever the athlete has actually finished. The guard that should have
+    // stopped that is real and it is in syncToNext(), TWO LINES DOWN: by the time it runs the
+    // pointer has already moved, so it reads the new pointer, finds it unlogged and returns
+    // satisfied. An athlete who stepped off a half-done Week 1 session to look at a tab came back
+    // to Week 2 with his sets behind him.
+    //
+    // dayRollCheck() already had this right, and said so in its own comment: decide BEFORE
+    // syncToNext() moves the pointer, while S.week and S.day still say which session that is.
+    // Same sentence, the other door.
+    var op=null; try{ op=openSession(); }catch(e){}
+    if(op && !(op.week===S.week && op.code===S.day)){ S.day=op.code; S.week=op.week; }
     var onTab=!PLAN.days.some(function(d){ return d.code===S.day; });
     if(onTab){
       var nx=null; try{ nx=nextSession(); }catch(e){}
@@ -5006,7 +5019,6 @@ try{
       var away=landHiddenAt? (Date.now()-landHiddenAt) : 0; landHiddenAt=null;
       if(away<LAND_AWAY_MS) return;                      // a glance at another app, not a new visit
       if(typeof SET_BUSY!=='undefined' && SET_BUSY) return;
-      try{ if(!accessOK()){ accessEnforce(); bootAccess(); return; } }catch(e){}
       if(landOnTraining()){ save(); render(); }
     }catch(e){}
   });
@@ -5051,6 +5063,51 @@ function strandHold(c, w, d){
     return true;
   }catch(e){ return false; }
 }
+// FIELD 2026-09-16, one of Jerry's athletes: "he was in the middle of week 1 completion and
+// today he opened his app and it set his day on mid of week 2."
+//
+// The session he is PART-WAY THROUGH: performed sets in this block that were never banked. Named
+// from state every athlete already has, so this also carries back the athletes the defect has
+// already moved - there is no flag that only new sessions will carry.
+//
+// Three refusals, each one load-bearing:
+//   - it will not fire while the athlete is standing on live work of their own, so it can never
+//     pull anybody out of the session they are actually in;
+//   - it is bounded to the current training week and the one before it. A set state carries no
+//     date, so the week it sits in is the only honest clock this can read, and one week is
+//     HOLD_MAX_DAYS in the unit the data actually has. A draft abandoned in week 1 does not
+//     capture an open in week 5;
+//   - it honours `freed`. Having once tapped Go to today, the athlete is not carried back
+//     tomorrow to the same session.
+function openSession(){
+  try{
+    var C=cyc(), tw=timeWeek();
+    // standing on live work: they are already where they should be
+    if(PLAN.days.some(function(d){ return d.code===S.day; })
+       && !sessionLogged(S.week, S.day) && sessionWorkAt(C, S.week, S.day)) return null;
+    var floorW=Math.max(1, tw-1);
+    var freed=(S.strand && S.strand.freed && S.strand.c===C)? (S.strand.w+'|'+S.strand.d) : null;
+    var s=S.strand;
+    if(s && s.c===C && !s.freed && s.w>=floorW && s.w<=tw
+       && !sessionLogged(s.w, s.d) && sessionWorkAt(C, s.w, s.d)) return {week:s.w, code:s.d};
+    var codes=(PLAN&&PLAN.days||[]).map(function(d){ return d.code; });
+    var best=null;
+    Object.keys(S.data||{}).forEach(function(k){
+      // set state is keyed <block>c|<week>|<code>|<position>
+      var m=/^(\d+)c\|(\d+)\|([^|]+)\|\d+$/.exec(k);
+      if(!m || (+m[1])!==C) return;
+      var w=+m[2], d=m[3];
+      if(w<floorW || w>tw) return;
+      if(codes.indexOf(d)<0) return;
+      if(freed===(w+'|'+d)) return;
+      if(sessionLogged(w, d)) return;
+      if(!sessionWorkAt(C, w, d)) return;
+      var rank=w*1000+codes.indexOf(d);
+      if(!best || rank>best.rank) best={week:w, code:d, rank:rank};
+    });
+    return best? {week:best.week, code:best.code} : null;
+  }catch(e){ return null; }
+}
 function syncToNext(){
   // On open, land on the next unsaved session. Never hijack a tab (YOU/RATE/CAL/PLAN) or a
   // session still in progress (no saved log yet) — only advance once the current one is banked.
@@ -5058,6 +5115,14 @@ function syncToNext(){
   // longer stays on a tab. The in-progress rule is unchanged and lives here.)
   try{
     if(!PLAN.days.some(function(d){ return d.code===S.day; })) return;
+    // 2026-09-16. This call used to live one line below, INSIDE the Open branch, so F28's hold
+    // and the banner that explains it reached Open-rhythm athletes only - and Guided is the
+    // default. A Guided pointer did stay put, but by accident of ordering: the unbanked-session
+    // check further down returns on the same condition. So nothing was recorded, strandBannerHTML
+    // had nothing to render, and the athlete saw Week 1 loads against a Week 2 calendar with no
+    // sentence joining them. dayRollCheck() has always called this unconditionally; this is the
+    // same guard, at the other door. For Guided the POINTER behaviour is unchanged to the line.
+    try{ if(strandHold(cyc(), S.week, S.day)) return; }catch(e){}
     // OPEN with a weekday map: land on the session this weekday actually owns, if it is still
     // unlogged. The athlete can move off it freely - this is where the card OPENS, not a rail.
     if(splitOpen()){
@@ -5069,8 +5134,8 @@ function syncToNext(){
       // The card holds instead. The CALENDAR is untouched - timeWeek() is still the truth, and the
       // banner leads with it - but the pointer waits on the unfinished session, so the half-done
       // work is exactly where the athlete left it, under its own week and its own prescription.
-      // One tap releases it. See strandBannerHTML().
-      try{ if(strandHold(cyc(), S.week, S.day)) return; }catch(e){}
+      // One tap releases it. See strandBannerHTML(). (The call itself now runs for both
+      // rhythms, a few lines above - 2026-09-16.)
       // and bring a stale pointer up to the calendar rather than stranding it in a spent week
       if(S.week<timeWeek()) S.week=timeWeek();
       var sc=schedTodayCode();
@@ -7394,13 +7459,8 @@ async function rosterLoad(){
       ROSTER.active=r.active||null;
       if(ROSTER.mode!=='coach') ROSTER.active=null;          // solo never reads a namespaced drawer
       if(ROSTER.active && !rosterAthlete(ROSTER.active)) ROSTER.active=null;
-      // AUDIT 2026-09-11 (finding L1). rosterLoad restored mode, athletes and the active id but
-      // never the access mirror, so cold-opening straight into an athlete's drawer left
-      // ROSTER.access undefined and coachAllowed() false - the card asked an already-authorised
-      // coach for a code, in their own gym, holding their own phone. The holder's grant belongs
-      // to the HOLDER and is saved beside the roster precisely so it survives a drawer being
-      // open; it must be read back with it.
-      if(r.access && typeof r.access==='object') ROSTER.access=r.access;
+      // L1's access mirror is gone with the gate (2026-09-22). A roster carries athletes now,
+      // and nothing else.
     }
   }catch(e){ oops('rosterLoad',e); }
   // read the roster's progress ahead of the first paint: rosterProgress() is synchronous
@@ -7492,7 +7552,7 @@ async function rosterSwitch(id){
     if(!id) S.day='MAX';
     try{ await refreshLogs(); }catch(e){ oops('rosterSwitchLogs',e); }
     // v219: back on the holder's own card, run the access checks that a drawer defers
-    if(!id){ try{ accessLegacy(); accessEnforce(); if(!accessOK()) bootAccess(); }catch(e){} }
+    // 2026-09-22: switching back to the holder's own card used to re-check the gate here.
     render();
     // landing back on the roster: refresh the counts, then repaint. Async, so the screen is
     // already up - this only corrects the lines once the real numbers are in.
@@ -7698,11 +7758,8 @@ function rosterWire(){
   };
 }
 function coachToggleHTML(){
-  // ACCESS (v214): the switch is only offered to a holder with coach rights
-  if(typeof coachAllowed==='function' && !coachAllowed()){
-    return '<div class="block" id="coachNeed"><h3>Who is using this card</h3>'
-      +'<div class="cue">Coaching other people from this card needs a coach code. Enter one under Settings \u2192 Access.</div></div>';
-  }
+  // 2026-09-22: this used to be offered only to a holder with coach rights. There are no rights
+  // any more - coaching a roster is a feature of the card, not a tier of it.
   return '<div class="block"><h3>Who is using this card</h3>'
     +'<div class="cue">'+(ROSTER.mode==='coach'
         ? 'Coaching others. You keep your own card, and each athlete on the roster gets their own.'
@@ -9536,7 +9593,6 @@ function settingsBodyHTML(){
     +'</div>'
     +'<div class="exnote" style="padding:8px 0 0">If a day is shorter than this, the card fills the time for you. It adds a set to the light exercises first, then an exercise you need, then some easy cardio. It never removes work you have logged.</div>'
     +'</div></div>';
-  try{ h+=accessHTML(); }catch(e){}
   h+='<div class="ex"><div class="ex-head">'
     +'<div class="prof-edit" data-discshow="1" style="padding:6px 0">Read the training disclaimer</div>'
     +'<div class="prof-edit" data-termsshow="1" style="padding:6px 0">Terms &amp; Privacy</div>'
@@ -10602,328 +10658,26 @@ function bootDisc(force){
   }catch(e){}
 }
 
-// ===== ACCESS =====
-// His ask, 2026-09-07: "I want to add a security gate before being able to access the app.
-// Depending what code you input will depend what rights you are given... either athlete rights
-// or coach rights. You have to enter it once before you begin. It's only good for 3 months and
-// then you must renew. Anyone who has access to the app right now will automatically be given
-// athlete rights unless manually changed through their setting."
+// ===== THE CARD IS OPEN =====
+// 2026-09-22, his call: "I'd like to remove the keys feature. I'm going to keep it 100%
+// unlocked and free for everyone to use. No supervision."
 //
-// What this is and is not. The card is one static file with no server behind it, so the check
-// runs on the athlete's own phone, against data that is already on that phone. It is a GATE:
-// it decides who gets in and which tools they see, and it lets him cut access at renewal by
-// controlling who holds a current code. It is not a lock against someone editing their own
-// phone's storage. The codes are never in this file - only their SHA-256 fingerprints are, so
-// nobody can read a code out of the source. Rotating codes means new fingerprints and a build.
-var ACCESS_SALT='deadstop-access-v1', ACCESS_DAYS=90;
-// v218. Every code the card will accept, as a salted SHA-256 fingerprint, with its life in days
-// and a version tag so a build can retire a generation. p:1 marks a pool code - one an
-// administrator can issue from the encrypted pool below. The admin key lives a year, by his
-// decision on 2026-09-07 ("admin key should have 1 year expiration").
-var ACCESS_CODES=[
-  {h:'ede566747131e9232c4a6e5b19a18872a853425f67242b8b9a8bd04d315fc524', role:'athlete', days:90, v:1, exp:'2026-12-31'},
-  {h:'fb768d97f3c6792eb22c3b4cfb389c5b863e871a26d98be245373b384a6c0ae8', role:'coach', days:90, v:1, exp:'2026-12-31'},
-  {h:'9e634252c06574174ff4e01d63b6d0f36d51385a0afe718163e01f0887236f42', role:'admin', days:365, v:1, exp:'2027-09-08'},
-  {h:'44c2efec7a96e4d957f252f2fba977a39189643a6e96c2a5578b07b9390924d5', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'1a194a6a6f45a30e8031e179ff88bbbc499652bdc55621c02d20fcf7a3fc904c', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'c8e45fecb574b547bbc8b8d4225dba026e4e704d7046c1f219a2bcc799f0b352', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'b42ffdd661a89112204c1bca1fbcce130051301cd77a3d9dbb652e33ba834c19', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'5d4c1792aa8985b619724e0968c9161085c1db19c3991ae42871893091a20452', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'567766c029145737a0d4f23af1c58e335383f05d763f466947acfb1047f01f59', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'9cf05e906aab1982988e7181b46fe50ba7bd65b584a716df3ac55723dd01c9d4', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'5197a3d01f7256189bd9526e6c85c8b62c1fc58f739587f96fc5ffa4e36298a5', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'25acb823a2088a375f7b61fd33da0c84146c1ff1b01c9ee4868241d2be03b61e', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'79201bdb39fbec3c5b955049037ad2dda9ec79c261ece490215fb26df3a19685', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'b9f1f47b5fbfb30f909a8247d8702569f10142588e709c18124a0def72c246cb', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'4c099054f7e0986f230b57cb730aebe8ba5ddddc1bc7589307af7bef8690fac3', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'967d5c99827de8260c138c303086da1a4cdc164fae21c5712230c3293362bdc0', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'72c451911a9071a7807bb1c374b55d8f30f41ddaf06bc901a5dc939ada551422', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'c57b9354a79ad6c0348090753c3a1bcc57cf533d870958b17c60a7eeb56d139a', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'22fee4743fadef408e371718844f1ffd607ed3423aa3359220818e441dbab4c1', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'78caebf3a868eb4c29e935f28c796c389af5071c8d43c6a9d8a61a16b3e26df6', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'7f71af77e3f3fd22e23a8a5bd8c8ce2496c042bd93ab746e5b8b87b338aa6d6f', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'1f220033e0e46ef14893acc2753613f0d58f6559bfdb048324d396059b42bdde', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'e2d8eed5e5c69fdc691d32c1e762a4ca8c29829f444a10881b230c6009c3f698', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'cebb960b68340c67bde1b1cfc2fdcff8740952722afb60d415bea8cf4f67ca2e', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'1fba80cc56a80d15e18a9836b31fe519a3abed333254c326daf9eba160b007b1', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'515c40e7162a238bb9e12c0a6d043c595861ffac8b3c866ec633aed6fa9822dd', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'6887fc9ea4e45968d96829dec2d896e27a68e9e84ac61c07765255a9df2ac2df', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'2397ee218db32520a31412116a4731915a734b9ef1833668dfd58fca01f94553', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'680ccdd5227a3e85b1f201e70a8889858440cd4ce3e82b3507e1b7def2001590', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'0b216174f21363806218ce472c1dd7b4d661c9bfe7dd04113c9eb905730d1050', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'029b75ef23fc3f9be093b39c927d4bdfb311e8f39e6bdb9d7adf14cdd56979a9', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'907454a96a04200e9bcd3ac8a20228222a08cff9ceb2b51546a832e0084ec182', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'0acb767b947d3b61b045dcddacc31333dd8a3dd77dd2bd85d10264cc535480b6', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'0b5e3fb823b95c7bd63b68c6fba316f2a8ec9265a9f74287f6e08e7ec02223b4', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'6592913daf6237eae3b7dfff95b7d6b992b12297aa2a3c42a2c317b3bea0d6de', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'2caeef9198df6a143becbd3adc63ca8399437d1fba59b65afcf4f7768fda2b02', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'0a8225af609d3dc3c59a9fc79f38884503d35cd2156d4cbc99f60591ea65df43', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'1193a306d0d51271360f902e2f2fe5b08f4cbed3d1a1b516e33f97ce95cbd1a7', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'d9c8bc2d260612623f85989b02d25c8fa9d27d26d92dcd0fe55119b784fe074f', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'9c9dfe9ee06dee005f67bd3aa548da51a361e91cfa04c4fbe26fb26da7abe3dc', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'3a285ead0f273c8f7e0b86222f810194b3f7ca6cf64cb5db4c43c15dd9e89812', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'593d67f590929d79e1aeed3103261d3f27cea418bc1b1b2f8be6abf0496f0566', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'92b790e47c4d1687a9c994f371ef1bc3fd60ba75f2a079fb4470383728d3b3a4', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'b2ccd37300bc177a5b3f785e748f8e0bb4fbd57267e3e834a417e6e4d2104d50', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'c5a5f0606d0ca37726fdb7dbac16cfb8090d00b4b0e2234213ebf26219d6dfb2', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'3eab8dafd8c7c96271cfc8be6f11260b46f58b4b1b3dbd30ed88b035add4dace', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'10d01db447ff6e70ca554fb1025c948f9ec4b2cf6acd07a1fe46b46050003852', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'bebf655e42d92d7ae0163781c5d82422daa1a1d6e541d903591defaee1185f3c', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'44d6e8e6b8f1d2f6c8e67a037be1897dc13b7d5863cda9a1074853ef49b4cbb0', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'3519297e75bfcc660eb78bc574a2940f163c7b45c4029a549718b20c2cbb3040', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'6c1e107b9b61b51a8e30b7010ff43fcb36c644ac210f55942b0502e56d723b0c', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'6d21eccf92186dc49e749dc86f6d23e95575961df1787cd6a0653e218fa0da3f', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'b905981376e995749f748a15337bb9796622f79a6ebfb9665e486910a250a9ab', role:'athlete', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'b278ec31c584d79461c32296145e4eec0b81a34ec5a97dda70609198318d58e1', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'0c5db6e2ce82b54a9f78f1c584231adde2c53dc9ca5e97ae289298a8e1f195ce', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'329deea3738022da746fc351afdfaa2d35ddff27e2caef6cc9d935a886d473a9', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'9937479b553368d1730c288df3fb9ba6726c542d5216ecb630f3e643bed63443', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'48e28f61e44a3e78ea3bc4b0f4508701cadbc5d6d6a266b01157df5e1f5b2845', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'c0decbbc816a88353c8ac512c8a98a2c663c19e4ffb7a1f6dfa20d1c745e7ba0', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'ec706178081cc0520311c539a376f8ee86f79c5aaef40c86882e1fff2a660043', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'ec4e082c1f373173464eb6f30ad21ac2bfb1bfda27d3302a600a454344bcb989', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'78e226692e2e851b40574aa2ff3d01dbeaf7bed480569065e2372ddbce752ee5', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'f3aac315ed1e2152f30e7ce1be980ab7b44bab926224eb6a915c8cc7fc8b7205', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'d19e2751d89fb40f927480dbf7d552adc5466dadbf9a586db9cd92c65ff5c614', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'240a0fa113c7636428064dbd466550f2ce8c2220a7dfaee1ec55258ccbe78bd4', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'3a2e8e44e77b683091840e65db338cc30f78d07e061039b2e33ee45617df2698', role:'coach', days:90, v:2, exp:'2027-03-31', p:1, b:'2026Q4'},
-  {h:'1f8ee22086a7d04617e4df19f04a99cb90be088bd6be712c5a36784d893284cb', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'e821730ebe3efcf4d996e6dc2b7af0bb6db02547845a7358d619bcc0e010e455', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'f7d955992b6f0ff96cabc1369d4702d4ed521bb05a7df159d7a9c728b73fa622', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'2c6589a93b26b5dcf27ea9ebfd61a0dbf1d299eb1ad012689b58dd980bfe4f69', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'c464f4e463adedb3685c8ff509bec03219598ec5608ffd4ef3a910b946d5725e', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'5f583752f8f9a700a3d45afb2cab4770e9d488abc2c68de7412b7a354ba341a3', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'ad7f4db72616a772d4782a1d7938b4cc63aba29fcbff8c2ae56a2737355275ca', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'f60662a6e7c04972a4cf0b72d1ede69ce9f0479848c38cc9220d54910b22d436', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'14984f94248a7802cc5fdd1ce1f5a721b18fdff064d14f2415e183974ca4648f', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'f4e0ebc783c3cda03c030d4ec5ecdaceedb9667a3ea48f10f1c124b9d4adee07', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'665d37d61ea018612fab37f51ccb9f882090ad427d9fc935c5f26d48ce3dbf02', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'2f91b4e9d10afe844571d9d2ad3441d5c4c91ffa36d0f13151a8d35912fa2b89', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'e6994c9e84fb1b1b8245f230e9762ff7a3b50c031890ec2264030bcbc2ad5b77', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'93d8506afad0926453aec3760fd78b3281fe16475a5412e94a6b823886d76817', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'8b84e6da221b1c27c3d6c25511bec72d9f200d16f6c78342a90fda7213740f05', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'a235d65754c5d27b892d81b78309b1e0b12992c0fe2769624f825db77d836e36', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'00118fe8973181f293a1b4024a005de6fdc9db1bd071cf9f6ba57640435cf4f3', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'562c5ea237ee6e73e16d5125215013ec44db05ea131fe74a7a9a24b5049d9ac8', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'34338e7ba704aabb4029e993e2b1893aaf728bce2c7f38ef8490a6ed96562e2e', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'02f7793d497e9230fcc2cc15aa7702eddb55d9f42a06e0d3b11855e6e6db2744', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'beded4eadd2881d5df84d41e371c4c4f453ddfbddc50c7a5d700f301c9e2f276', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'e178eb51d44e2583b4af5ed120a456865617b32ca4ee81691cf69d03a1b6e91f', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'12fd2c921a80f52021bd7f83e3c8443bad7d21aa3ad2cdd2e0fdcb91264f7630', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'63603bf0061f14d430c449630ab71d10b8644a32dc2093f12ed4870bf97c20fc', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'648c6be0711e5adefaabc79743f0838b3121e4835a479f5debab2b3c0d964d3a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'2fe609315375d37fc7190081b6a2ec9b1570c5ab1cc28470b4ea8969f142e7e7', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'359424fbb2e56d1a3499b9a5bb3d87d2331736d51b5eaa6b9bb526b62b7c9d25', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'ca5f3a3f2e1322507835c02d9afc0706a8f115852c7566e1ed2607f0c712cedd', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'63b10b16d81f6eae2ac0e14909fb53d1af976b33408e4b07b6082ef8eef74494', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'a5d354c5c13ca3468f0337f1aa464ec4d08aa4bf8a7751bffffbfca4f6fb2037', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'95156c6a487d5217a680d976953ae2ab1dd9012063edbe41b5a0c4ddfa773b3b', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'6ec32fe844d9ec0570700052d48da3f3ae7ec756bc32d87cdec42fc88c765ca1', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'87c4af6d006a3392b0f855e6964cf177ef1af480cb7e8b881c69a07263aacaa8', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'cc33b71d0449f4ab7e923ee11d3a841db105bab0800301069eed731bf455a0b4', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'d6ab74eae1067a32bf406c8d266edd7474cbe4f5460880ae2e4c5388a5d0db2a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'e0e63191dbaa9fef5ba89dfaeb26b0c322f887105b32fbe8163c5ed1d5a501d6', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'2864ab32b3acaa2474690c356d767d9d0af83e6b493175c5a81c41bc6f39072a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'ad0cce5c7f8dc4772321bf135955307a2309235c286909d7c82c91692a0a31a5', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'8bf6e6ec9c4365c6750a6432384e8304c9c07db0365bcce34d7fd9013837f66f', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'a1ac21a71e5ba4d122672919ea630e050a6033e9ca2b118c57af917f8d61d75a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'f60d70d50c5b5d71ef937640bf0cfae91a2d489d2624d91c03de50bade76cddc', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'6fcd3e6b162a1d09878e29f491fe0923a9f7ca99814dc6ee1645f45c997a96b5', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'8ada8c11dced3d56cddf4e256e04df442c5aa38a8022c735df59d400bd1081da', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'98fc85f25a84c0283619f7d152af6810b874d2a87218f27f422b2be1ab4d978d', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'072ffeacdb485dd0a835ebf105242f57db8c47523794ff85ba79aa3fe5ec9db8', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'d01f5af62fb763f040ef068fb9a196eade4ad98449097329cf6da20a732ba4c6', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'113dceaf1ad07f17f1e2bd5dfb177f93d3985e772f87f8aa01ffca0a67593ace', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'0661e0ae185a8b2c420b21b057001d59b0ab828ae8c20371c5443d471c6d0e89', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'673257df6bc244072cae7cd1f5f82a2f6dfb5cc13633215efe9aafe5a6cf0a9a', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'1587342e690f174a634a5b1278d3a23fff30643d290965aecf1185f039bd82f0', role:'athlete', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'700b618c0f457fe8aaabd5fdbbf6f48c2f33b238a9d5b5285368a5790c012182', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'ab32e1190dbca25f2074801bcbc1a0bb1c613e587dfd39644123296358cf7e97', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'93afd977fe17f2985ed11c458449cdca37656e1e66d7fe060228da84df624a71', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'d1a9eefbc21d3b1dc031f3262422a3ec9e0e7c0aa9dfc6e13de354e42752b4b4', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'1d73b051578a4ad09bc59e947281ed65ce04dd5bb201691e113dfa89ce46eecd', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'2f009122039501f4f7048f32ae0906ebe3c9e2b9aeb691e3de7c882ce530550d', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'a77c0f130e75bd301bf5da02032cc24480b94d5f42c4165c29eaf2a29d3c4f29', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'91594717314f8cf1943e6ab46fca91a20fed3002486c5619268fda2e4040ff60', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'4764fde38c3c82bb62b2e908d437df22fc0b8ccf199cd60659a82e0b49919b33', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'f72977d72a0d9e9f3c7d8c24bcd818338614ffe9dc20f279c4479e6c4933a8a9', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'16e23e482614739c25c6352d77e581873600929a95867c8332b0c71b31900538', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'b367f76e58baa6fce1ca4d3f1a42bf77460e556faad3fd6dd1f23fb6ade7f94f', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'87d7825ea43fc32a6ddd336a6dfae60ab0e1d7f83675e2b349c7be8a82172f79', role:'coach', days:90, v:2, exp:'2027-06-30', p:1, b:'2027Q1'},
-  {h:'3bdfc0bc385a0846c8aa14adc81554e07ea163b6df18de74b9f0f0aa9f508c2b', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'85e786812dfec426a93aa7e0cd6c9ece3a47101c5479c14963a2fe9214a776fe', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'3add4883f327a2a278e86757caad2a1ec50a3402213f84c681c9fdde6edd5743', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'9ede600e94cbb920be9845067c6a55190270b24ed13f5230fa849bc27741ecab', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'2a65077e545d9c5b2a700cb10b9fdd1357535931a242c1124a2339756a4df110', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'87bfddfcad416130d9d0da49ec329370412a11ea810baffcfb57319fa16328dc', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'562ce2115609b928b220b35689546b3d2817e933ede3490e8f192efe062c3835', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'760720dd2909114a968afa903ac781222912085f68b4250a585c5478a818fb41', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'3116bf4db9398885b48eb50ca99fd1acf184fb535b2e429eb80b842c4bd6b678', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'803d3abd335a38755cbb5cae5aa569e9322ef323fa169b0881f7c303a9ec0789', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'2217957a3d7b71afa13fdc7423af8813725b0d1b68b44fd58666369c5476041b', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'4a2bcede1d7261d9928144fdb6afc2834fdf2b73bded7db49e4eca809a2e4550', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'ed53a6c25543b470cb2bf47d870d89815d40c58471d4bb6a26de75f1725815c5', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'f01716f316cf147286fca1e00d7a34d9ca169d1996b290d54298520a6382265e', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'807f643238646e8dc5e89582e62e954d68831e6007cc47e426990de119f3a9ba', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'a7c9ad20f1c5b82fed3c8736471f2a540ea792f76bf6a61711725745b60c1a1f', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'e18042c5b1d29160d0bb1124ea818002b16b53429184f20688d526b150be8718', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'99df5b06fb57a9d34be057c8aaef124627606f6f445ed3f98504fd5e0efa1e4a', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'534b6f1825d00bdd06c4281ac2ef9e5f3d9c24008c61c5101bfaeb5db6e5b9f4', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'df298905881f57b7d5d693d64418d48018b0b862d90fa8e5a6c1999197657f0d', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'dcd3c1562104e26c5ec4397e6a96494ab6d7c75883683e4c214370822283862e', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'f628182328ec31948b3eb07fc7927591d2b85540a595d930b2e0172ab794e5df', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'d06102f08e57e93a77a4c7b774dbeaeb22ea58dadf8e8a0b854280edeceb676d', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'78fadcff9277abd1c52d22106628ce8d1a7f94fb6fe0035994f917c5bdef7852', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'cd0f6ea5ae7b0bfe894b7d904f122d04db28cabe9c503357a30a749d48c93f91', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'06c62f6df017d1bb0a0f799519700800806453cbdbd0475da9b20a8626584a8a', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'e1cd85aaae426864fc2e497b8964bb547e1638cc738f5fc020d741672c7ab4cb', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'64608cca394a1ab4d363a2dd0ef858a3f04bc8e00b869f3d7a91d99ba223b669', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'68db44e4d30163c10fdc4e3ed6b7ae8ee5a64d54a2fd85e48cba847fff72ca0f', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'16daa4a32a49e4be0a80eceb533d78d1bb51feb0e9888e80afc43fe70297c558', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'5cd682470bcd480d35048c8f23afba6d8a614f754189bb8c4b310641e9e020f2', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'6167aaa5641787a288103f8ded136ab49931a4cf7359e7c30d57230d615c3a46', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'bacfabcc42283e28323c6ccc73b4ddcd745b0bd16b983597fb3080a54ed0a0d7', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'fc0b34759572c9d197162ef92c3a1615c5da908379e807a366482fa6cd55cd33', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'35e9c75ad5ce8b13c2e818bf7e6dc66244b73456629bcae5bb9bbd1db1c78b0b', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'0dd1c40462e10db80470d911ca6778f80fc6eb5cff1f511609a2cb5c1bc74221', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'149f629665ae83d9c224355b9a4db7f69119a6ea3f83d639c719e15923ae08f5', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'6ead63fa217e0255bf2bbe7def4ac3a63ac794a6bc9db1c14574f90924c663bc', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'ca4d38032bb0ba3b3873700fefe12f8033c044585dd2065c32adb645591f281b', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'0ee29924060ba32c0e30d6af445386d38551493be27ef9bfd70334d735a7e757', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'83823e779dfbe4cc67ead9934d9a7bedf009f30d4a52e689956ebc80bd7680e3', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'ffe7849bf9f23ad9392e32d082509a2ab8c27b049739fb13e1224d38b679c999', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'ba8fd7841b5f47ebd190580fede1f87c694ee1d7552737a54b23023fdb2a83be', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'47659ddf156bdf797d37944b54ecd566db476995fec78b5ff3ee9741959e8ce7', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'c4fed20fad86c223452f51fd627e646abe52594410777aaf0e8c6ae2dbe15afa', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'fd51c5311df2c2eef80a6a7dd25ec0a9c69ceac1e40dd8c96c454f2e69cd368b', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'ad2511495059f52fa301b66046fac4f55172328aa8e2d94b727398f6bcc3bb24', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'5d1ce14a1ffaa31ecb3a66c4d7f546aafa634b0ce95fabdcf585cf11ff5690a6', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'71ac3c3d8739307bac22755a421b47d56ccaec99f3cd96fda2d937cdbc40d3f9', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'0a35b17c21b39f49013e0ac5eeea56a91b97733caada09715b427a2858c9ebf2', role:'athlete', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'2c0f8693803790a55944539bacb901afb28f35c43ebfbba45c87bc0ad8d13b36', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'2856a170d7728a4f2cb830e17f446baffa836a554e8819e17eef079888b52c79', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'9da2f5265982a805183804281523f36d16f97a80485e1a1fc03e878d610475ec', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'c4a80aea0ade140ec6cd4b4d5676399a4aec36bbcade762323524cdbbe48918c', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'bbf27a66ddd00e983cc76e4468b0a36e86836b4b540a7cb1f3b411bf4722ee2a', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'f7677ba5073572c82a5142eb5272dc254da2a11c2e1540a052bb55b7fd9cdf00', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'50315d64898fae781a125897d255e4e246f6428fa32ef5e6d5be8c8f8d096bce', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'1ebbadf1925120a79f81054a8c98b66508e8f90015c7a675283642c446d080e7', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'94319125673f6cba1243f7c0a4ff7a3a18d8c905bc2061b324bdfbca09b6ebc7', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'52fa3f3a3478cb8b849bcf34aed2bf2952bd79cbb4553ac803a971116c867bcb', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'8b47c942fd9f792f6024bc73a27496693f03554f8ff042b676655c7804e94e14', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'c9a6492032512ccd4a83086e0a226e76e0f519d2b5f2c56385a2a4ff9d579815', role:'coach', days:90, v:2, exp:'2027-09-30', p:1, b:'2027Q2'},
-  {h:'e9624813edca6e8b2b7e28606ed04089a14d77e16a865cf72c3d0b160d5abd12', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'959dbe530c8ecbd133c55ac8c84db7b0b79d9f17ba2f8b9eaeed457a527b48d5', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'6abcb725571fa954f9047894f3ab3b9d830eeeaf4e9e462a6a3ca13d6b678257', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'428848fd48d674f72e7205ad6a709081730b5502fb474471645286da4130b339', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'190e0342f64f0e10a9bcf76f03fef86a699ffce91317ea8cbcad794d35980b96', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'76c2f8f73b5fe7fcb00c845c5fdf0ed571c66a7c156b9e30ee18078a9323867f', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'7d9087d05ad8a5bc10aa1226eca62b00782fa7e61d87e0884732892131f30aa2', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'01dea3060751033e041fd2ea13a9c890fa5c9aacfb7d6f37d0bd1bf81d565510', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'42788c978f557a2b992afeb3619469db9cc413616017800f48d666ad9e256fc0', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'5711e9a2bd0eea21433403205fb14e429ffb2d4f087c2b3db7b6ac44055452c5', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'351fef82dc1f71c128dbea401500db68286a0c7eff905d7feaeab4d30a265ea8', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'c31c4460e1417f19cfd8c74619669ff6407b0f9005c985a375a278b631328e71', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'73f67a754a246c6e962887c9d47cbc2848b1c396bbdefaff3a10b347ebc3e5f7', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'7e708a1854bbdf54c8b21d9c07994843e6f65126c02d3fbd89933f5a0a7a74c9', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'5ec11af526d2e913fcaec396cf9df271bde313b627f3ab6ffb1e20864d3cab37', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'8566bc5284addf85a677daa703c6c6c60ee27fff8c05590bb906a09cf42270fd', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'9b033c4b0bb50cad37e3f8f6f78a3ec1f55671a856b5867da27702a83cd0f5d9', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'8571ef195454bad95ecdf254a0969710ed41a6bca5764dc8fdc0691a984c2645', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'891e02d1edd849e356991b23732e5558505a021e4e6022d2f3432280ba65fc23', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'2b6a1d0e73afb1611ee7de98aaa219c9d7b4e359cc0129f3103522771d9fe02a', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'58d5b34642ff9925bbf227df934750c5df80d94037c37ba64a38d7bf80c74b56', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'6e2cf4b1239b4bfbe49c5a7a8a6b4617c0b570d089fbb7e9c9baa82c327162db', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'3af4e31daaa6181c4572b306ad64efe11de83ee064f47294d16044e3c03eadf5', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'ac26a1fe0dad9425eae64e1297d5f8a608acd3d0900f8866ad00f872df556aaf', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'a6d7828c1830c24757440d6e59fbfc9298cb930d26b7baa7b22ebdb41ceb0317', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'0b6d4fe5b519b35be4de29ff2717a66764bcee268c5f79fdbca39171577fe1f5', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'faf30090eeb41efa0bb224337a21f48bf112164be94a4bd07ce15334842d31f6', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'b2048726de90d6144f674bd5279a89e1a3a995abc319bf7e32629dc056ec25db', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'da0fc6b8e25778028dc6ae339431a0a90c1399e7752cda57f68426158027b8b0', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'91e12c2d6542331ed9b4c897269e68350e0444ec925e051ded98e70d695ce3f7', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'6fce3443028198b1c08ee089e548b9d9aa922e9c7345d37dbc2856a91abd7695', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'a942247512dc3951e0907a02025e6c6c2f4ea7a74cbd3153efbbc045962f5d85', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'331a98cdcae03357f03c6d19e3bd76fba89807140c7c489332d8660313645094', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'a924349f234f228341eaa8f6a33840dcc86c3f7daed123319e4c7ff1e339be06', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'5d758132c64b26dd525c6bc20469e9172a850dff798afe42dec4b2e180431ed2', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'a27b6985df27df6eccc412f9e1bcea1c89171067f91c68289d7a9f8e96dddce4', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'cebb3c4a68840a01d396e353739e6d695cb5aea7aa5dafcb3ba3d2bca90ce9a8', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'105615ad14635bbbf79ee3502361c20decb729cfe2d0b28fd6d85cd6d48279a2', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'1a64442236473d436672fb7be3550754798f624eae1d75dca83f13126fefae72', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'3e61a84f2543b01b8798167bf644dc0a79e1a00e787fd89d03f2db69bcf8e060', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'5d821edf07fae22316fd7b94b52992873f671b93da0035304a91f828bdc2f127', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'41b3337ab9637620924e15c0d636e501b62c8e1cc7a0a7c217511ad5c5cc46cf', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'78cb7b23380753d0ac1eb882b106c804af38c6ed258aebbb8ca3b89cc0b2976b', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'08eb5ed1cf22a85363c525d73929d3a6d44c8a287113d998c1b429904a015f74', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'0e589c11ffeb671de99299c0324ea2386028a1ede7406721ed47175b72533952', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'a7781e56c451fb93a40697e915f05b3c15b78a8b85f351faf23bdadf56d2afc1', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'1d66113f3a6ba30f33c4403727fe37c16ec02590ec1cfec1e084e2fdd3506add', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'6d1e970ed91ae60a6b6936001b6ed00abdac64015ad4e2ed84b717fc256eefa5', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'6aa0240b0f965c24150cb815b46a3c941f87b3574c1db1527155d4a5f65ce0ea', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'95fe82003a50d1e61a26339b8e62acc04b94775893c0264d09df0c28ea4c6463', role:'athlete', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'24d3f0890d702d42823a14e9af4ba12aa4af9e9d6c136a00fee8d315369de990', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'6a69ba7428e2d26944c00a4fab134d27adcf2b462fa4815fe2589579806e5e4d', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'0584ba9f9a0580f7cf22f48e0183b6127c93b7b92298a04f3c6b2f5a7f84caa7', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'60371ac9c10fce6021b04a1aaf338aa5e2dcd984435adc6675dd219d7bc44fe4', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'ac19c02c2ffa1e19712bf07438586b20dbf4066184479b4f7240c192596ae3ec', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'ee27910341b2dfb9ba322487e8d8116ac08d48c909ae725e5adf055f63fe84cf', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'136fd1f358afdd745e59f43feb0e4b3f75cca059932493ebf52b7e09cef2aa07', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'e2a679d9aa10a9a67dc518d40f73d0ec843872d586bf18a513843922b2a76b0d', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'990940d4521275dd066f8b30ce077ac4f22a40486b3da2f66215e6fd7a66146b', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'c285232b5b3b4f6a94b5475b157dbd710e715afa33bf0d2c53999981e38ec24f', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'6cef8e5997ff0d986bb4cc67d886ecf37154c73595a555fe437ceb688b109e2f', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'},
-  {h:'95e68ead01a267a88d7c29e55f776c8ebf5ff9b590472b0430b2a0ef2dd87461', role:'coach', days:90, v:2, exp:'2027-12-31', p:1, b:'2027Q3'}
-];
-// ---- THE POOL ----
-// 200 athlete and 50 coach codes, generated at build time and stored here encrypted under a key
-// derived from the ADMIN code. Their fingerprints are in ACCESS_CODES so every card verifies
-// them; their plain text is nowhere in this file. An administrator who enters the admin code
-// derives the key, opens the pool, and issues from it. Anyone reading the source sees noise.
-// This is the design chosen over an algorithmic generator, whose secret would have sat in every
-// copy of the file and turned any reader into a key factory. Adding or replacing codes is a
-// build.
-// SHA-256, plain JS, so the gate works the same on every phone and in every test runner
-// (crypto.subtle is async and absent in some contexts). Standard construction; nothing clever.
-function sha256hex(msg){
-  var K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
-  var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
-  var bytes=[]; var s=unescape(encodeURIComponent(String(msg)));
-  for(var i=0;i<s.length;i++) bytes.push(s.charCodeAt(i)&255);
-  var bitLen=bytes.length*8; bytes.push(0x80);
-  while(bytes.length%64!==56) bytes.push(0);
-  for(var j=7;j>=0;j--) bytes.push(j>=4? 0 : (bitLen>>>(j*8))&255);
-  var rotr=function(x,n){ return (x>>>n)|(x<<(32-n)); };
-  for(var off=0; off<bytes.length; off+=64){
-    var w=new Array(64);
-    for(var t=0;t<16;t++) w[t]=(bytes[off+t*4]<<24)|(bytes[off+t*4+1]<<16)|(bytes[off+t*4+2]<<8)|bytes[off+t*4+3];
-    for(t=16;t<64;t++){ var s0=rotr(w[t-15],7)^rotr(w[t-15],18)^(w[t-15]>>>3), s1=rotr(w[t-2],17)^rotr(w[t-2],19)^(w[t-2]>>>10); w[t]=(w[t-16]+s0+w[t-7]+s1)|0; }
-    var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
-    for(t=0;t<64;t++){
-      var S1=rotr(e,6)^rotr(e,11)^rotr(e,25), ch=(e&f)^(~e&g), t1=(h+S1+ch+K[t]+w[t])|0;
-      var S0=rotr(a,2)^rotr(a,13)^rotr(a,22), mj=(a&b)^(a&c)^(b&c), t2=(S0+mj)|0;
-      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
-    }
-    H[0]=(H[0]+a)|0; H[1]=(H[1]+b)|0; H[2]=(H[2]+c)|0; H[3]=(H[3]+d)|0; H[4]=(H[4]+e)|0; H[5]=(H[5]+f)|0; H[6]=(H[6]+g)|0; H[7]=(H[7]+h)|0;
-  }
-  return H.map(function(x){ return ('00000000'+(x>>>0).toString(16)).slice(-8); }).join('');
-}
-function accessNorm(c){ return String(c||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase(); }
-function accessFp(c){ return sha256hex(ACCESS_SALT+'|'+accessNorm(c)); }
-// AUDIT 2026-09-08. A coach who opens an athlete's drawer has S REPLACED by the athlete's
-// state (rosterSwitch -> load()), and the athlete's drawer has no access record. Every access
-// read then said "nobody": coachAllowed() went false, the header chip vanished, and a resume or
-// a boot inside the drawer ran accessEnforce() and demoted the coach's own roster to solo
-// while they were working in it. Access belongs to the card HOLDER, not to whichever drawer is
-// open, so the holder's grant is mirrored into ROSTER (which is loaded on its own, drawer or
-// not) and read from there whenever a drawer is active. Inside a drawer nothing is granted,
-// enforced, or gated; that all waits for the holder's own card.
-function inDrawer(){ try{ return !!(ROSTER && ROSTER.active); }catch(e){ return false; } }
-function accessRec(){ try{ if(inDrawer()) return (ROSTER.access||null); return S.access||null; }catch(e){ return null; } }
-function accessOK(){ try{ var a=accessRec(); return !!(a && a.role && a.until && shiftDate()<=a.until); }catch(e){ return false; } }
-function accessRole(){ return accessOK()? accessRec().role : null; }
-function coachAllowed(){ var r=accessRole(); return r==='coach' || r==='admin'; }
-function adminAllowed(){ return accessRole()==='admin'; }
+// What stood here was the access system - the code gate, the 253-fingerprint table, the
+// Cloudflare client that activated and re-checked a grant, and the Admin tab that issued and
+// revoked keys. All of it is gone, not switched off: a dormant lock is still a lock somebody
+// can trip, and the fingerprint table had no business being published once nothing checked it.
+//
+// There is no role any more, so there is nothing to be denied. Coaching a roster is a feature
+// of the card rather than a tier of it, and the Admin tab went with the thing it administered.
+//
+// What this costs, said out loud so it is a choice and not a surprise: no revocation, no
+// "who's active", no usage numbers. All three existed only because of the gate.
+//
+// The Worker is still deployed and still answers; nothing here calls it. That is deliberate,
+// so a card still running an older build keeps working instead of meeting a dead endpoint and
+// locking its holder out of their own training history.
+//
+// One thing that lived in here had to survive it, and is kept below rather than deleted.
 // AUDIT 2026-09-11 (finding L3). S.avatar was interpolated straight into a src attribute. A
 // backup file is untrusted input - anyone can hand an athlete a .json - and a crafted avatar
 // value closed the attribute and added an event handler that then ran in this card's origin,
@@ -10938,899 +10692,6 @@ function safeImgSrc(v){
     if(/^https?:\/\/[^\s"'<>\\]+$/i.test(t)) return t;
     return '';
   }catch(e){ return ''; }
-}
-function accessGrant(role, via, days, exp, code){
-  var t=shiftDate(), u=new Date(t+'T12:00:00'); u.setDate(u.getDate()+(days||ACCESS_DAYS));
-  var until=u.toISOString().slice(0,10);
-  if(exp && exp<until) until=exp;           // a grant never outlives its key
-  var rec={role:role, since:t, until:until, via:via||'code'};
-  // W1: the daily check must present the same credential the claim was made with, and that is
-  // now the code rather than the published fingerprint. Kept beside the grant, in the athlete's
-  // own storage, exactly where the fingerprint already lived - it never leaves the phone except
-  // to this card's own Worker over TLS.
-  try{ if(code) rec.code=String(code).trim(); }catch(e){}
-  // v237 (F01): the fingerprint is retained as a LOCAL index only - it identifies which
-  // pool entry this grant came from for S.usedKeys and the admin ledger. It is never sent to
-  // the server and is no longer accepted there, because it is printed in this very file.
-  try{ if(code) rec.lfp=accessFp(code); }catch(e){}
-  // The server's stable key id, learned at activation. Safe to store and safe to show: it
-  // proves nothing and unlocks nothing, which is the whole point of separating it from the
-  // credential digest (F02).
-  try{ if(rec.kid===undefined) rec.kid=null; }catch(e){}
-  if(!inDrawer()){ S.access=rec; save(); }
-  try{ if(ROSTER){ ROSTER.access=rec; rosterSave(); } }catch(e){}
-  // AUDIT 2026-09-08: an admin who later entered a lesser code kept S.poolKey, so a forged
-  // role reopened the pool. Any grant below admin drops the key.
-  if(role!=='admin'){ try{ delete S.poolKey; delete S.adminPoolCt; save(); }catch(e){} }
-}
-// v224. His finding, 2026-09-09: "When their access expires, the key expires with it correct?"
-// It did not - the GRANT expired, the KEY did not, so an athlete met the gate, typed the same
-// code again, and got another 90 days. Renewal was honour-system. Two rules now:
-//   - every key carries a hard expiry baked into the build (exp). Past it the code is refused
-//     on every phone, and a grant never outlives its key: until = min(entry+days, exp).
-//   - a key that has already been granted on THIS card is refused once that grant has lapsed
-//     (S.usedKeys). Renewal on the same phone needs a code this phone has not seen.
-// Neither is a lock - a static file cannot revoke - but together they make "three months,
-// then renew" mean what it says: the only way past is a current code from him.
-// ===== THE SERVER =====
-// v225. The last thing a static file could not do. v224 gave every key a hard life and stopped
-// a lapsed key renewing itself on the same phone, but one code still worked on any number of
-// phones, because nothing on a phone can count how many phones have used it. Now something can:
-// a Worker that remembers which device claimed which key. One code, one phone. And with it, two
-// things he has never had - real revocation (kill a key, they are out at their next check) and
-// seats or dates changed without a build.
-//
-// The rules this layer holds to, because an athlete in a gym does not care whose fault a network
-// is: training NEVER touches the network. Only entering a code, and a check about once a week.
-// If the check cannot get through, the card carries on for SRV_GRACE days on its last good
-// answer and keeps trying. Nobody is stopped mid-session by a bad signal, and a phone that never
-// reaches the internet again stops after the grace, not before.
-//
-// What is sent: the key's fingerprint, this device's random id, the build, and small named
-// counters. Never a lift, a weight, a max, a bodyweight, a name, a note or a session report.
-var SRV_BASE='https://deadstop-access.manuel-g-grajeda.workers.dev';
-// v229: SRV_EVERY 7 -> 1. His ask: "see who is currently running the application". A weekly
-// check could only ever say "sometime this week". One check on the first open of a day - never
-// during a session, never awaited - gives "opened today / yesterday / six days ago" per person,
-// and a revoke now lands within a day. Cost: ~2 storage writes per device per day; the free
-// tier's 1,000/day covers roughly 400 daily athletes before the $5 plan is needed.
-var SRV_GRACE=14, SRV_EVERY=1, SRV_TIMEOUT=7000;
-function srvOn(){ return !!SRV_BASE; }
-function srvDev(){
-  try{
-    if(!S.devId){
-      var a='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-', s='';
-      try{ var r=new Uint8Array(22); (crypto.getRandomValues||function(){})(r); for(var i=0;i<22;i++) s+=a[(r[i]||Math.floor(Math.random()*256))%a.length]; }
-      catch(e){ for(var j=0;j<22;j++) s+=a[Math.floor(Math.random()*a.length)]; }
-      S.devId=s; save();
-    }
-    return S.devId;
-  }catch(e){ return 'nodevice'; }
-}
-async function srvPost(path, body){
-  if(!srvOn()) return null;
-  var ctl=null, t=null;
-  try{ ctl=new AbortController(); t=setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, SRV_TIMEOUT); }catch(e){}
-  try{
-    var r=await fetch(SRV_BASE.replace(/\/+$/,'')+path, {method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body||{}), signal:ctl? ctl.signal : undefined});
-    if(t) clearTimeout(t);
-    return await r.json();
-  }catch(e){ if(t) clearTimeout(t); return null; }   // null means "could not ask", never "no"
-}
-// counters the card keeps between checks. Names only, numbers only.
-function srvCount(name, by){
-  try{ if(!S.useCt || typeof S.useCt!=='object') S.useCt={};
-    if(!/^[a-z][a-z0-9_]{0,20}$/.test(name)) return;
-    S.useCt[name]=(S.useCt[name]||0)+(by||1); save();
-  }catch(e){}
-}
-function srvGraceLeft(){
-  try{ var a=accessRec(); if(!a) return SRV_GRACE;
-    // v226: a card that has NEVER reached the server counts its grace from the day it was let
-    // in, not from nothing. Otherwise an athlete who activated offline would keep its full
-    // grace forever and never be checked at all.
-    var from=a.ck || a.since;
-    if(!from) return SRV_GRACE;
-    // v227: a phone clock set forward and back leaves a stamp in the future; that is not credit
-    return SRV_GRACE - Math.max(0, adDays(from, shiftDate()));
-  }catch(e){ return SRV_GRACE; }
-}
-// The weekly re-verify. Runs at boot, never during a session, and never blocks anything.
-// v227 AUDIT. Two things that would have locked out every existing athlete on first open, and
-// three that would have locked everyone out at a weekly check after a bad deploy:
-//   - a grant from BEFORE the server (v214 codes, legacy athletes, his own coach card) has no
-//     fingerprint. The check sent fp:null, the Worker said "unknown", and the card cleared the
-//     grant. Nothing to verify means nothing to check: such a grant is left to run to its own
-//     date, after which a code is entered and the server sees it then.
-//   - only a DEFINITIVE refusal clears access - revoked, inuse, expired, or unknown WITH a
-//     fingerprint. A 500, an empty body, a 404 from a wrong URL, anything else the server
-//     might say on a bad day, is "could not ask", exactly like no network at all.
-// The Worker publishes its full answer set at GET / as `reasons`. These three groups must
-// between them cover every one of them; srvReasonAudit() below fails loudly if the server ever
-// grows a reason this card has no branch for.
-//
-//   REFUSED     a considered "no" about this credential. Clears the grant.
-//   NEEDSCLAIM  a considered "not yet" - the key is fine, this device holds no claim on it.
-//               NOT an outage: it is the one answer that should make the card try to activate.
-//   SOFT        the request did not produce a decision (transport, our own bug, a misconfigured
-//               Worker, a rate limit). Treated exactly like no network: the athlete is not
-//               punished for the server having a bad day.
-var SRV_REFUSED={revoked:1, inuse:1, expired:1, ended:1, unknown:1};
-var SRV_NEEDSCLAIM={unclaimed:1};
-// FOURTH AUDIT 2026-09-13 (finding DS16). `unavailable` is new on the Worker: a credential lookup
-// that could not be performed, as distinct from one that found nothing. It already landed here
-// by the default rule two lines down - "an answer this build does not know is not a refusal" -
-// but relying on a safety net for a reason we now deliberately send is how a later build turns
-// a storage blip into a lockout. Named on purpose.
-var SRV_SOFT={bad:1, toolarge:1, ratelimited:1, misconfigured:1, server:1, auth:1, route:1, unavailable:1};
-function srvVerdict(r){
-  if(!r || typeof r!=='object') return 'unreachable';
-  if(r.ok===true) return 'ok';
-  if(r.ok===false){
-    if(SRV_NEEDSCLAIM[r.reason]) return 'unclaimed';
-    if(SRV_REFUSED[r.reason]) return 'refused';
-    if(SRV_SOFT[r.reason]) return 'unreachable';
-  }
-  return 'unreachable';                     // an answer this build does not know is not a refusal
-}
-// A card and a Worker that disagree about the answer set is a release-blocking defect, not a
-// runtime surprise. This runs once, in the background, and records the mismatch for the report.
-async function srvReasonAudit(){
-  try{
-    if(!srvOn()) return null;
-    var r=await fetch(SRV_BASE.replace(/\/+$/,'')+'/', {method:'GET'});
-    var j=await r.json();
-    if(!j || !Array.isArray(j.reasons)) return null;
-    var unknown=j.reasons.filter(function(x){ return !SRV_REFUSED[x] && !SRV_NEEDSCLAIM[x] && !SRV_SOFT[x]; });
-    S.srvProto={v:j.protocol||null, at:shiftDate(), unhandled:unknown};
-    save();
-    return unknown;
-  }catch(e){ return null; }
-}
-// F05. The server owns role, entitlement end and code validity. A success reconciles all
-// three into the local grant. A grant is never EXTENDED past what the server reports - the only
-// direction this may move access is the server's.
-function accessReconcile(r){
-  try{
-    if(!r || r.ok!==true) return false;
-    var a=accessRec(); if(!a) return false;
-    var changed=false;
-    if(r.role && r.role!==a.role){ a.role=r.role; changed=true; }          // downgrade or upgrade
-    if(r.kid && r.kid!==a.kid){ a.kid=r.kid; changed=true; }
-    if(typeof r.protocol==='number' && r.protocol!==a.proto){ a.proto=r.protocol; changed=true; }
-    // R03: `until` is the entitlement the server stamped at first claim. It is authoritative in
-    // both directions, because the server is where the 90 days are counted - but a local value
-    // may never survive being LONGER than the server's.
-    if(r.until && r.until!==a.until){ a.until=r.until; changed=true; }
-    else if(r.until===null && r.exp && a.until>r.exp){ a.until=r.exp; changed=true; }
-    if(r.exp!==undefined) a.exp=r.exp||null;
-    a.ck=shiftDate();
-    if(!inDrawer()) S.access=a;
-    try{ if(ROSTER){ ROSTER.access=a; rosterSave(); } }catch(e){}
-    save();
-    if(changed){ try{ accessEnforce(); }catch(e){} try{ render(); }catch(e){} }
-    return changed;
-  }catch(e){ return false; }
-}
-
-// F04. A device admitted offline holds a grant but no server claim. This finishes the job the
-// moment the card can reach the Worker, using the code kept beside the grant. Subject to the
-// ordinary seat rules: if the key has since been taken by another phone, the athlete is told
-// that, rather than being left to discover it when their grace quietly runs out.
-async function srvClaimPending(a){
-  try{
-    if(!a || !a.code) return null;
-    var r=await srvPost('/v1/activate', {code:a.code, dev:srvDev(), build:BUILD});
-    var vd=srvVerdict(r);
-    if(vd==='ok'){ accessReconcile(r); try{ delete S.accessPending; }catch(e){} save(); return 'ok'; }
-    if(vd==='refused'){ return 'refused'; }
-    return null;                                          // still cannot ask
-  }catch(e){ return null; }
-}
-
-async function srvCheck(force){
-  try{
-    if(!srvOn() || !accessOK()) return null;
-    if(inDrawer()) return null;      // v226: a drawer is not a device. The holder's card checks.
-    var a=accessRec(); if(!a) return null;
-    // v237 (F01): the credential is the CODE. A grant from before the server existed has no code
-    // and nothing to verify, so it runs to its own date and meets the gate afterwards.
-    if(!a.code) return null;
-    if(!force && a.ck && adDays(a.ck, shiftDate())<SRV_EVERY) return null;
-
-    var body={code:a.code, dev:srvDev(), build:BUILD};
-    if(S.useCt && Object.keys(S.useCt).length) body.use=S.useCt;
-    var r=await srvPost('/v1/check', body);
-    var vd=srvVerdict(r);
-
-    if(vd==='unclaimed'){
-      // The key is real and this device holds no claim on it. That is a claimable situation, not
-      // an outage and not a refusal. Try to complete it now; only a definitive refusal from that
-      // attempt closes the door.
-      S.accessPending={since:(S.accessPending&&S.accessPending.since)||shiftDate(), at:shiftDate()};
-      save();
-      var done=await srvClaimPending(a);
-      if(done==='ok'){ S.useCt={}; save(); return {ok:true, claimed:true}; }
-      if(done==='refused'){
-        ACCESS_LAST='inuse';
-        accessDeny('inuse');
-        try{ accessEnforce(); }catch(e){} try{ bootAccess(); }catch(e){}
-        return {ok:false, reason:'inuse'};
-      }
-      return null;                                       // could not finish it; grace continues
-    }
-
-    if(vd==='unreachable'){
-      // Could not ask. Carry on until the grace runs out, then ask for a code.
-      var left=srvGraceLeft();
-      if(left<=0){ ACCESS_LAST='offline'; accessDeny('offline'); try{ bootAccess(); }catch(e){} }
-      else if(left<=5){ try{ mailPush('srvoff-'+shiftDate(),
-        'I have not been able to check in for a while. Get this phone online in the next '+left+' day'+(left===1?'':'s')+' and nothing changes \u2014 everything you have logged stays either way.',
-        'focused'); }catch(e){} }
-      return null;
-    }
-
-    S.useCt={};
-    if(vd==='ok'){
-      try{ delete S.accessPending; }catch(e){}
-      accessReconcile(r);
-    } else {
-      ACCESS_LAST=r.reason||'revoked';
-      accessDeny(r.reason||'revoked');
-      try{ accessEnforce(); }catch(e){} try{ bootAccess(); }catch(e){}
-    }
-    save();
-    return r;
-  }catch(e){ return null; }
-}
-function accessStamp(){ try{ var a=accessRec(); if(a){ a.ck=shiftDate(); if(!inDrawer()) S.access=a; if(ROSTER) { ROSTER.access=a; rosterSave(); } save(); } }catch(e){} }
-function accessClear(){ try{ if(!inDrawer()) delete S.access; if(ROSTER && ROSTER.access){ delete ROSTER.access; rosterSave(); } save(); }catch(e){} }
-// F03. Every path that withdraws access records WHY, in a field that is not part of the grant
-// and is therefore not removed with it. accessLegacy() consults this; a card that has been
-// refused is not a pre-gate card, however long it has been in use.
-function accessDeny(reason){
-  try{
-    S.accessDenied={reason:String(reason||'refused').slice(0,20), at:shiftDate()};
-    if(ROSTER){ ROSTER.accessDenied=S.accessDenied; try{ rosterSave(); }catch(e){} }
-    save();
-  }catch(e){}
-  accessClear();
-}
-function accessDeniedRec(){
-  try{ if(inDrawer()) return (ROSTER && ROSTER.accessDenied)||null; return S.accessDenied||null; }catch(e){ return null; }
-}
-
-var ACCESS_LAST=null;   // why the last attempt was refused: 'unknown'|'expired'|'used'|'inuse'|'revoked'|'offline'
-function accessTry(code){
-  ACCESS_LAST=null;
-  if(accessNorm(code).length<6){ ACCESS_LAST='unknown'; return null; }
-  var fp=accessFp(code), hit=null;
-  ACCESS_CODES.forEach(function(x){ if(x.h===fp) hit=x; });
-  if(!hit){ ACCESS_LAST='unknown'; return null; }
-  var today=shiftDate();
-  if(hit.exp && today>hit.exp){ ACCESS_LAST='expired'; return null; }
-  try{
-    if(!Array.isArray(S.usedKeys)) S.usedKeys=[];
-    var cur=accessRec();
-    var lapsed=!(cur && cur.until && today<=cur.until);
-    // v226: the same-phone reuse rule is the FALLBACK for a card with no server. Once a server
-    // is configured it holds the key's expiry and its one-device claim, and it should give the
-    // reason (expired vs inuse) - so defer to it rather than refusing locally first.
-    if(!srvOn() && S.usedKeys.indexOf(fp)>-1 && lapsed){ ACCESS_LAST='used'; return null; }
-    if(S.usedKeys.indexOf(fp)<0) S.usedKeys.push(fp);
-  }catch(e){}
-  accessGrant(hit.role,'code',hit.days,hit.exp,code);   // W1: the grant keeps the code it was made with
-  // an administrator's card keeps the pool key so the Admin tab can open the pool. It is the
-  // admin's own phone and the admin's own backup; the pool never leaves it in plain text.
-  // R07: there is no pool in the card to unlock any more, so there is no key to derive. An
-  // administrator's authority over the pool is their admin token against the Worker, which is
-  // the only thing that could ever revoke a key anyway.
-  if(hit.role==='admin'){ try{ delete S.poolKey; save(); }catch(e){} }
-  return hit.role;
-}
-// "Anyone who has access to the app right now will automatically be given athlete rights."
-// A card that has been used - accepted the disclaimer, banked a log, finished setup, holds a
-// plan - and has no access record yet is a card from before the gate existed. Athlete, 90 days.
-// A card with nothing in it is a new card, and a new card meets the gate.
-var ACCESS_LEGACY_V=2;
-// The day the access gate shipped. A card that acknowledged the disclaimer BEFORE this date was
-// in use while there was no gate to meet, which is the population the one-time migration exists
-// for: "anyone who has access to the app right now will automatically be given athlete rights."
-// A card acknowledging it today is a new athlete standing in front of the gate. The date is the
-// evidence; the acknowledgement on its own never was, and treating it as such is F03.
-var ACCESS_GATE_DATE='2026-09-08';
-function accessLegacy(){
-  try{
-    if(inDrawer()) return false;           // a drawer is not the holder's card
-    if(S.access){ try{ if(ROSTER && !ROSTER.access){ ROSTER.access=S.access; rosterSave(); } }catch(e){} return false; }
-
-    // (a) it has already run. A one-time migration that runs twice is not a migration.
-    if(S.legacyMig && S.legacyMig.v>=ACCESS_LEGACY_V) return false;
-
-    // (b) access was withdrawn. Revoked, expired, ended, seat taken, or grace exhausted - none of
-    // those are a pre-gate card, and re-deriving eligibility from app usage is exactly how a
-    // revocation came back to life in v236.
-    if(accessDeniedRec()){
-      try{ S.legacyMig={v:ACCESS_LEGACY_V, at:shiftDate(), used:false, why:'denied'}; save(); }catch(e){}
-      return false;
-    }
-
-    // (c) it has held a real grant before. Anything that ever activated against the server, or
-    // ever carried a code, is a gated card whose grant has since been removed - not a survivor
-    // from before the gate.
-    if(S.usedKeys && S.usedKeys.length){
-      try{ S.legacyMig={v:ACCESS_LEGACY_V, at:shiftDate(), used:false, why:'had-key'}; save(); }catch(e){}
-      return false;
-    }
-
-    // (d) the actual eligibility test. Two ways to be provably pre-gate, and neither of them
-    // is "this card has seen the disclaimer":
-    //
-    //   - it accepted the disclaimer before the gate existed. A date, checked against a fixed
-    //     date, so a new athlete acknowledging it today can never satisfy it.
-    //   - it already holds real training: banked sessions, finished setup, or a generated
-    //     programme. None of those can exist on a card that has not got past the gate.
-    var ackedBeforeGate=false;
-    try{ ackedBeforeGate = !!(S.discAck && S.discAck.d && String(S.discAck.d) < ACCESS_GATE_DATE); }catch(e){}
-    var worked = (logKeys||[]).length>0 || !!(S.onb && S.onb.done) || !!(S.genPlan && S.genPlan.days);
-    if(!ackedBeforeGate && !worked) return false;
-
-    accessGrant('athlete','legacy');
-    try{ S.legacyMig={v:ACCESS_LEGACY_V, at:shiftDate(), used:true}; save(); }catch(e){}
-    return true;
-  }catch(e){ return false; }
-}
-function accessUntilText(){ try{ var a=accessRec(); if(!a||!a.until) return ''; var d=new Date(a.until+'T12:00:00'); return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return (S.access&&S.access.until)||''; } }
-function bootAccess(force){
-  try{
-    if(!force && accessOK()) return;
-    if(inDrawer() && !force) return;      // the gate meets the holder on their own card, not in a drawer
-    var had=document.getElementById('accessGate');
-    if(had){   // already standing: bring the athlete to it rather than doing nothing
-      try{ var im=had.querySelector('#accessMsg'); if(im) im.textContent='Enter the code you were given.'; had.querySelector('#accessIn').focus(); }catch(e){}
-      return;
-    }
-    var expired=!!(S.access && S.access.until && !accessOK());
-    var v=document.createElement('div'); v.id='accessGate'; v.className='disc-wrap lockfree'; v.style.zIndex='412';
-    v.innerHTML='<div class="disc-inner">'
-      +'<h2>'+(force? 'Access code' : (expired? 'Your access has expired' : 'Enter your access code'))+'</h2>'
-      +'<p>'+(force
-          ? 'Enter a code to renew your access or change what this card can do. Your current access: <b>'+esc(accessRole()||'none')+'</b>'+(accessOK()? ' until '+esc(accessUntilText()) : '')+'.'
-          : (expired
-             ? 'Nothing has been lost \u2014 every session is still on this phone. Enter a current code to carry on.'
-             : 'This card is by invitation. Enter the code you were given. It sets what the card can do and is good for three months.'))+'</p>'
-      +'<input type="text" id="accessIn" class="dtin" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX" style="width:100%;box-sizing:border-box;font-size:20px;letter-spacing:.12em;text-align:center;margin-top:8px">'
-      +'<div id="accessMsg" class="cue" style="min-height:20px;padding:6px 0 0;color:var(--amber)"></div>'
-      +'<button type="button" class="daybtn" id="accessOk" style="margin-top:12px;width:100%">Continue</button>'
-      +((expired||force)? renewButtonsHTML() : '')
-      +(force? '<div class="disc-more" id="accessCancel">Keep what I have</div>' : '')
-      +'</div>';
-    document.body.appendChild(v);
-    // v226, his catch: "when they open the card on the web before download, they have to enter
-    // the code, then when they download it, they have to enter it again a second time."
-    // On iOS a Home Screen web app gets its OWN storage container, separate from Safari. Same
-    // phone, two sealed boxes - so the installed copy makes a NEW device id, the Worker sees a
-    // second device on a claimed key, and refuses it. The athlete is locked out of the copy they
-    // actually train on. So on an uninstalled iPhone the gate does not take a code at all: it
-    // sends them to install first. One entry, in the copy that keeps it.
-    // (Android shares storage between the browser and the installed app, so nothing changes there.)
-    var mustInstall=false;
-    try{ mustInstall = srvOn() && isIOS() && !isInstalled() && !accessOK(); }catch(e){}
-    if(mustInstall){
-      v.querySelector('.disc-inner').innerHTML=
-         '<h2>Add the card to your Home Screen first</h2>'
-        +'<p>Your code ties itself to one copy of the card. On iPhone the Home Screen version is a '
-        +'separate copy from Safari, so entering your code here would use it up in the wrong place '
-        +'and lock you out of the one you train on.</p>'
-        +'<p><b>1.</b> Tap the Share button at the bottom of Safari &mdash; the square with the arrow.<br>'
-        +'<b>2.</b> Scroll and tap <b>Add to Home Screen</b>.<br>'
-        +'<b>3.</b> Open the card from your Home Screen, and enter your code there.</p>'
-        +'<button type="button" class="daybtn" id="accessHow" style="margin-top:12px;width:100%">Show me how</button>'
-        +'<div class="disc-more" id="accessAnyway">Enter it here anyway</div>';
-      v.querySelector('#accessHow').onclick=function(){ try{ a2hsShow(); }catch(e){} };
-      v.querySelector('#accessAnyway').onclick=function(){ try{ v.remove(); }catch(e){} bootAccess(true); };
-      document.body.appendChild(v);
-      return;
-    }
-    var input=v.querySelector('#accessIn'), msg=v.querySelector('#accessMsg');
-    var go=async function(){
-      try{
-        if(v.__done) return;
-        var role=accessTry(input.value);
-        // v225: the local checks passed. Now the only question a phone cannot answer alone -
-        // has this key already been claimed by somebody else's phone?
-        if(role && srvOn()){
-          v.__done=true;                                  // no double-submits while we ask
-          msg.textContent='Checking\u2026';
-          var fpv=accessFp(input.value);   // local pool index only; never sent (F01)
-          // AUDIT 2026-09-11 (finding W1). The card used to send the FINGERPRINT as its
-          // credential - a value published in every copy of this file, so anyone could read one
-          // from view-source and claim a seat with it. The code itself is the secret, so the code
-          // is what goes to the server, over TLS, where a Worker-side pepper hashes it. The
-          // fingerprint is still sent alongside, so a Worker with no pepper configured yet keeps
-          // working during rollout; once ACCESS_PEPPER exists the server ignores it.
-          // v237 (F01): the code, over TLS, and nothing else. The Worker peppers it server-side.
-          // The fingerprint is NOT sent: it is published in this file, so sending it would mean
-          // the credential is printed in the application.
-          var r=await srvPost('/v1/activate', {code:String(input.value||'').trim(), dev:srvDev(), build:BUILD});
-          var vda=srvVerdict(r);
-          if(vda==='unreachable') r=null;   // v227: a 500 or a malformed answer is not a refusal
-          if(r && r.ok===false){
-            accessClear();
-            try{ var ui=(S.usedKeys||[]).indexOf(fpv); if(ui>-1) S.usedKeys.splice(ui,1); save(); }catch(e){}
-            v.__done=false;
-            msg.textContent = r.reason==='inuse'? (isIOS()
-                                ? 'That code is already set up. If that was you in Safari, open the card from your Home Screen instead \u2014 or ask for it to be reset.'
-                                : 'That code is already set up on another phone. Ask for your own.')
-                            : r.reason==='revoked'? 'That code has been turned off. Ask for a new one.'
-                            : r.reason==='expired'? 'That code has expired. Ask for a current one.'
-                            : r.reason==='ended'? 'That code has run out. Ask for a new one.'
-                            : 'That code was not accepted.';
-            input.focus(); return;
-          }
-          // r===null: the server could not be reached. Let them in and check again later - a new
-          // athlete standing in a gym with no signal should not be locked out of their own card.
-          // The key is NOT marked used-on-this-phone until the server has confirmed it, so a
-          // failed claim can be retried later without the local rule refusing it first.
-          try{ if(!r){ var uk=(S.usedKeys||[]).indexOf(fpv); if(uk>-1){ S.usedKeys.splice(uk,1); save(); } } }catch(e){}
-          // F05. Take the server's role, key id and entitlement end rather than keeping whatever
-          // the offline pool entry happened to say. If the server could not be reached, mark the
-          // claim pending so it completes at the next opportunity (F04) instead of silently
-          // running down the offline grace.
-          try{
-            var ar=accessRec();
-            if(ar){
-              ar.lfp=fpv;
-              ar.ck = r? shiftDate() : null;
-              if(!inDrawer()) S.access=ar;
-              if(ROSTER){ ROSTER.access=ar; rosterSave(); }
-              save();
-            }
-            if(r && r.ok===true){ accessReconcile(r); try{ delete S.accessPending; save(); }catch(e){} }
-            else if(!r){ S.accessPending={since:shiftDate(), at:shiftDate()}; save(); }
-          }catch(e){}
-          v.__done=false;
-        }
-        if(!role){
-          msg.textContent= ACCESS_LAST==='expired'? 'That code has expired. Ask for a current one.'
-                         : ACCESS_LAST==='used'? 'That code has already been used on this phone. Renewing needs a new one.'
-                         : 'That code is not recognised. Check it and try again.';
-          input.focus(); return; }
-        v.__done=true;
-        accessAfterGrant(role);
-        // say it before leaving: the sheet behind this gate may look exactly as it did
-        var inner=v.querySelector('.disc-inner');
-        inner.innerHTML='<h2>'+(role==='admin'? 'Admin access is on' : role==='coach'? 'Coach access is on' : 'Athlete access is on')+'</h2>'
-          +'<p>Good until <b>'+esc(accessUntilText())+'</b>.'
-          +(role==='admin'
-              ? ' The Admin tab is open, and coach tools with it.'
-              : role==='coach'
-              ? ((ROSTER && ROSTER.mode==='coach')? ' Coaching is switched on and your roster is back where it was.'
-                                                    : ' You can now switch on coaching under <b>You \u2192 Who is using this card</b>.')
-              : ' This card is set up for your own training.')
-          +'</p><button type="button" class="daybtn" id="accessDone" style="margin-top:12px;width:100%">Done</button>';
-        var done=function(){ try{ v.remove(); }catch(e){} try{ render(); }catch(e){} };
-        var db=inner.querySelector('#accessDone'); db.onclick=done;
-        db.addEventListener('pointerup', done); db.addEventListener('touchend', done, {passive:true});
-      }catch(e){}
-    };
-    var okb=v.querySelector('#accessOk');
-    okb.onclick=go;
-    // same lesson as the disclaimer button (v213): a phone can withhold the click. Take the tap
-    // as a pointer-up or touch-end on the button as well - go() ignores the second arrival.
-    okb.addEventListener('pointerup', go);
-    okb.addEventListener('touchend', go, {passive:true});
-    input.addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); go(); } });
-    input.setAttribute('autocorrect','off'); input.setAttribute('autocomplete','off');
-    var cancel=v.querySelector('#accessCancel'); if(cancel) cancel.onclick=function(){ try{ v.remove(); }catch(e){} };
-    var rc=v.querySelector('[data-renewcopy]'); if(rc) rc.onclick=renewCopy;
-    setTimeout(function(){ try{ input.focus(); }catch(e){} }, 50);
-  }catch(e){}
-}
-// a coach-mode card whose holder does not have coach rights runs as a solo card. The roster is
-// kept, untouched; it comes back the moment a coach code is entered and the switch is flipped.
-function accessEnforce(){
-  try{
-    if(inDrawer() && !(ROSTER && ROSTER.access)) return false;   // holder unknown from here: leave it
-    if(ROSTER && ROSTER.mode==='coach' && !coachAllowed()){ ROSTER.mode='solo'; ROSTER.wasCoach=true; rosterSave(); return true; }
-  }catch(e){}
-  return false;
-}
-// FIELD 2026-09-07, his own card, first open on v214: "I entered the coach code, selected
-// enter, and nothing happened." The code WAS accepted and the gate closed - but the card had
-// switched his roster to solo when it found no coach rights, accepting the code did not switch
-// it back, and behind the gate the Settings sheet still read "Athlete access". A two-second
-// toast was the only sign. A coach code now hands the roster straight back, the gate says in
-// its own words what it just did before it goes, and the Settings sheet is refreshed in place.
-function accessAfterGrant(role){
-  try{
-    if(role==='coach' || role==='admin'){
-      if(ROSTER && (ROSTER.wasCoach || (ROSTER.athletes||[]).length) && ROSTER.mode!=='coach'){
-        ROSTER.mode='coach'; delete ROSTER.wasCoach; rosterSave();
-      }
-    } else if(ROSTER && ROSTER.mode==='coach'){ ROSTER.mode='solo'; ROSTER.wasCoach=true; rosterSave(); }
-  }catch(e){}
-  try{ if(typeof SET_OPEN!=='undefined' && SET_OPEN) settingsRefresh(); }catch(e){}
-  try{ render(); }catch(e){}
-}
-// His ask, 2026-09-07: "Add the expiration date to the calendar and have a 'good till' in the
-// header somewhere. Or renew? Then a link that sends the user to send me a direct email or
-// message with an auto message asking for a renewal."
-// RENEW_EMAIL / RENEW_SMS are his. Either may be blank; with neither set, the button puts the
-// request on the clipboard so it can be pasted anywhere. The message is prefilled - the athlete
-// only has to send it.
-var RENEW_EMAIL='manuel.g.grajeda@outlook.com', RENEW_SMS='+15202346160', RENEW_SOON_DAYS=14;
-function accessDaysLeft(){ try{ var a=accessRec(); if(!a||!a.until) return null;
-  return Math.round((new Date(a.until+'T12:00:00')-new Date(shiftDate()+'T12:00:00'))/86400000); }catch(e){ return null; } }
-function accessSoon(){ var d=accessDaysLeft(); return d!=null && d<=RENEW_SOON_DAYS; }
-function renewText(){
-  var a=S.access||{}, who=(S.profileName||'').trim();
-  var when=a.until? accessUntilText() : 'now';
-  return 'Hi \u2014 my Deadstop Training Card access ('+(a.role||'athlete')+') '
-    +(accessOK()? 'runs out on '+when : 'ran out on '+when)
-    +'. Could you send me a renewal code?'+(who? ' \u2014 '+who : '');
-}
-function renewHref(kind){
-  var body=encodeURIComponent(renewText());
-  if(kind==='sms' && RENEW_SMS) return 'sms:'+RENEW_SMS+'?&body='+body;
-  if(RENEW_EMAIL) return 'mailto:'+RENEW_EMAIL+'?subject='+encodeURIComponent('Training Card renewal')+'&body='+body;
-  return '';
-}
-function renewButtonsHTML(){
-  var h='';
-  if(RENEW_EMAIL) h+='<a class="toggle lockfree" href="'+renewHref('mail')+'" style="display:block;text-align:center;margin-top:8px;text-decoration:none">Email a renewal request</a>';
-  if(RENEW_SMS)   h+='<a class="toggle lockfree" href="'+renewHref('sms')+'" style="display:block;text-align:center;margin-top:8px;text-decoration:none">Text a renewal request</a>';
-  if(!RENEW_EMAIL && !RENEW_SMS) h+='<div class="toggle lockfree" data-renewcopy="1" style="margin-top:8px">Copy a renewal request</div>';
-  return h;
-}
-function renewCopy(){
-  try{ var t=renewText();
-    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function(){});
-    try{ alertToast('Renewal request copied \u2014 paste it into a message'); }catch(e){}
-  }catch(e){}
-}
-// ===== ADMIN =====
-// His ask, 2026-09-07: "adding a tab for admin only where an admin can generate keys for
-// athletes and coaches and maybe other potential tools in the future. Only shows for
-// administrators." The value here is the bookkeeping - which key went to whom, when - as much
-// as the issuing. Issued keys are recorded on the admin's own card (S.adminIssued).
-// R07. The pool is on the server. These read a CACHE of the server's counts, refreshed by
-// adminSync(), so render() stays synchronous - it cannot await, and a counts call on every paint
-// would hammer the Worker. A stale count is cosmetic; the server decides what is actually issued.
-function adminPoolCt(){ try{ if(inDrawer()) return null; return S.adminPoolCt||null; }catch(e){ return null; } }
-async function adminPoolLoad(){
-  try{
-    if(!srvOn() || !S.adminTok) return null;
-    var r=await srvAdmin('/v1/admin/pool', null, 'GET');
-    if(r && r.ok){ S.adminPoolCt={at:shiftDate(), roles:r.roles||{}, batches:r.batches||{}, configured:!!r.configured}; save(); return S.adminPoolCt; }
-    if(r && r.reason==='auth') S.adminLiveErr='auth';
-    return null;
-  }catch(e){ return null; }
-}
-function adminIssued(){ if(!Array.isArray(S.adminIssued)) S.adminIssued=[]; return S.adminIssued; }
-// the current batch: the earliest one that has not expired. A key issued from it is good to
-// that batch's date, so a key handed out on the last day of a quarter still gives ~90 days.
-// How many are left, per role, from the cached server counts.
-function adminLeftCt(role){ try{ var p=adminPoolCt(); return (p && p.roles && p.roles[role])? (p.roles[role].left||0) : 0; }catch(e){ return 0; } }
-// The batch a key would come from next, for the "issuing from 2027Q1" line. Cosmetic only.
-function adminCurBatch(){
-  try{
-    var p=adminPoolCt(); if(!p || !p.batches) return null;
-    var ids=Object.keys(p.batches).filter(function(id){ return id!=='none'; }).sort();
-    for(var i=0;i<ids.length;i++){ var b=p.batches[ids[i]]; if((b.athlete||0)+(b.coach||0)>0) return {id:ids[i], exp:b.exp, athlete:b.athlete||0, coach:b.coach||0}; }
-    return null;
-  }catch(e){ return null; }
-}
-// R07. Issuing is a server decision now. It is atomic there, so two taps - or a tap here and one
-// in the private panel - can never be handed the same code, which the old per-device ledger could
-// not prevent. The local list stays as the administrator's own record of who got what.
-async function adminIssue(role, to){
-  try{
-    if(!srvOn() || !S.adminTok) return {ok:false, reason:'notok'};
-    var r=await srvAdmin('/v1/admin/issue', {role:role, to:String(to||'').trim()});
-    if(r === null) return {ok:false, reason:'offline'};
-    if(!r.ok) return {ok:false, reason:r.reason||'error'};
-    adminIssued().push({code:r.code, role:role, to:String(to||'').trim(), d:shiftDate(), b:r.b||null, exp:r.exp||null, kid:r.kid||null});
-    try{ if(r.kid){ S.adminKid=S.adminKid||{}; S.adminKid[accessFp(r.code)]=r.kid; } }catch(e){}
-    save();
-    adminPoolLoad();                       // refresh the counts in the background
-    return {ok:true, code:r.code};
-  }catch(e){ return {ok:false, reason:'error'}; }
-}
-function adminShareHref(kind, code, role){
-  var rec=null; try{ adminIssued().forEach(function(x){ if(x.code===code) rec=x; }); }catch(e){}
-  var body='Your Deadstop Training Card '+role+' code: '+code+'. Open the card, enter it once, and it is good for 90 days from that day'+(rec&&rec.exp? ' (the code itself is valid until '+rec.exp+')':'')+'.';
-  if(kind==='sms') return 'sms:?&body='+encodeURIComponent(body);
-  return 'mailto:?subject='+encodeURIComponent('Your Training Card code')+'&body='+encodeURIComponent(body);
-}
-// ===== THE BRIDGE (v228) =====
-// His ask: "Build the bridge please. Its easier for me to run things through the admin in my
-// card." Until now the card's Admin tab and the Worker did not talk: the tab kept its own list
-// on his phone, and Unissue silently returned a key to the pool that the server still had
-// claimed by somebody's phone. Now the Worker is the truth and the tab is a view of it. His
-// admin token lives on his card (S.adminTok - it is his phone, same trust as the pool key),
-// and every action on the tab is a request to the server first, the ledger second.
-async function srvAdmin(path, body, method){
-  if(!srvOn() || !S.adminTok) return null;
-  var ctl=null, t=null;
-  try{ ctl=new AbortController(); t=setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, SRV_TIMEOUT); }catch(e){}
-  try{
-    var r=await fetch(SRV_BASE.replace(/\/+$/,'')+path, {method:method||'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.adminTok},
-      body:(method==='GET')? undefined : JSON.stringify(body||{}), signal:ctl? ctl.signal : undefined});
-    if(t) clearTimeout(t);
-    if(r.status===401){ return {ok:false, reason:'auth'}; }
-    return await r.json();
-  }catch(e){ if(t) clearTimeout(t); return null; }
-}
-// F02. code -> stable server key id, resolved through the Worker so the pepper stays on the
-// server. Cached on the admin's own card; a kid never changes, so this is a one-time cost per
-// code and survives a pepper rotation.
-async function adminKids(codes){
-  try{
-    if(!codes || !codes.length) return {};
-    S.adminKid=S.adminKid||{};
-    var want=[], idx={};
-    for(var i=0;i<codes.length;i++){
-      var lf=accessFp(codes[i]);
-      idx[codes[i]]=lf;
-      if(!S.adminKid[lf]) want.push(codes[i]);
-    }
-    for(var o=0;o<want.length;o+=200){
-      var batch=want.slice(o,o+200);
-      var r=await srvAdmin('/v1/admin/lookup', {codes:batch});
-      if(!r || !r.ok) break;
-      for(var k=0;k<batch.length;k++){
-        var got=(r.keys&&r.keys[k])? r.keys[k].kid : null;
-        if(got) S.adminKid[accessFp(batch[k])]=got;
-      }
-    }
-    save();
-    var out={};
-    for(var c=0;c<codes.length;c++) out[codes[c]]=S.adminKid[idx[codes[c]]]||null;
-    return out;
-  }catch(e){ return {}; }
-}
-function adminKidOf(code){ try{ return (S.adminKid||{})[accessFp(code)]||null; }catch(e){ return null; } }
-
-// pull live status for every issued key, and the numbers - then redraw
-var _adminSyncing=false;
-async function adminSync(){
-  if(_adminSyncing || !S.adminTok) return;
-  _adminSyncing=true;
-  try{
-    S.adminLive=S.adminLive||{};
-    var iss=adminIssued();
-    await adminKids(iss.map(function(x){ return x.code; }));
-    for(var i=0;i<iss.length;i++){
-      var fp=accessFp(iss[i].code);                      // local ledger index
-      var kid=adminKidOf(iss[i].code);                   // server key identity (F02)
-      if(!kid){ S.adminLive[fp]={unknown:true, at:shiftDate()}; continue; }
-      var r=await srvAdmin('/v1/admin/key?kid='+encodeURIComponent(kid), null, 'GET');
-      if(r && r.ok===false && r.reason==='auth'){ S.adminLiveErr='auth'; break; }
-      if(r && r.ok && r.key){ S.adminLive[fp]={devs:(r.key.devs||[]).length, rev:!!r.key.rev, exp:r.key.exp||null, until:r.key.until||null, to:r.key.to||null, kid:kid, at:shiftDate()}; S.adminLiveErr=null; }
-      else if(r===null){ S.adminLiveErr='offline'; break; }
-      else if(r && r.ok===false){ S.adminLiveErr=r.reason||'error'; }
-    }
-    await adminPoolLoad();
-    var who=await srvAdmin('/v1/admin/devices', null, 'GET');
-    if(who && who.ok){ S.adminWho={at:shiftDate(), today:who.today, list:who.devices||[]}; }
-    var st=await srvAdmin('/v1/admin/stats?days=30', null, 'GET');
-    if(st && st.ok){ S.adminStats={at:shiftDate(), s:st.stats}; S.adminLiveErr=null; }
-    else if(st===null) S.adminLiveErr='offline';
-    else if(st && st.reason==='auth') S.adminLiveErr='auth';
-    save();
-  }catch(e){}
-  _adminSyncing=false;
-  try{ if(S.day==='ADMIN') render(); }catch(e){}
-}
-function adminLiveOf(code){ try{ return (S.adminLive||{})[accessFp(code)]||null; }catch(e){ return null; } }
-// Who's active - one line per device that has checked in, newest first. Name is whatever he
-// wrote beside the key when he issued it; a key issued without a name shows the batch instead.
-function adminWhoHTML(){
-  var W=S.adminWho; if(!W || !Array.isArray(W.list)) return '';
-  var t=W.today||shiftDate();
-  var ago=function(d){ if(!d) return 'never'; var n=adDays(d,t); return n<=0? 'today' : n===1? 'yesterday' : n+' days ago'; };
-  var rows=W.list.slice(0,60).map(function(x){
-    var stale=x.last? adDays(x.last,t) : 999;
-    return '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">'
-      +'<div><b>'+esc(x.to||('\u2014 '+(x.b||'')))+'</b> <span class="cue" style="font-size:11px">\u00b7 '+esc(x.role||'?')+' \u00b7 '+esc(x.build||'?')+'</span></div>'
-      +'<div class="cue" style="font-size:12px;white-space:nowrap;'+(stale<=1? 'color:var(--green)' : stale<=7? '' : 'opacity:.6')+'">'+esc(ago(x.last))+'</div></div>';
-  }).join('');
-  var todayN=W.list.filter(function(x){ return x.last===t; }).length, weekN=W.list.filter(function(x){ return x.last && adDays(x.last,t)<=7; }).length;
-  return '<div class="block"><h3>Who\u2019s active</h3>'
-    +'<div class="cue" style="margin-bottom:4px"><b>'+todayN+'</b> opened the card today \u00b7 <b>'+weekN+'</b> this week \u00b7 '+W.list.length+' phones in the last 90 days</div>'
-    +(rows||'<div class="cue">Nobody has checked in yet.</div>')
-    +(W.list.length>60? '<div class="cue" style="font-size:11px;opacity:.7;margin-top:4px">showing the 60 most recent</div>' : '')
-    +'</div>';
-}
-function adminStatsHTML(){
-  var st=S.adminStats&&S.adminStats.s; if(!st) return '';
-  var t=st.totals||{}, d=st.devices||{}, k=st.keys||{};
-  var ref=Object.keys(t).filter(function(x){ return x.indexOf('refuse.')===0; }).map(function(x){ return x.slice(7)+' '+t[x]; });
-  return '<div class="block"><h3>The numbers \u00b7 last 30 days</h3>'
-    +'<div class="cue" style="line-height:1.7">'
-    +'<b>'+(d.week||0)+'</b> active this week \u00b7 <b>'+(d.month||0)+'</b> this month<br>'
-    +'<b>'+(t.activate||0)+'</b> codes claimed \u00b7 <b>'+(t['use.sessions']||0)+'</b> sessions logged<br>'
-    +'<b>'+(k.claimed||0)+'</b> of '+(k.total||0)+' keys in use \u00b7 <b>'+(k.revoked||0)+'</b> revoked'
-    +(ref.length? '<br>Refused: '+esc(ref.join(', '))+' <span style="opacity:.7">\u2014 \u201cinuse\u201d is a code tried on a second phone</span>' : '<br>Nothing refused.')
-    +(d.builds? '<br>Builds: '+esc(Object.keys(d.builds).map(function(b){ return b+' ('+d.builds[b]+')'; }).join(', ')) : '')
-    +'</div><div class="cue" style="font-size:11px;opacity:.7;margin-top:4px">as of '+esc(S.adminStats.at)+'</div></div>';
-}
-function adminHTML(){
-  var h='<div class="sub" style="margin-top:8px">Administration</div>';
-  if(srvOn()){
-    if(!S.adminTok){
-      h+='<div class="block" style="border-color:var(--amber)"><h3>Connect to the server</h3>'
-        +'<div class="cue">Revoking a key, replacing a lost phone and the live numbers all happen on the server. Enter your admin token once \u2014 the same one you set on Cloudflare \u2014 and this tab does the rest.</div>'
-        +'<input type="password" id="adminTokIn" class="dtin" placeholder="admin token" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:8px">'
-        +'<div class="toggle lockfree" data-admintok="1" style="margin-top:8px">Connect</div></div>';
-    } else {
-      var err=S.adminLiveErr;
-      h+='<div class="block"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
-        +'<div class="cue">'+(err==='auth'? '<b style="color:var(--red)">The server did not accept the token.</b> Enter it again.'
-                              : err==='offline'? '<b style="color:var(--amber)">Could not reach the server.</b> Showing what was last seen.'
-                              : 'Connected to the server.'+(S.adminStats? ' Last read '+esc(S.adminStats.at)+'.' : ''))+'</div>'
-        +'<span class="toggle lockfree" data-adminsync="1" style="padding:0 12px;font-size:11px;white-space:nowrap">Refresh</span></div>'
-        +(err==='auth'? '<input type="password" id="adminTokIn" class="dtin" placeholder="admin token" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:8px"><div class="toggle lockfree" data-admintok="1" style="margin-top:8px">Connect</div>' : '')
-        +'</div>';
-      h+=adminWhoHTML();
-      h+=adminStatsHTML();
-    }
-  }
-  // R07: there is no locked pool in the card to open any more, so there is no "enter the admin
-  // code again to unlock it" state. Authority over the pool is the admin token against the
-  // Worker, and the block above already handles not having one.
-  var iss=adminIssued();
-  var poolCt=adminPoolCt();
-  var cur=adminCurBatch();
-  var left={athlete:adminLeftCt('athlete'), coach:adminLeftCt('coach')};
-  var curTxt = !poolCt
-    ? 'Connect to the server to see what is left and to issue a key. '
-    : (poolCt.configured===false
-        ? 'The server has no issuing pool loaded \u2014 seed it from the private admin panel first. '
-        : (cur
-            ? ('Issuing from batch <b>'+esc(cur.id)+'</b> \u2014 '+cur.athlete+' athlete, '+cur.coach+' coach left, keys good till <b>'+esc(cur.exp||'\u2014')+'</b>. ')
-            : 'No keys left in any live batch \u2014 load another batch from the private admin panel. '));
-  h+='<div class="block" id="adminIssue"><h3>Issue a key</h3>'
-    +'<div class="cue">'+curTxt+'A key gives 90 days from the day it is entered, never past its batch date, and cannot be re-entered on the same phone once it lapses. '
-    +(poolCt? (left.athlete+' athlete and '+left.coach+' coach keys left across all batches. ') : '')
-    +'Keys are held on the server, not in this app \u2014 so two people issuing at once can never be handed the same one.</div>'
-    +'<input type="text" id="adminTo" class="dtin" placeholder="Who is this for? (name)" style="width:100%;box-sizing:border-box;margin-top:8px">'
-    +'<div style="display:flex;gap:8px;margin-top:8px">'
-    +'<div class="toggle" data-adminissue="athlete" style="flex:1;text-align:center'+(left.athlete? '':';opacity:.4')+'">Athlete key</div>'
-    +'<div class="toggle" data-adminissue="coach" style="flex:1;text-align:center'+(left.coach? '':';opacity:.4')+'">Coach key</div>'
-    +'</div>'
-    +(S.adminLast? '<div class="block" style="margin-top:10px;border-color:var(--green)"><div class="cue">'+esc(S.adminLast.role)+' key for <b>'+esc(S.adminLast.to||'\u2014')+'</b></div>'
-        +'<div class="mono" style="font-size:22px;letter-spacing:.12em;text-align:center;padding:8px 0">'+esc(S.adminLast.code)+'</div>'
-        +'<div style="display:flex;gap:8px">'
-        +'<div class="toggle lockfree" data-admincopy="'+esc(S.adminLast.code)+'" style="flex:1;text-align:center">Copy</div>'
-        +'<a class="toggle lockfree" href="'+adminShareHref('sms',S.adminLast.code,S.adminLast.role)+'" style="flex:1;text-align:center;text-decoration:none">Text it</a>'
-        +'<a class="toggle lockfree" href="'+adminShareHref('mail',S.adminLast.code,S.adminLast.role)+'" style="flex:1;text-align:center;text-decoration:none">Email it</a>'
-        +'</div></div>' : '')
-    +'</div>';
-  h+='<div class="block"><h3>Issued keys</h3>';
-  if(!iss.length) h+='<div class="cue">None yet.</div>';
-  else h+=iss.slice().reverse().map(function(x,i){
-    var idx=iss.length-1-i;
-    return '<div class="ex" style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'
-      +'<div><b>'+esc(x.to||'\u2014')+'</b> <span class="cue">\u00b7 '+esc(x.role)+' \u00b7 issued '+esc(x.d)+(x.exp? ' \u00b7 key good till '+esc(x.exp):'')+'</span>'
-      +'<div class="mono" style="font-size:13px;letter-spacing:.08em">'+esc(x.code)+'</div></div>'
-      +(function(){
-          // live status from the server, and the actions that are safe given it
-          var L=adminLiveOf(x.code);
-          var pill=!srvOn()? '' : !L? '<span class="cue" style="font-size:11px;opacity:.7">status unknown</span>'
-                  : L.rev? '<span class="cue" style="font-size:11px;color:var(--red)">revoked</span>'
-                  : L.devs? '<span class="cue" style="font-size:11px;color:var(--green)">on '+L.devs+' phone'+(L.devs>1?'s':'')+'</span>'
-                  : '<span class="cue" style="font-size:11px;opacity:.7">not yet entered</span>';
-          var acts='<span class="toggle lockfree" data-admincopy="'+esc(x.code)+'" style="padding:0 10px;font-size:11px">Copy</span>';
-          if(!srvOn()) acts+='<span class="toggle lockfree" data-adminforget="'+idx+'" style="padding:0 10px;font-size:11px">Unissue</span>';
-          else if(L && L.rev) acts+='<span class="toggle lockfree" data-adminrev="'+idx+'" data-on="0" style="padding:0 10px;font-size:11px">Un-revoke</span>';
-          else if(L && !L.devs) acts+='<span class="toggle lockfree" data-adminforget="'+idx+'" style="padding:0 10px;font-size:11px" title="Nobody has entered it: return it to the pool">Unissue</span>'
-                                    +'<span class="toggle lockfree" data-adminrev="'+idx+'" data-on="1" style="padding:0 10px;font-size:11px">Revoke</span>';
-          else if(L) acts+='<span class="toggle lockfree" data-adminrev="'+idx+'" data-on="1" style="padding:0 10px;font-size:11px">Revoke</span>'
-                          +'<span class="toggle lockfree" data-adminnewphone="'+idx+'" style="padding:0 10px;font-size:11px">New phone</span>';
-          return '<div>'+pill+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+acts+'</div>';
-        })()
-      +'</div></div>'; }).join('');
-  h+='</div>';
-  h+='<div class="block"><h3>Your access</h3><div class="cue">Admin until <b>'+esc(accessUntilText())+'</b>. Adding or replacing keys in the pool is a build.</div></div>';
-  return h;
-}
-function adminWire(){
-  try{
-    document.querySelectorAll('[data-adminissue]').forEach(function(b){ b.onclick=async function(){
-      if(b.__busy) return;                                  // one tap, one key
-      b.__busy=true;
-      var role=b.getAttribute('data-adminissue'); var to=(document.getElementById('adminTo')||{}).value||'';
-      try{
-        alertToast('Asking the server for a key\u2026');
-        var r=await adminIssue(role, to);
-        if(!r.ok){
-          alertToast(
-            r.reason==='offline'    ? 'Could not reach the server \u2014 nothing was issued. Try again when you have signal.'
-          : r.reason==='exhausted'  ? 'No '+role+' keys left in the pool. Load another batch from the private admin panel.'
-          : r.reason==='nopool'     ? 'The server has no issuing pool loaded. Seed it from the private admin panel first.'
-          : r.reason==='empty'      ? 'The server has no '+role+' keys loaded yet.'
-          : r.reason==='notok'      ? 'Connect to the server first.'
-          : r.reason==='auth'       ? 'The server did not accept your admin token.'
-          : 'The server could not issue a key ('+esc(r.reason)+').', 8000);
-          return;
-        }
-        S.adminLast={code:r.code, role:role, to:String(to).trim(), d:shiftDate()}; save(); render();
-      } finally { b.__busy=false; }
-    }; });
-    document.querySelectorAll('[data-admincopy]').forEach(function(b){ b.onclick=function(){
-      var c=b.getAttribute('data-admincopy');
-      try{ if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(c).catch(function(){}); }catch(e){}
-      alertToast('Copied '+c);
-    }; });
-    document.querySelectorAll('[data-admintok]').forEach(function(b){ b.onclick=function(){
-      var v=(document.getElementById('adminTokIn')||{}).value||''; v=String(v).trim(); if(!v) return;
-      S.adminTok=v; S.adminLiveErr=null; save(); render(); alertToast('Connecting\u2026'); adminSync();
-    }; });
-    document.querySelectorAll('[data-adminsync]').forEach(function(b){ b.onclick=function(){ alertToast('Reading the server\u2026'); adminSync(); }; });
-    document.querySelectorAll('[data-adminrev]').forEach(function(b){ b.onclick=async function(){
-      var i=+b.getAttribute('data-adminrev'), on=b.getAttribute('data-on')==='1'; var iss=adminIssued(); var x=iss[i]; if(!x) return;
-      if(on && !confirm('Revoke this key?\n\nWhoever holds it keeps training until their card next checks in \u2014 within a week \u2014 and is then asked for a code. Their sessions stay on their phone.')) return;
-      await adminKids([x.code]);
-      var kid=adminKidOf(x.code);
-      if(!kid){ alertToast('That code is not on the server yet \u2014 seed it first.'); return; }
-      var r=await srvAdmin('/v1/admin/key', {kid:kid, rev:on});
-      if(r && r.ok){ x.rev=on; S.adminLive=S.adminLive||{}; S.adminLive[accessFp(x.code)]={devs:(r.key.devs||[]).length, rev:!!r.key.rev, exp:r.key.exp||null, until:r.key.until||null, kid:kid, at:shiftDate()}; save(); render(); alertToast(on? 'Revoked on the server.' : 'Restored on the server.'); }
-      else alertToast(r && r.reason==='auth'? 'The server did not accept the token.' : 'Could not reach the server \u2014 nothing changed.');
-    }; });
-    document.querySelectorAll('[data-adminnewphone]').forEach(function(b){ b.onclick=async function(){
-      var i=+b.getAttribute('data-adminnewphone'); var iss=adminIssued(); var x=iss[i]; if(!x) return;
-      if(!confirm('Let this key be claimed by a new phone?\n\nFor a lost or replaced phone. Their old phone stops at its next check.')) return;
-      await adminKids([x.code]);
-      var kid=adminKidOf(x.code);
-      if(!kid){ alertToast('That code is not on the server yet \u2014 seed it first.'); return; }
-      var r=await srvAdmin('/v1/admin/key', {kid:kid, clearDevices:true, reopenRehome:true});
-      if(r && r.ok){ S.adminLive=S.adminLive||{}; S.adminLive[accessFp(x.code)]={devs:0, rev:!!r.key.rev, exp:r.key.exp||null, until:r.key.until||null, kid:kid, at:shiftDate()}; save(); render(); alertToast('Cleared \u2014 they can set up on a new phone.'); }
-      else alertToast(r && r.reason==='auth'? 'The server did not accept the token.' : 'Could not reach the server \u2014 nothing changed.');
-    }; });
-    document.querySelectorAll('[data-adminforget]').forEach(function(b){ b.onclick=async function(){
-      var i=+b.getAttribute('data-adminforget'); var iss=adminIssued(); if(!iss[i]) return;
-      // v228: with a server, Unissue is only offered for a key nobody has entered (see the list),
-      // so returning it to the pool is safe. Without a server it is bookkeeping, as before.
-      var L=srvOn()? adminLiveOf(iss[i].code) : null;
-      if(srvOn() && L && L.devs){ alertToast('Somebody has entered that key. Revoke it instead.'); return; }
-      // R07: the pool is the server's, so returning a key has to reach it. Removing it from the
-      // local list alone would leave the key marked issued on the Worker and never offered again
-      // - the ledger drift this whole change exists to end.
-      if(srvOn() && S.adminTok){
-        var kid=iss[i].kid || adminKidOf(iss[i].code);
-        if(!kid){ await adminKids([iss[i].code]); kid=adminKidOf(iss[i].code); }
-        if(kid){
-          var r=await srvAdmin('/v1/admin/unissue', {kid:kid});
-          if(r===null){ alertToast('Could not reach the server \u2014 nothing was returned.'); return; }
-          if(!r.ok){
-            alertToast(r.reason==='claimed'
-              ? 'Somebody has entered that key. Revoke it instead.'
-              : 'The server would not return it ('+esc(r.reason||'error')+').', 7000);
-            return;
-          }
-        }
-      }
-      var gone=iss.splice(i,1)[0]; if(S.adminLast && S.adminLast.code===gone.code) delete S.adminLast;
-      save(); render(); alertToast(srvOn()? 'Returned to the pool.' : 'Returned to the pool \u2014 this does not remove access from anyone who already entered it');
-      if(srvOn() && S.adminTok) adminPoolLoad();
-    }; });
-  }catch(e){}
-}
-function accessHTML(){
-  var r=accessRole();
-  return '<div class="block"><h3>Access</h3>'
-    +'<div class="cue">'+(r
-        ? ('<b>'+(r==='admin'? 'Admin' : r==='coach'? 'Coach':'Athlete')+'</b> access until <b>'+esc(accessUntilText())+'</b>.'
-           +(r==='admin'? ' Coach tools and the Admin tab are on.' : r==='coach'? ' Coach tools are on.' : ' Coach tools need a coach code.'))
-        : 'No current access.')+'</div>'
-    +'<div class="toggle" data-accesscode="1" style="margin-top:8px">Enter a code</div>'
-    +renewButtonsHTML()
-    +(srvOn()? '<div class="cue" style="margin-top:10px;font-size:11px;opacity:.8">Your code is tied to this phone. The card checks in about once a week to keep it active \u2014 it sends only your code and a count of sessions, never your training. Training itself never needs a connection.</div>' : '')
-    +'</div>';
 }
 
 // ===== TERMS & PRIVACY =====
@@ -12054,6 +10915,24 @@ function icsEsc(t){ return String(t).replace(/[\\,;]/g,'').replace(/\n/g,' '); }
 // alarm the PHONE fires - the reliable reminder path, unlike web push. Colour is per
 // CALENDAR in every major client, so this ships as its own "Deadstop" calendar the athlete
 // colours once; per-event colour would be a promise the .ics format cannot keep.
+// What one session costs, in minutes, when the export cannot say WHICH session it is. The
+// athlete's own target when they have set one; otherwise the MEDIAN of what this block's sessions
+// actually cost. Not the longest - that blocks out an hour of a phone's day the athlete never
+// uses - and not a flat guess.
+function icsTypicalMins(){
+  try{
+    var t=null; try{ t=sessTarget(); }catch(e){}
+    if(t) return Math.round(t);
+    var all=[];
+    (PLAN.days||[]).forEach(function(day){
+      try{ var m=sessionMinutes(Object.assign({},day,{exercises:applyOrder(day.code,day.exercises)}));
+        if(m) all.push(m); }catch(e){}
+    });
+    if(!all.length) return 60;
+    all.sort(function(a,b){ return a-b; });
+    return Math.round(all[Math.floor(all.length/2)]);
+  }catch(e){ return 60; }
+}
 function icsForBlock(){
   try{
     var td=calTrainDays(); if(!td.length) return null;
@@ -12062,19 +10941,52 @@ function icsForBlock(){
     var ptr=Math.max(0, codes.indexOf(S.day));
     var left=sessLeft(), ev=[], n=new Date(shiftDate()+'T12:00:00');
     if(!left) return null;
+    // FIELD 2026-09-19 (Jerry): "I took my rest day and my phone is a day ahead."
+    //
+    // He is right, and the reason is a contradiction rather than a slipped line. This card's
+    // rotation is ATHLETE-PACED - it advances when a session is BANKED, never when a day passes -
+    // so a session NAME on a future DATE is precisely the promise the engine refuses to make. Rest
+    // once and every name after it is one step wrong, and a file already on the phone cannot
+    // correct itself.
+    //
+    // A weekday map is the one case where the weekday really does own the session: that rhythm
+    // does not shift when a day is missed, and the card says so in its own note - "Miss Wednesday
+    // and legs is still Wednesday's session." So WITH a map the export names the session and is
+    // correct by construction; this also repairs the second half of the fault, which is that the
+    // export never consulted that map at all and imposed the rotation on those athletes too.
+    //
+    // WITHOUT one, the event carries the time, the real duration and the alarm - everything a
+    // static file can still be right about in a month - and the card says WHAT when he opens it,
+    // which is the only place that knows. His call, asked before this was written.
+    var map=null; try{ map=schedMap(); }catch(e){}
+    var DOW=['SU','MO','TU','WE','TH','FR','SA'];
+    var genericMins=icsTypicalMins();
     for(var i=0;i<180 && ev.length<left;i++){
       var d=new Date(n.getTime()); d.setDate(d.getDate()+i);
       var iso=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
       if(td.indexOf(d.getDay())<0) continue;
       if(i===0 && streakDayset()[iso]) continue;
-      var day=PLAN.days[ptr%PLAN.days.length]; ptr++;
-      var mins=60; try{ mins=sessionMinutes(Object.assign({},day,{exercises:applyOrder(day.code,day.exercises)}))||60; }catch(e){}
-      try{ if(sessTarget()) mins=Math.max(mins, sessTarget()); }catch(e){}
-      ev.push('BEGIN:VEVENT\r\nUID:ds-'+iso+'-'+day.code+'@deadstop\r\nDTSTAMP:20260901T000000Z'
+      var day=null;
+      if(map){
+        var code=map[DOW[d.getDay()]];
+        if(code) day=PLAN.days.filter(function(x){ return x.code===code; })[0]||null;
+        if(!day) continue;                     // a training day this map does not own: not ours to name
+      }
+      var title=day? ('Deadstop \u2014 '+(day.title||day.code)) : 'Deadstop \u2014 Training';
+      var mins=genericMins;
+      if(day){
+        try{ mins=sessionMinutes(Object.assign({},day,{exercises:applyOrder(day.code,day.exercises)}))||genericMins; }catch(e){}
+        try{ if(sessTarget()) mins=Math.max(mins, sessTarget()); }catch(e){}
+      }
+      // The UID no longer carries the session code. It used to, which meant a re-export naming a
+      // different session for the same date was a NEW event to every calendar client - so
+      // correcting a drifted calendar ADDED to it instead of replacing it. Keyed on the date
+      // alone, a re-import updates in place.
+      ev.push('BEGIN:VEVENT\r\nUID:ds-'+iso+'@deadstop\r\nDTSTAMP:20260901T000000Z'
         +'\r\nDTSTART:'+iso.replace(/-/g,'')+'T'+hh+mi+'00'
         +'\r\nDURATION:PT'+Math.round(mins)+'M'
-        +'\r\nSUMMARY:'+icsEsc('Deadstop \u2014 '+(day.title||day.code))
-        +'\r\nBEGIN:VALARM\r\nTRIGGER:-PT60M\r\nACTION:DISPLAY\r\nDESCRIPTION:'+icsEsc('Deadstop \u2014 '+(day.title||day.code))+'\r\nEND:VALARM\r\nEND:VEVENT');
+        +'\r\nSUMMARY:'+icsEsc(title)
+        +'\r\nBEGIN:VALARM\r\nTRIGGER:-PT60M\r\nACTION:DISPLAY\r\nDESCRIPTION:'+icsEsc(title)+'\r\nEND:VALARM\r\nEND:VEVENT');
     }
     if(!ev.length) return null;
     return 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Deadstop//Card//EN\r\nX-WR-CALNAME:Deadstop\r\nCALSCALE:GREGORIAN\r\n'+ev.join('\r\n')+'\r\nEND:VCALENDAR\r\n';
@@ -12840,7 +11752,7 @@ function weekSheetHTML(w){
   return h;
 }
 function printWeek(w){
-  try{ srvCount('prints'); }catch(e){}
+  
   // AUDIT 2026-09-08: a call without a week rendered "Week undefined of 6 · undefined NaN"
   // into the sheet host, and the host outlived "Back to the card" (only the printing class was
   // removed), so the text sat in the page invisibly. Default the week, and empty the host on close.
@@ -13575,7 +12487,7 @@ function routineListHTML(code){
      +'<div class="grip" data-grip="1" role="button" tabindex="0" aria-label="Drag to reorder">\u2261</div>'
      +'<div style="flex:1;min-width:0">'
      +'<div class="rtname">'+esc(n)+(cust[n]?' <span class="subtag">ADDED</span>':'')+'</div>'
-     +'<div class="rtsub">'+(e.sets||3)+' \u00d7 '+(e.reps||'')+(e.perHand?' \u00b7 per hand':'')+'</div></div>'
+     +'<div class="rtsub">'+(e.sets||3)+' \u00d7 '+((typeof holdReps==='function'&&holdReps(e))||e.reps||'')+(e.perHand?' \u00b7 per hand':'')+'</div></div>'
      +'<div class="rtcol">'
      +'<div class="rtmini" data-rtup="'+i+'" data-rtc="'+code+'" aria-label="Move up">\u25B4</div>'
      +'<div class="rtmini" data-rtdown="'+i+'" data-rtc="'+code+'" aria-label="Move down">\u25BE</div></div>'
@@ -14540,7 +13452,12 @@ function libPickerHTML(c){
 function libDefaults(r){
   // sensible starting prescription by group and equipment
   var g=r[1], eq=r[2];
-  if(g==='core') return {sets:3, reps:(r[0].indexOf('Plank')>-1?'max hold':'12-15')};
+  // 2026-09-16. This used to test `r[0].indexOf('Plank')>-1` INSIDE the core branch, which is two
+  // wrong things at once: Copenhagen Plank is filed under legs and Dead Hang under pull, so
+  // neither ever reached the test that would have caught them, and both were added as "8-12".
+  // One rule, asked first, by the same function the clock and the rest screen use.
+  try{ if(isHoldEx({name:r[0], reps:''})) return {sets:3, reps:'max hold'}; }catch(e){}
+  if(g==='core') return {sets:3, reps:'12-15'};
   if(g==='arms') return {sets:3, reps:'10-12'};
   if(eq==='barbell') return {sets:3, reps:'6-8'};
   if(eq==='machine'||eq==='cable') return {sets:3, reps:'10-12'};
@@ -14566,7 +13483,7 @@ function libAdd(name, code){
     }
   }catch(e){}
   var hadCore=false; try{ hadCore=dayOrderNames(code).some(isCoreGrip); }catch(e){}
-  try{ srvCount('adds'); }catch(e){}
+  
   dayReshape(code, function(){
     custList(code).push({b:cyc(), w:S.week, cid:Date.now()+Math.floor(Math.random()*999), name:name,
       load:(r[5]==='bw'?'BW':(est&&est.val!=null? est.val : 25)),
@@ -16118,7 +15035,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v238';
+const BUILD = 'v244';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -17478,6 +16395,12 @@ function exSets(ex){ if(ex && ex.doc) return ex.sets;   // a finished session is
   if(g&&g.accSets&&numericReps(ex)) return g.accSets;
   return ex.sets; }
 function exReps(ex){
+  // 2026-09-16, and FIRST on purpose. A hold is timed in every other part of the card, so it is
+  // timed here too - before the Start branch (a beginner's plank was stored as a flat "10") and
+  // before the goal branch (which was rewriting that "10" into the goal's accessory range).
+  // Read-time, so it is right for every athlete already carrying a generated plan, without
+  // rewriting a single line of what they have saved.
+  var __h=holdReps(ex); if(__h) return __h;
   if(isStartProgram()) return ex.reps;       // the plan's plain "10", not a goal rep range
   // A tested bodyweight max OVERRIDES the goal's generic accessory range. Without this the
   // panel said "27 reps" while the card still prescribed 3x8 - two different answers on one
@@ -17655,6 +16578,23 @@ function holdFmt(sec){
   var n=Math.round(+sec); if(!isFinite(n) || n<0) return String(sec);
   if(n<60) return n+'s';
   return Math.floor(n/60)+':'+String(n%60).padStart(2,'0');
+}
+// FIELD 2026-09-16 (Jerry, for one of his athletes): "plank showing reps instead of max in the
+// reps section? Mine shows max hold. Why is his different?" Because his came from the exercise
+// library, which says "max hold", and the athlete's came from the plan generator, which never
+// asked isHoldEx() at all and handed a plank the goal's accessory rep range. On a strength goal
+// that reads SIX TO EIGHT REPS OF A PLANK, next to a hold clock, on the same screen.
+//
+// What a timed hold's reps line should say, in one place:
+//   - a bare rep count on a hold is a mistake, wherever it came from    -> "max hold"
+//   - a time a coach actually wrote ("45s", "1:00", "30-60 sec")        -> KEPT, it is coaching
+//   - anything already correct                                          -> untouched
+// Returns null when this is not a hold, so every caller can write holdReps(ex) || <what it did>.
+function holdReps(ex){
+  try{
+    if(!ex || !isHoldEx(ex)) return null;
+    return numericReps(ex)? 'max hold' : null;
+  }catch(e){ return null; }
 }
 function isHoldEx(ex){
   try{
@@ -19229,7 +18169,6 @@ try{ document.addEventListener('visibilitychange',function(){ if(!document.hidde
   // rule the ease-back honours.
   try{
     if(typeof sessionHasWork!=='function' || !sessionHasWork()){
-      if(typeof srvCheck==='function') srvCheck();
       if(typeof layoffGate==='function') layoffGate();
     }
   }catch(e){ oops('resumeCheck',e); }
@@ -19454,7 +18393,7 @@ async function saveSessionLog(quiet){
   // the shape goes in beside the report: the report is for people, the shape is what the card
   // itself renders this session from, forever, whatever the program becomes
   var shape0=[]; try{ shape0=sessionShape(); }catch(e){ shape0=[]; }
-  try{ srvCount('sessions'); }catch(e){}
+  
   // ADDITIONAL AUDIT 2026-09-12 (finding F30). The context a report is built from is now stored
   // WITH the session, so a correction months later can regenerate that session's report from that
   // session's own facts instead of from whatever is on screen today.
@@ -20014,11 +18953,8 @@ function renderInner(){
         ? ' \u00b7 <span class="nist-tag lockfree" data-nist="1" role="button" tabindex="0">NOT INSTALLED</span>' : '')
       // ACCESS (v216): the run-out date lives in the header, and turns into Renew when it is close
       +(function(){ try{
-          var arec=(typeof accessRec==='function')? accessRec() : S.access;
+          var arec=null;   // 2026-09-22: no grant to describe
           if(!arec || !arec.until) return '';
-          var soon=accessSoon(), left=accessDaysLeft();
-          var txt=!accessOK()? 'RENEW' : (soon? 'RENEW \u00b7 '+left+' day'+(left===1?'':'s') : 'Good till '+accessUntilText());
-          return ' \u00b7 <span class="'+(soon||!accessOK()? 'nist-tag':'beta-tag')+' lockfree" data-accesshdr="1" role="button" tabindex="0">'+txt+'</span>';
         }catch(e){ return ''; } })()
       +'</div></div>'
     +((cyc()===1)? '<div class="hdr-help lockfree" data-tourcore="1" role="button" tabindex="0" aria-label="Replay the quick tour">?</div>' : '')
@@ -20053,7 +18989,7 @@ function renderInner(){
   // smaller change than building the missing contract, and leaves nothing to be half-right about.
   // aria-current="page" is what marks the section you are in; it was colour alone before.
   h+='<nav class="tabrow" aria-label="Sections">'+[['MAX','You'],['RATE','Rate'],['CAL','Calendar'],['PLAN','Plan'],['LIB','Library']]
-      .concat((typeof adminAllowed==='function' && adminAllowed())? [['ADMIN','Admin']] : []).map(function(t2){
+      .map(function(t2){
     return '<button type="button" class="tab'+(S.day===t2[0]?' on':'')+'" data-day="'+t2[0]+'"'
       +(S.day===t2[0]?' aria-current="page"':'')+'>'+t2[1]+'</button>'; }).join('')+'</nav>';
   var __isTraining=PLAN.days.some(function(dd){ return dd.code===S.day; });
@@ -20068,10 +19004,9 @@ function renderInner(){
     app.innerHTML=h; wire(); try{ anaPaintAll(); }catch(e){} try{ settingsSync(); }catch(e){} return;
   }
   if(S.day==='ADMIN'){
-    h+=(typeof adminAllowed==='function' && adminAllowed())? adminHTML() : '<div class="block"><div class="cue">Administrators only.</div></div>';
-    app.innerHTML=h; wire(); try{ adminWire(); }catch(e){} try{ settingsSync(); }catch(e){}
+    h+='<div class="block"><div class="cue">This card has no administration \u2014 it is open to everyone.</div></div>';
+    app.innerHTML=h; wire(); try{ settingsSync(); }catch(e){}
     // v228: the tab reads the server when opened, if it has not today
-    try{ if(adminAllowed() && S.adminTok && !(S.adminStats && S.adminStats.at===shiftDate())) adminSync(); }catch(e){}
     return;
   }
   if(S.day==='LIB'){
@@ -20981,12 +19916,36 @@ function wire(){
     el.onclick=function(){
       try{
         var s=S.strand;
+        var __was=S.week+'|'+S.day;
         if(s) s.freed=true;
+        // FOUND 2026-09-16, walking this button on the real state of one of Jerry's athletes.
+        // The action used to be syncToNext() alone - and syncToNext()'s second check is
+        // `if(!sessionLogged(S.week,S.day)) return`, which is TRUE of every session the strand
+        // holds, because strandHold() returns false the moment that session IS logged. So the
+        // release handed control to a function whose first act was to return, every time, on
+        // every build in this ladder. The button could never move anybody, and the toast below
+        // said "Moved on" regardless.
+        //
+        // Go to today goes to today: the session the card itself would take them to, which is
+        // nextSession() - the same function every other "where next" decision here uses. If the
+        // block's weeks are spent and there is no next session, the pointer at least comes up to
+        // the calendar rather than sitting in a week that is over.
+        var __nx=null; try{ __nx=nextSession(); }catch(e){}
+        if(__nx){ S.day=__nx.code; S.week=__nx.week; }
+        else { try{ if(S.week<timeWeek()) S.week=timeWeek(); }catch(e){} }
+        try{ S.focus=firstOpenFocus(); }catch(e){ S.focus=0; }
+        S.calSel=null;
         save();
         try{ syncToNext(); }catch(e){}
         save(); render();
-        if(s) alertToast('Moved on \u2014 those '+s.n+' set'+(s.n===1?'':'s')
+        // and the toast reports what happened, not what was intended. Holding the session the
+        // rotation already points at is a real case - bank A and B, stall on C, and C is next -
+        // and telling that athlete he has been moved on is a lie about his own card.
+        var __moved=(S.week+'|'+S.day)!==__was;
+        if(s && __moved) alertToast('Moved on \u2014 those '+s.n+' set'+(s.n===1?'':'s')
                         +' still count toward Week '+s.w, 6000);
+        else if(s) alertToast('This is already your next session \u2014 those '+s.n+' set'
+                        +(s.n===1?'':'s')+' still count toward Week '+s.w, 6000);
       }catch(e){ oops('strandGo',e); }
     }; });
   document.querySelectorAll('[data-how]').forEach(function(el){ el.onclick=function(ev){ ev.stopPropagation(); howEx=el.dataset.how; render(); }; });
@@ -21162,9 +20121,6 @@ function wire(){
     try{ SET_OPEN=false; settingsSync(); }catch(e){}
     render(); });
   document.querySelectorAll('[data-discshow]').forEach(b=>b.onclick=()=>{ bootDisc(true); });
-  document.querySelectorAll('[data-accesscode]').forEach(b=>b.onclick=()=>{ bootAccess(true); });
-  document.querySelectorAll('[data-accesshdr]').forEach(b=>b.onclick=()=>{ bootAccess(true); });
-  document.querySelectorAll('[data-renewcopy]').forEach(b=>b.onclick=renewCopy);
   document.querySelectorAll('[data-gocal]').forEach(b=>b.onclick=()=>{ S.day='CAL'; save(); render(); });
   document.querySelectorAll('[data-mailopen]').forEach(b=>b.onclick=()=>{ mailShow(); });
   document.querySelectorAll('[data-foldtog]').forEach(b=>b.onclick=()=>{ var id=b.dataset.foldtog; S.fold=S.fold||{}; S.fold[id]=!foldOpen(id, b.getAttribute('aria-expanded')==='true'); save(); render(); });
@@ -22384,8 +21340,7 @@ function calHTML(){
       if(iso>today) bd='1px solid var(--amber)';
       else if(iso<today) fg='var(--red)';
     }
-    var accEnd=!!(S.access && S.access.until===iso);   // ACCESS (v216): the day access runs out
-    if(accEnd && !__logged){ bd='2px solid var(--red)'; }
+    // 2026-09-22: the calendar used to mark the day a grant ran out. There is no grant.
     // The cell's whole meaning was carried by colour and border style. It now says it in words
     // too - one name covering every state the cell is in, so a day that is logged AND a deload AND
     // today reads as all three instead of as a bare number.
@@ -22393,13 +21348,11 @@ function calHTML(){
     if(__logged) __say.push('trained \u00b7 '+e.days.join(', '));
     if(deload) __say.push('deload week');
     if(isToday) __say.push('today');
-    if(accEnd) __say.push('access runs out');
     h+='<div data-calday="'+iso+'" role="button" tabindex="0" aria-label="'+esc(__say.join(' \u00b7 '))+'"'
       +' style="min-height:44px;border:'+bd+';border-radius:8px;background:'+bg
       +';padding:3px 2px;text-align:center;cursor:pointer;'+(isToday?'box-shadow:0 0 0 2px var(--amber);':'')+'">'
       +'<div class="mono" style="font-size:12px;font-weight:700;color:'+fg+'" aria-hidden="true">'+d
       +'</div>'
-      +(accEnd? '<div style="font-size:8px;font-weight:800;color:var(--red);letter-spacing:.04em">ACCESS</div>' : '')
       +(e&&e.days.length? '<div style="font-size:10px;font-weight:800;color:'+fg+'">'+e.days.join('')+'</div>':'')
       +(e&&e.bw!=null? '<div style="font-size:8px;color:'+(e.days.length?fg:'var(--faint)')+'">'+Math.round(isKg()? e.bw*0.45359237 : e.bw)+'</div>':'')
       +(function(){ var ns=(calNotes()[iso]||[]); if(!ns.length) return '';
@@ -22415,18 +21368,8 @@ function calHTML(){
    +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;color:var(--red);text-align:center;font-size:9px;line-height:10px;font-weight:800;vertical-align:-1px">7</span> missed</span>'
 
    +'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;box-shadow:0 0 0 2px var(--amber);vertical-align:-1px"></span> today</span>'
-   +(S.access&&S.access.until? '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;border:2px solid var(--red);vertical-align:-1px"></span> access runs out</span>' : '')
    +'</div>';
-  // ACCESS (v216): the date in words, and the way to renew, on the tab where dates live
-  try{ if(S.access && S.access.until){
-    var dl=accessDaysLeft();
-    h+='<div class="block" id="calAccess" style="margin-top:10px'+((accessSoon()||!accessOK())? ';border-color:var(--amber)':'')+'">'
-      +'<div class="cue">'+(accessOK()
-          ? ('Access runs out on <b>'+esc(accessUntilText())+'</b>'+(dl!=null? ' \u2014 '+dl+' day'+(dl===1?'':'s')+' from today.' : '.'))
-          : ('Access ran out on <b>'+esc(accessUntilText())+'</b>.'))+'</div>'
-      +'<div class="toggle lockfree" data-accesscode="1" style="margin-top:8px">Enter a code</div>'
-      +renewButtonsHTML()+'</div>';
-  } }catch(e){}
+  // The renewal block that stood here went with the gate on 2026-09-22.
   // month summary
   let n=0, bwF=null, bwL=null;
   Object.keys(ix).forEach(k=>{ if(k.indexOf(ym)!==0) return;
@@ -23897,7 +22840,7 @@ function printPlanHTML(){
       h+='<tr><td class="c-ex"><span class="nm">'+esc(ex.name)+(ex.perHand?' (per hand)':'')+'</span>'
         +(ex.cue?'<span class="pl">'+esc(ex.cue)+'</span>':'')
         +(ex.warmup?'<span class="wu">Warm-up: '+esc(ex.warmup)+'</span>':'')+'</td>'
-        +'<td class="c-n">'+ex.sets+'\u00d7'+ex.reps+'</td><td class="c-n">'+(ex.rir||'\u2013')+'</td><td class="c-n">'+(ex.rest||'\u2013')+'</td>'
+        +'<td class="c-n">'+ex.sets+'\u00d7'+(holdReps(ex)||ex.reps)+'</td><td class="c-n">'+(ex.rir||'\u2013')+'</td><td class="c-n">'+(ex.rest||'\u2013')+'</td>'
         +loads.map(function(v){ return '<td class="c-n">'+v+'</td>'; }).join('')+'</tr>';
     });
     h+='</tbody></table></section>';
@@ -23937,7 +22880,7 @@ function buildPlanModel(){
   PLAN.days.forEach(d=>{ if(!d.exercises||!d.exercises.length) return;
     const outsD=(S.outs&&S.outs[d.code])||[];
     const exs=d.exercises.filter(ex=>outsD.indexOf(ex.name)<0).concat(customsFor(d.code));
-    const rows=exs.map(ex=>({ name:ex.name+(ex.perHand?' (per hand)':''), sr:ex.sets+' x '+ex.reps,
+    const rows=exs.map(ex=>({ name:ex.name+(ex.perHand?' (per hand)':''), sr:ex.sets+' x '+(holdReps(ex)||ex.reps),
       rir:String(ex.rir||'-'), rest:String(ex.rest||'-'), loads:planLoadsRow(ex), cue:String(ex.cue||''), warm:String(ex.warmup||'') }));
     days.push({code:d.code,title:d.title,heads:heads,lw:lw,rows:rows});
   });
@@ -24389,7 +23332,6 @@ async function bootSequence(){
 // The read-failed path. Everything here is read-only by construction.
 function bootReduced(res){
   try{ if(!discPending()){ var g0=document.getElementById('discGate'); if(g0 && !g0.__force) g0.remove(); } }catch(e){}
-  try{ accessLegacy(); accessEnforce(); if(!accessOK()) bootAccess(); }catch(e){}
   try{ applyTheme(); }catch(e){}
   try{ render(); }catch(e){}
   try{ bootStallBanner(res && res.key); }catch(e){}
@@ -24465,7 +23407,6 @@ async function bootAfterLoad(res){
   try{ if(!discPending()){ var g0=document.getElementById('discGate'); if(g0 && !g0.__force) g0.remove(); } }catch(e){}
   // ACCESS (v214): a card from before the gate becomes an athlete card for 90 days; a card whose
   // holder lacks coach rights runs solo; anything without current access meets the gate.
-  try{ accessLegacy(); accessEnforce(); if(!accessOK()) bootAccess(); }catch(e){}
 
   // must run AFTER the saved state is in, or S.seenBuild is still empty and every
   // returning user looks like a first-timer
@@ -24518,7 +23459,7 @@ if(!S.when || !S.when.date || (!whenManual() && S.when.date!==shiftDate() && S.w
   // v226: never mid-session. If the athlete has work on the board that is not banked, the check
   // waits for the next open - being asked for a code with four sets logged and nowhere to put
   // them is the worst thing this layer could do to somebody.
-  try{ if(!sessionHasWork()) srvCheck(); }catch(e){ try{ srvCheck(); }catch(e2){} }
+  // 2026-09-22: the daily server re-check went with the gate.
   try{ docBackfill(); }catch(e){}
   try{ tplMigrate(); }catch(e){}   // v220: the template changed shape - logged sets follow their movement
   try{ if(S._avaPick){ profEdit=true; S._avaPick=null; save(); } }catch(e){}
@@ -24700,8 +23641,14 @@ function PG_ex(name, maxes, opts){
   if((opts.limits||[]).indexOf('bp')>-1 && maxKey){
     note=(note? note+' ':'')+'Breathe through every rep \u2014 no held-breath grinding, and stop the set if it turns into a strain.';
   }
+  // 2026-09-16. Every generated exercise in the application is built here, and until now this
+  // line handed a plank whatever rep range the goal schedule carried. exReps() corrects that on
+  // the way to the screen, but the PLAN OBJECT is what the printed sheet, the onboarding rotation
+  // preview and the export read, so the truth belongs in the stored prescription as well.
+  var __reps=opts.reps||sch.reps;
+  try{ var __hr=holdReps({name:name, reps:__reps}); if(__hr) __reps=__hr; }catch(e){}
   return {
-    name:name, sets:opts.sets||sch.sets, reps:opts.reps||sch.reps,
+    name:name, sets:opts.sets||sch.sets, reps:__reps,
     load:load, loadNum:loadNum, rir:sch.rir, note:note,
     perHand:perHand, barbell:!!(r && r[2]==='barbell'),
     deload:deload, rest:PG_rest(!!maxKey, group),
