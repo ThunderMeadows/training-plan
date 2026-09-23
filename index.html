@@ -4952,20 +4952,57 @@ function timeWeek(){
     return Math.floor(days/7)+1;
   }catch(e){ return 1; }
 }
-function nextSession(){
+// FIELD 2026-09-23 (Jerry): "The app skipped my last leg F on week 5 and forced me into deload."
+//
+// It did, and this function is why. It took the CODE from the rotation and the WEEK from the CLOCK,
+// and never asked whether the week it was leaving was finished - so the LAST session of any week is
+// the one the calendar eats, every time, for everyone. He banked week 5 E and the card put him on
+// week 6 F, a deload at 135, while week 5 F - his deadlift day at 285 - had never happened and
+// nothing led back to it.
+//
+// I left this open in v239 and wrote the reasoning down as deliberate: an athlete who trained twice
+// in a six-day week really does have four sessions they did not do, and the card should not hold a
+// whole week open waiting for them. That covers somebody who missed most of a week. It does not
+// cover a man who did five of six and lost the sixth to the clock, and generalising from the first
+// case to the second was my mistake, not a design.
+//
+// HIS RULE, chosen 2026-09-23: finish the week first, no cap. Walk the weeks in order, and within
+// each week the plan's own day order, and offer the first session that is not banked. Nothing is
+// ever skipped, however far behind the clock the athlete is.
+//
+// The clock is still the CEILING - tw bounds how far the pointer may go, so nobody pulls next
+// week's loads forward. It simply cannot step over work to get there. And the deload is reached
+// when the working weeks are actually complete: a six-week block is six weeks of work, and week six
+// is the deload's content rather than a deadline that deletes week five.
+//
+// Note what this replaces: the old "next code after the most recent log" rotation. Under "nothing
+// is skipped" the two rules disagree - do A then C and the old rule pointed at D, leaving B behind
+// forever. This one points at B. That is the same rule seen from the other side, and it is the one
+// he asked for.
+// `skip` is a single session the ATHLETE has deliberately released - see the strand banner's
+// "Go to today". 2026-09-23: once the clock can no longer step over untrained work, the release
+// had nowhere to go, because the session being released IS the next one due. Nothing is skipped by
+// the calendar; a session the athlete explicitly puts down is a different thing and is theirs to
+// put down. Caught by FLD31 and FLD36 on the first cut of the week-completion rule.
+function nextSession(skip){
   try{
     var codes=PLAN.days.map(function(d){ return d.code; }), W=PLAN.weeks;
+    if(!codes.length) return null;
     var tw=timeWeek();
-    if(tw>W) return null;             // the block's weeks are spent - block-end review takes over
-    var p=curLOGP(), C=cyc(), last=null;
-    (logKeys||[]).forEach(function(k){
-      if(k.indexOf(p)!==0) return;
-      var m=k.match(/(\d{4}-\d{2}-\d{2})-([A-Za-z]+)-W(\d+)B(\d+)$/);
-      if(m && (+m[4])===C && (!last || m[1]>last.d)) last={d:m[1], code:m[2]};
-    });
-    if(!last) return {week:tw, code:codes[0]};
-    var i=codes.indexOf(last.code); if(i<0) i=codes.length-1;
-    return {week:tw, code:codes[(i+1)%codes.length]};
+    // A BLOCK WHOSE TIME IS FULLY SPENT IS OVER, and that comes first. "Finish the week, no cap"
+    // is a rule about the clock INSIDE a block; it is not a licence to keep offering week 3 day D
+    // a month after the block ended. landtest caught this on the first cut - with the block spent
+    // there must be no next session, or the block-end review never fires and the athlete cannot
+    // start the next block at all. Unfinished sessions stay reachable by the week chips and by
+    // pinning one, which is exactly what the pin is for.
+    if(tw>W) return null;
+    for(var w=1; w<=tw; w++){
+      for(var i=0;i<codes.length;i++){
+        if(skip && skip.week===w && skip.code===codes[i]) continue;
+        if(!sessionLogged(w, codes[i])) return {week:w, code:codes[i]};
+      }
+    }
+    return null;                      // everything up to the clock is banked: nothing is due yet
   }catch(e){}
   return null;
 }
@@ -4977,11 +5014,56 @@ function nextSession(){
 // enough away that it is a new visit rather than a glance at another app. Two things it will
 // not do: pull an athlete off a session in progress (no log yet - that is where they should be),
 // or move the focus on a day they were already standing on.
+// THE PIN.  2026-09-23, his ask: "There needs to be a way to manually adjust what day is the
+// training day. I also need this issue of manually adjusting to stop."
+//
+// Both halves of that sentence matter. The first is a control. The second is the reason the control
+// has to be more than navigation: he could already tap a week chip and a day, and the card would
+// move him off it again on the next open or the next bank. A pin is the athlete saying "this is the
+// session I am doing", and nothing in the card overrules it - not a day roll, not a resume, not the
+// unfinished-session hold, not the clock.
+//
+// It holds until that session is BANKED or he RELEASES it. His choice, asked before this was built.
+//
+// What it does not do is change what is prescribed. Pinning week 5 day F shows week 5 day F's
+// loads, because that is what pinning it means.
+function pinnedSession(){
+  try{
+    var p=S.pin;
+    if(!p || p.c!==cyc()) return null;
+    if(!PLAN.days.some(function(d){ return d.code===p.d; })) return null;
+    if(!(p.w>=1 && p.w<=PLAN.weeks)) return null;
+    if(sessionLogged(p.w, p.d)){ S.pin=null; try{ save(); }catch(e){} return null; }
+    return {week:p.w, code:p.d};
+  }catch(e){ return null; }
+}
+function pinSet(w, d){
+  try{
+    S.pin={c:cyc(), w:+w, d:String(d)};
+    S.week=+w; S.day=String(d);
+    try{ S.focus=firstOpenFocus(); }catch(e){ S.focus=0; }
+    S.calSel=null;
+    save();
+  }catch(e){}
+}
+function pinClear(){ try{ S.pin=null; save(); }catch(e){} }
+function pinIsHere(){
+  try{ var p=pinnedSession(); return !!(p && p.week===S.week && p.code===S.day); }catch(e){ return false; }
+}
 var LAND_AWAY_MS=30*60*1000, landHiddenAt=null;
 function landOnTraining(){
   try{
     if(!PLAN || !PLAN.days || !PLAN.days.length) return false;
     var was=S.day+'|'+S.week;
+    // 2026-09-23: a pinned session outranks everything below. The athlete said which session they
+    // are doing; the card does not have a better idea.
+    var __pin=null; try{ __pin=pinnedSession(); }catch(e){}
+    if(__pin){
+      var __movedPin=(__pin.week!==S.week || __pin.code!==S.day);
+      S.day=__pin.code; S.week=__pin.week;
+      if(__movedPin){ try{ S.focus=firstOpenFocus(); }catch(e){ S.focus=0; } S.calSel=null; }
+      return __movedPin;
+    }
     // FIELD 2026-09-16. This used to go straight to the tab branch below, which calls
     // nextSession() - and nextSession() takes its WEEK from timeWeek(), so on day 8 of a block it
     // returns week 2 whatever the athlete has actually finished. The guard that should have
@@ -4995,9 +5077,14 @@ function landOnTraining(){
     // Same sentence, the other door.
     var op=null; try{ op=openSession(); }catch(e){}
     if(op && !(op.week===S.week && op.code===S.day)){ S.day=op.code; S.week=op.week; }
+    // 2026-09-23: a session the athlete RELEASED must not be handed back by the fallback below
+    // either. openSession() already honours `freed`; nextSession() has to be told. FLD31 caught
+    // this half a fix short.
+    var __freed=null; try{ var __fs=S.strand;
+      if(__fs && __fs.freed && __fs.c===cyc()) __freed={week:__fs.w, code:__fs.d}; }catch(e){}
     var onTab=!PLAN.days.some(function(d){ return d.code===S.day; });
     if(onTab){
-      var nx=null; try{ nx=nextSession(); }catch(e){}
+      var nx=null; try{ nx=nextSession(__freed); }catch(e){}
       if(nx){ S.day=nx.code; S.week=nx.week; }
       else {
         // the block's weeks are spent: the day view carries the block-end review, so land on
@@ -5114,6 +5201,8 @@ function syncToNext(){
   // (v212: landOnTraining() above now handles the tab case before this runs - a cold open no
   // longer stays on a tab. The in-progress rule is unchanged and lives here.)
   try{
+    // 2026-09-23: nothing moves an athlete off a session they pinned.
+    try{ if(pinnedSession()) return; }catch(e){}
     if(!PLAN.days.some(function(d){ return d.code===S.day; })) return;
     // 2026-09-16. This call used to live one line below, INSIDE the Open branch, so F28's hold
     // and the banner that explains it reached Open-rhythm athletes only - and Guided is the
@@ -5137,13 +5226,28 @@ function syncToNext(){
       // One tap releases it. See strandBannerHTML(). (The call itself now runs for both
       // rhythms, a few lines above - 2026-09-16.)
       // and bring a stale pointer up to the calendar rather than stranding it in a spent week
-      if(S.week<timeWeek()) S.week=timeWeek();
+      //
+      // 2026-09-23. This used to read `S.week=timeWeek()` - the clock, flat - and that is a SECOND
+      // door onto the defect Jerry reported: nextSession() was repaired to finish a week before
+      // moving on, and this line stepped over the same unfinished work on its way to the calendar,
+      // for every athlete in the Open rhythm. Found by the probe written for the first door, which
+      // is the only reason it is not still in here.
+      //
+      // The pointer still comes forward - it just comes forward to the next session that has not
+      // been trained, which is the furthest a pointer may honestly go.
+      try{
+        var __nx=nextSession();
+        if(__nx && __nx.week>S.week) S.week=__nx.week;
+        else if(!__nx && S.week<timeWeek()) S.week=timeWeek();
+      }catch(e){ if(S.week<timeWeek()) S.week=timeWeek(); }
       var sc=schedTodayCode();
       if(sc && !sessionLogged(timeWeek(), sc)){ S.day=sc; S.week=timeWeek(); return; }
       if(!sessionLogged(S.week, S.day)) return;
     }
     if(!sessionLogged(S.week, S.day)) return;
-    var nx=nextSession(); if(nx){ S.day=nx.code; S.week=nx.week;
+    var __sk=null; try{ var __s=S.strand;
+      if(__s && __s.freed && __s.c===cyc()) __sk={week:__s.w, code:__s.d}; }catch(e){}
+    var nx=nextSession(__sk); if(nx){ S.day=nx.code; S.week=nx.week;
       // A repeat pass re-opens its cell: same split slot, same week, MORE training - the
       // athlete's choice. The cell unlocks, its set states wipe to a clean card, and pass
       // one's log keeps its date.
@@ -5185,6 +5289,23 @@ function strandBannerHTML(){
       +'<div class="cardio-row">'
       +'<div class="toggle" data-strandgo="1" role="button" tabindex="0">Go to today</div>'
       +'</div></div>';
+  }catch(e){ return ''; }
+}
+// The pin's control and its state, on the day screen where the session is.
+function pinHTML(){
+  try{
+    if(!PLAN.days.some(function(d){ return d.code===S.day; })) return '';
+    if(typeof dayLocked==='function' && dayLocked()) return '';
+    var here=pinIsHere();
+    var d=PLAN.days.filter(function(x){ return x.code===S.day; })[0];
+    var name=d? (d.title||d.code) : S.day;
+    if(here) return '<div class="block lockfree" style="border-color:var(--amber)">'
+      +'<div class="cue" style="padding:0 0 8px"><b>Pinned:</b> Week '+S.week+' \u00b7 '+esc(name)
+      +'. The card will open here every time until you log it or unpin it \u2014 whatever the calendar says.</div>'
+      +'<div class="cardio-row"><div class="toggle" data-pinoff="1" role="button" tabindex="0">Unpin</div></div></div>';
+    return '<div class="sub" style="margin-top:6px">'
+      +'<span class="toggle lockfree" data-pinon="1" role="button" tabindex="0" style="padding:2px 8px;font-size:11px">Pin this session</span>'
+      +' <span class="cue" style="font-size:11px">\u2014 hold the card here until you have logged it</span></div>';
   }catch(e){ return ''; }
 }
 function nextLineHTML(){
@@ -13845,6 +13966,36 @@ function repsTarget(list){
   return best;
 }
 // The rep target of a stored session. New records carry `rt`; older ones are read from their reps.
+// Was this history record performed in a deload week? `dl` says so for anything logged from
+// 2026-09-22 on. For everything older there is no marker and guessing would be inventing evidence,
+// so this falls back to the one authority that already exists for a past date: the session log,
+// whose key carries W<week>B<block>. A date banked in that block's final week was a deload.
+//
+// The date set is built once per call-batch and reused, so a long history is not re-scanned for
+// every exercise on every render.
+var _dlDates=null, _dlStamp='';
+function histDeloadDates(){
+  try{
+    var stamp=(logKeys||[]).length+'|'+cyc()+'|'+(PLAN&&PLAN.weeks);
+    if(_dlDates && _dlStamp===stamp) return _dlDates;
+    var W=(PLAN&&PLAN.weeks)||0, out={};
+    if(W>1){
+      (logKeys||[]).forEach(function(k){
+        var m=k.match(/(\d{4}-\d{2}-\d{2})-[A-Za-z]+-W(\d+)B(\d+)$/);
+        if(m && (+m[2])===W) out[m[1]]=1;
+      });
+    }
+    _dlDates=out; _dlStamp=stamp;
+    return out;
+  }catch(e){ return {}; }
+}
+function histIsDeload(rec){
+  try{
+    if(!rec) return false;
+    if(rec.dl) return true;
+    return !!histDeloadDates()[rec.d];
+  }catch(e){ return false; }
+}
 function histTarget(rec){
   try{
     if(!rec) return null;
@@ -13862,6 +14013,10 @@ function histLastLike(name, target, notDate){
     for(var i=H.length-1;i>=0;i--){
       var r=H[i]; if(!r || r.w==null) continue;
       if(notDate && r.d===notDate) continue;
+      // 2026-09-22: a deload is not something to anchor the next block to. It is still in the
+      // history and still on every screen that reports history - it is just not the weight an
+      // athlete is asked to start from.
+      if(histIsDeload(r)) continue;
       if(histTarget(r)===target) return r;
     }
   }catch(e){}
@@ -13876,6 +14031,7 @@ function histBestLike(name, target){
     var b=null;
     (histFor(name)||[]).forEach(function(x){
       if(!x || x.w==null) return;
+      if(histIsDeload(x)) return;              // 2026-09-22: never "your best here" either
       if(histTarget(x)!==target) return;
       if(!b || x.w>b.w) b=x;
     });
@@ -13935,7 +14091,17 @@ function recordHistory(){
     // like with like instead of comparing a five-rep day to a ten-rep day and calling the
     // difference progress. Stored rather than inferred from here on; histTarget() below infers it
     // for everything logged before today.
+    // FIELD 2026-09-22 (Jerry): "Deload week isn't going to disrupt the progressions correct?"
+    // For the accessories it was, and through a door I opened. recordPerf() has guarded S.lastPerf
+    // against deload since 2026-09-06; v237h then put histLastLike() - which reads THIS store -
+    // ahead of S.lastPerf in accAnchor(), and this store was never guarded. Measured on a full
+    // block: Romanian Deadlift anchored at 110 instead of 190, Leg Press at 240 instead of 390.
+    //
+    // The session is real training and stays in the history. It is MARKED, and the two functions
+    // that look backwards for something to prescribe from skip a marked record. Everything that
+    // reports history still shows it.
     var rec={d:date, w:(typeof w==='number'?w:null), sets:reps, ws:ws, e1:e1, rt:(typeof tgt==='number'&&tgt>0? tgt : null)};
+    try{ if(isDeload() && PLAN && PLAN.weeks>1) rec.dl=1; }catch(e){}
     var vol=histVolume(rec);
     if(prior.length){
       if(rec.w!=null&&bw!=null&&rec.w>bw) out.push({ex:nm,kind:'weight',val:rec.w,prev:bw});
@@ -15035,7 +15201,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v244';
+const BUILD = 'v246';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -18806,6 +18972,7 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(S.noteStashKey===undefined) S.noteStashKey=null;
   if(S.froze===undefined) S.froze={};
   if(S.rptOpen===undefined) S.rptOpen=false;
+  if(S.pin===undefined) S.pin=null;          // 2026-09-23: the session the athlete pinned
   if(S.strand===undefined) S.strand=null;    // F28: an unfinished session the card is waiting on
   if(S.rptKind===undefined) S.rptKind='bug';
   if(S.coachOwn===undefined) S.coachOwn=false;
@@ -19263,6 +19430,7 @@ function renderInner(){
   try{ h=lockBarHTML()+h; }catch(e){}
   try{ h+=prBannerHTML(); }catch(e){}
   try{ h+=strandBannerHTML(); }catch(e){}
+  try{ h+=pinHTML(); }catch(e){}
   try{ h+=blockFxHTML(); }catch(e){}
   try{ h+=howSheetHTML(); }catch(e){}
   try{ h+=reportHTML(); }catch(e){}
@@ -19912,6 +20080,19 @@ function wire(){
   // own key, still count toward their own week and block, and that session can still be banked
   // later from the calendar. `freed` makes the release permanent, so having once said "move on" the
   // athlete is not asked again tomorrow about the same session.
+  document.querySelectorAll('[data-pinon]').forEach(function(el){
+    el.onclick=function(){ try{
+      pinSet(S.week, S.day); render();
+      var d=PLAN.days.filter(function(x){ return x.code===S.day; })[0];
+      alertToast('Pinned \u2014 the card stays on Week '+S.week+' \u00b7 '+((d&&(d.title||d.code))||S.day)
+                +' until you log it', 6000);
+    }catch(e){ oops('pinOn',e); } }; });
+  document.querySelectorAll('[data-pinoff]').forEach(function(el){
+    el.onclick=function(){ try{
+      pinClear();
+      try{ syncToNext(); }catch(e){}
+      save(); render(); alertToast('Unpinned \u2014 the card picks up where the plan is', 5000);
+    }catch(e){ oops('pinOff',e); } }; });
   document.querySelectorAll('[data-strandgo]').forEach(function(el){
     el.onclick=function(){
       try{
@@ -19930,7 +20111,12 @@ function wire(){
         // nextSession() - the same function every other "where next" decision here uses. If the
         // block's weeks are spent and there is no next session, the pointer at least comes up to
         // the calendar rather than sitting in a week that is over.
-        var __nx=null; try{ __nx=nextSession(); }catch(e){}
+        // 2026-09-23: pass the session being released, so the card moves PAST it rather than
+        // offering it straight back. Since the clock can no longer step over untrained work, the
+        // released session is usually the very next one due - which made this button dead again
+        // until FLD31 and FLD36 said so.
+        var __rel=(s && s.c===cyc())? {week:s.w, code:s.d} : null;
+        var __nx=null; try{ __nx=nextSession(__rel); }catch(e){}
         if(__nx){ S.day=__nx.code; S.week=__nx.week; }
         else { try{ if(S.week<timeWeek()) S.week=timeWeek(); }catch(e){} }
         try{ S.focus=firstOpenFocus(); }catch(e){ S.focus=0; }
