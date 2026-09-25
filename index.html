@@ -760,7 +760,10 @@ textarea{width:100%;min-height:78px;background:var(--panel);border:2px solid var
   width:100%;box-sizing:border-box;-webkit-tap-highlight-color:rgba(255,255,255,.15);touch-action:manipulation;
   /* pinned to the bottom of the gate's own scroll box: on a short phone the four paragraphs can
      push the button below the fold, and a gate whose button is off-screen reads as frozen */
-  position:sticky;bottom:0;}
+  /* 2026-09-24: never flush with the screen edge. Android's gesture bar and Chrome's edge-to-edge
+     drawing both claim the bottom strip, and a button whose lower half sits under it is a button
+     that only half works. The safe-area inset is zero where there is none. */
+  position:sticky;bottom:calc(env(safe-area-inset-bottom, 0px) + 6px);margin-bottom:6px;}
 .disc-inner h2{font-size:22px;letter-spacing:-.01em;margin:0 0 12px;}
 .disc-inner p{font-size:14.5px;line-height:1.65;color:var(--chalk);margin:0 0 12px;}
 .disc-inner p b{color:var(--amber);}
@@ -4984,6 +4987,57 @@ function timeWeek(){
 // had nowhere to go, because the session being released IS the next one due. Nothing is skipped by
 // the calendar; a session the athlete explicitly puts down is a different thing and is theirs to
 // put down. Caught by FLD31 and FLD36 on the first cut of the week-completion rule.
+// A SESSION THE ATHLETE DECLINED.  2026-09-24, his ask: "if you decide to skip a particular day,
+// you would be able to."
+//
+// v246's "finish the week, no cap" is what made this necessary: an unbanked session is now offered
+// until it is done, so without a way to decline one, a session an athlete has decided against
+// blocks the rest of the block forever.
+//
+// A skip is NOT training and NOT a missed day - it is a decision. It enters no log, no history, no
+// volume and no estimate, so nothing in the engine can mistake it for evidence. It shows on the
+// week dots and in the block review, because his call was to mark it rather than hide it. And it
+// clears itself if the session is ever banked: a skip that outlived the work would hide a real
+// session from the record, which is the one failure this feature could cause.
+function skipKey(w, d){ return cyc()+'|'+w+'|'+d; }
+function skipMap(){ if(!S.skip || typeof S.skip!=='object') S.skip={}; return S.skip; }
+function sessionSkipped(w, d){
+  try{
+    var m=skipMap(), k=skipKey(w, d);
+    if(!m[k]) return false;
+    // banked after being skipped: the work happened, so the decision is spent
+    if(sessionLogged(w, d)){ delete m[k]; try{ save(); }catch(e){} return false; }
+    return true;
+  }catch(e){ return false; }
+}
+function skipToggle(w, d){
+  try{
+    var m=skipMap(), k=skipKey(w, d);
+    if(m[k]){ delete m[k]; }
+    else {
+      if(sessionLogged(w, d)) return false;         // it was trained; there is nothing to decline
+      m[k]=shiftDate();
+      // declining the session you are standing on releases any pin on it - holding the card on a
+      // session the athlete just declined is the contradiction this would otherwise create.
+      try{ var p=S.pin; if(p && p.c===cyc() && p.w===w && p.d===d) S.pin=null; }catch(e){}
+    }
+    save();
+    return true;
+  }catch(e){ return false; }
+}
+// How many sessions carrying this lift were declined in the current block. For the block review.
+function skipCountFor(maxKey){
+  try{
+    var n=0, m=skipMap();
+    Object.keys(m).forEach(function(k){
+      var p=k.split('|'); if((+p[0])!==cyc()) return;
+      var d=PLAN.days.filter(function(x){ return x.code===p[2]; })[0];
+      if(!d) return;
+      if((d.exercises||[]).some(function(e){ return e.maxKey===maxKey; })) n++;
+    });
+    return n;
+  }catch(e){ return 0; }
+}
 function nextSession(skip){
   try{
     var codes=PLAN.days.map(function(d){ return d.code; }), W=PLAN.weeks;
@@ -4999,6 +5053,7 @@ function nextSession(skip){
     for(var w=1; w<=tw; w++){
       for(var i=0;i<codes.length;i++){
         if(skip && skip.week===w && skip.code===codes[i]) continue;
+        if(sessionSkipped(w, codes[i])) continue;    // 2026-09-24: the athlete declined this one
         if(!sessionLogged(w, codes[i])) return {week:w, code:codes[i]};
       }
     }
@@ -5171,7 +5226,8 @@ function openSession(){
     var C=cyc(), tw=timeWeek();
     // standing on live work: they are already where they should be
     if(PLAN.days.some(function(d){ return d.code===S.day; })
-       && !sessionLogged(S.week, S.day) && sessionWorkAt(C, S.week, S.day)) return null;
+       && !sessionLogged(S.week, S.day) && !sessionSkipped(S.week, S.day)
+       && sessionWorkAt(C, S.week, S.day)) return null;
     var floorW=Math.max(1, tw-1);
     var freed=(S.strand && S.strand.freed && S.strand.c===C)? (S.strand.w+'|'+S.strand.d) : null;
     var s=S.strand;
@@ -5188,6 +5244,7 @@ function openSession(){
       if(codes.indexOf(d)<0) return;
       if(freed===(w+'|'+d)) return;
       if(sessionLogged(w, d)) return;
+      if(sessionSkipped(w, d)) return;            // 2026-09-24: declined, so not somewhere to return to
       if(!sessionWorkAt(C, w, d)) return;
       var rank=w*1000+codes.indexOf(d);
       if(!best || rank>best.rank) best={week:w, code:d, rank:rank};
@@ -5242,9 +5299,12 @@ function syncToNext(){
       }catch(e){ if(S.week<timeWeek()) S.week=timeWeek(); }
       var sc=schedTodayCode();
       if(sc && !sessionLogged(timeWeek(), sc)){ S.day=sc; S.week=timeWeek(); return; }
-      if(!sessionLogged(S.week, S.day)) return;
+      // 2026-09-24: "do not move an athlete off an unbanked session" must not apply to one they
+      // have DECLINED. A skipped session is not work in progress, and leaving the pointer parked
+      // on it is how the skip would look like it had done nothing. FLD46 caught exactly that.
+      if(!sessionLogged(S.week, S.day) && !sessionSkipped(S.week, S.day)) return;
     }
-    if(!sessionLogged(S.week, S.day)) return;
+    if(!sessionLogged(S.week, S.day) && !sessionSkipped(S.week, S.day)) return;
     var __sk=null; try{ var __s=S.strand;
       if(__s && __s.freed && __s.c===cyc()) __sk={week:__s.w, code:__s.d}; }catch(e){}
     var nx=nextSession(__sk); if(nx){ S.day=nx.code; S.week=nx.week;
@@ -5299,13 +5359,22 @@ function pinHTML(){
     var here=pinIsHere();
     var d=PLAN.days.filter(function(x){ return x.code===S.day; })[0];
     var name=d? (d.title||d.code) : S.day;
+    // 2026-09-24: a session already declined says so, and offers the way back.
+    if(sessionSkipped(S.week, S.day))
+      return '<div class="block lockfree" style="border-color:var(--dim)">'
+        +'<div class="cue" style="padding:0 0 8px"><b>Skipped:</b> Week '+S.week+' \u00b7 '+esc(name)
+        +'. It will not be offered again and it counts as nothing \u2014 not trained, not missed. '
+        +'It is still on your calendar and in the block review so you can see you chose it.</div>'
+        +'<div class="cardio-row"><div class="toggle" data-skipoff="1" role="button" tabindex="0">Put it back</div></div></div>';
     if(here) return '<div class="block lockfree" style="border-color:var(--amber)">'
       +'<div class="cue" style="padding:0 0 8px"><b>Pinned:</b> Week '+S.week+' \u00b7 '+esc(name)
       +'. The card will open here every time until you log it or unpin it \u2014 whatever the calendar says.</div>'
       +'<div class="cardio-row"><div class="toggle" data-pinoff="1" role="button" tabindex="0">Unpin</div></div></div>';
+    var canSkip=false; try{ canSkip=!sessionLogged(S.week, S.day); }catch(e){}
     return '<div class="sub" style="margin-top:6px">'
       +'<span class="toggle lockfree" data-pinon="1" role="button" tabindex="0" style="padding:2px 8px;font-size:11px">Pin this session</span>'
-      +' <span class="cue" style="font-size:11px">\u2014 hold the card here until you have logged it</span></div>';
+      +(canSkip? ' <span class="toggle lockfree" data-skipon="1" role="button" tabindex="0" style="padding:2px 8px;font-size:11px">Skip it</span>' : '')
+      +' <span class="cue" style="font-size:11px">\u2014 hold the card here, or decline this one and move on</span></div>';
   }catch(e){ return ''; }
 }
 function nextLineHTML(){
@@ -10709,18 +10778,58 @@ function discPending(){ try{ return !(S.discAck && S.discAck.v>=DISC_V); }catch(
 // Idempotent, and reachable three ways: the button's own handler, the keyboard, and a
 // WINDOW-level capture listener registered at load - which runs before any document-level
 // guard the card owns (the day-lock guard, the tour guard) can swallow the tap.
-function discAccept(){
+// 2026-09-24, FOURTH field report of a dead "I understand" - Android, several people. Three
+// changes, each closing a way this function could take the tap and still leave the gate up:
+//   - the gate is REMOVED FIRST. The athlete's tap is honoured on screen before anything is
+//     saved, queued or computed; nothing that follows can keep the gate in front of them.
+//   - the __done latch is released if anything throws. It was set first and never cleared, so
+//     one exception anywhere below it made every later tap a no-op for the life of the page.
+//   - the acknowledgment is held in DISC_ACKED, a plain variable, as well as on S. A tap that
+//     lands while load() is mid-read puts discAck on a state object that load() then replaces,
+//     and save() is refused during that window - so the gate left and nothing was stored, and the
+//     next open showed it again. bootAfterLoad() re-asserts DISC_ACKED onto the loaded state.
+var DISC_ACKED=null;
+function discAccept(how){
+  var v=null;
   try{
-    var v=document.getElementById('discGate'); if(!v) return;
+    v=document.getElementById('discGate'); if(!v) return;
     if(v.__done) return; v.__done=true;
     var force=!!v.__force;
-    if(!force){ S.discAck={v:DISC_V, d:localDate()}; save(); }
-    try{ v.remove(); }catch(e){}
-    if(!force){ var q=DISC_QUEUE; DISC_QUEUE=null; if(q) try{ q(); }catch(e){} }
-  }catch(e){}
+    try{ v.remove(); }catch(e){ try{ v.style.display='none'; if(v.parentNode) v.parentNode.removeChild(v); }catch(e2){} }
+    if(!force){
+      var dd=null; try{ dd=localDate(); }catch(e){}     // the acknowledgment never waits on the clock
+      DISC_ACKED={v:DISC_V, d:dd};
+      S.discAck=DISC_ACKED;
+      try{ save(); }catch(e){}
+      // which delivery this phone used, for the report bundle - quiet, never a red bar
+      try{ if(how && how!=='click') oops('discGate:'+how, 'accepted via '+how); }catch(e){}
+      var q=DISC_QUEUE; DISC_QUEUE=null; if(q) try{ q(); }catch(e){}
+    }
+  }catch(e){
+    try{ if(v && document.getElementById('discGate')===v) v.__done=false; }catch(x){}
+    try{ oops('discAccept', e); }catch(x){}
+  }
+}
+// Is this event the athlete's tap on the accept button? Either the button is the target, or the
+// point the phone reports is inside the button's rectangle whatever element it says it hit. The
+// second half is the Android repair: a tap that hit-tests to something else while landing on the
+// button is still the tap. Stands down while the Terms sheet is open over the gate - a finger on
+// the Terms text must never count as acknowledging what is underneath it.
+function discHit(ev){
+  try{
+    var t=ev && ev.target;
+    if(t && t.closest && t.closest('#discOk')) return true;
+    var b=document.getElementById('discOk'); if(!b) return false;
+    if(document.querySelector('.terms-wrap')) return false;
+    var p=(ev.changedTouches && ev.changedTouches[0]) || (ev.touches && ev.touches[0]) || ev;
+    if(!p || p.clientX==null || p.clientY==null) return false;
+    var r=b.getBoundingClientRect(), m=10;
+    if(!(r.width>0 && r.height>0)) return false;
+    return p.clientX>=r.left-m && p.clientX<=r.right+m && p.clientY>=r.top-m && p.clientY<=r.bottom+m;
+  }catch(e){ return false; }
 }
 try{ window.addEventListener('click', function(ev){
-  var t=ev.target; if(t && t.closest && t.closest('#discOk')){ discAccept(); } }, true); }catch(e){}
+  if(discHit(ev)){ discAccept((ev.target && ev.target.closest && ev.target.closest('#discOk'))? 'click' : 'click-rect'); } }, true); }catch(e){}
 // FIELD 2026-09-06, THIRD report of a dead "I understand" - his sister, first open, "frozen,
 // buttons don't work". Every path above depends on a CLICK event arriving. A phone can withhold
 // one: iOS drops the synthesized click after a touch that a handler preventDefault-ed, after a
@@ -10732,23 +10841,23 @@ try{ window.addEventListener('click', function(ev){
 var _discDown=null;
 function discTapEnd(ev){
   try{
-    var t=ev.target; if(!t || !t.closest || !t.closest('#discOk')) return;
+    if(!discHit(ev)) return;
     var p=(ev.changedTouches && ev.changedTouches[0]) || ev;
     if(_discDown && p && p.clientX!=null && Math.hypot(p.clientX-_discDown.x, p.clientY-_discDown.y)>14) return;  // that was a scroll
-    discAccept();
+    discAccept(ev.type);
   }catch(e){}
 }
 try{
   window.addEventListener('pointerdown', function(ev){
-    try{ var t=ev.target; if(!t || !t.closest || !t.closest('#discOk')) return;
+    try{ if(!discHit(ev)) return;
       _discDown={x:ev.clientX, y:ev.clientY, t:Date.now()};
       setTimeout(function(){ try{
         var g=document.getElementById('discGate'); if(!g || g.__done) return;
-        if(_discDown && Date.now()-_discDown.t>=450) discAccept();
+        if(_discDown && Date.now()-_discDown.t>=450) discAccept('watchdog');
       }catch(e){} }, 520);
     }catch(e){} }, true);
   window.addEventListener('touchstart', function(ev){
-    try{ var t=ev.target; if(!t || !t.closest || !t.closest('#discOk')) return;
+    try{ if(!discHit(ev)) return;
       var p=ev.touches && ev.touches[0]; if(p) _discDown={x:p.clientX, y:p.clientY, t:Date.now()};
     }catch(e){} }, {capture:true, passive:true});
   window.addEventListener('pointerup', discTapEnd, true);
@@ -10774,8 +10883,17 @@ function bootDisc(force){
     v.__force=!!force;
     var ok=document.getElementById('discOk');
     if(ok){ ok.addEventListener('keydown', function(ev){
-      if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); discAccept(); } }); }
-    if(ok) ok.onclick=function(){ discAccept(); };
+      if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); discAccept('key'); } }); }
+    if(ok) ok.onclick=function(){ discAccept('click'); };
+    // 2026-09-24: and the gate itself listens, in the bubbling phase, for a tap that ends inside
+    // the button's rectangle - the last net under every capture listener above.
+    // A pointer-up or touch-end goes through discTapEnd(), which keeps the scroll test: a finger
+    // that travelled is a scroll, whatever it ended on.
+    try{ ['click','pointerup','touchend'].forEach(function(tn){
+      v.addEventListener(tn, function(ev){ try{
+        if(tn==='click'){ if(discHit(ev)) discAccept('gate-click'); } else discTapEnd(ev);
+      }catch(e){} }, {passive:true});
+    }); }catch(e){}
   }catch(e){}
 }
 
@@ -15201,7 +15319,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v246';
+const BUILD = 'v248';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -18973,6 +19091,7 @@ async function load(){ const DEF=JSON.parse(JSON.stringify(S));
   if(S.froze===undefined) S.froze={};
   if(S.rptOpen===undefined) S.rptOpen=false;
   if(S.pin===undefined) S.pin=null;          // 2026-09-23: the session the athlete pinned
+  if(!S.skip || typeof S.skip!=='object') S.skip={};   // 2026-09-24: sessions the athlete declined
   if(S.strand===undefined) S.strand=null;    // F28: an unfinished session the card is waiting on
   if(S.rptKind===undefined) S.rptKind='bug';
   if(S.coachOwn===undefined) S.coachOwn=false;
@@ -20087,6 +20206,21 @@ function wire(){
       alertToast('Pinned \u2014 the card stays on Week '+S.week+' \u00b7 '+((d&&(d.title||d.code))||S.day)
                 +' until you log it', 6000);
     }catch(e){ oops('pinOn',e); } }; });
+  document.querySelectorAll('[data-skipon]').forEach(function(el){
+    el.onclick=function(){ try{
+      var w=S.week, d=S.day;
+      if(!skipToggle(w, d)){ alertToast('That session is already logged \u2014 nothing to skip'); return; }
+      var dd=PLAN.days.filter(function(x){ return x.code===d; })[0];
+      try{ syncToNext(); }catch(e){}
+      save(); render();
+      alertToast('Skipped Week '+w+' \u00b7 '+((dd&&(dd.title||dd.code))||d)
+                +' \u2014 it counts as nothing, and it is on the record as your choice', 6000);
+    }catch(e){ oops('skipOn',e); } }; });
+  document.querySelectorAll('[data-skipoff]').forEach(function(el){
+    el.onclick=function(){ try{
+      skipToggle(S.week, S.day); save(); render();
+      alertToast('Put back \u2014 the card will offer it again', 5000);
+    }catch(e){ oops('skipOff',e); } }; });
   document.querySelectorAll('[data-pinoff]').forEach(function(el){
     el.onclick=function(){ try{
       pinClear();
@@ -21620,7 +21754,14 @@ function weekHeadHTML(){
   const logged={}; try{ const pd=curLOGP(); (logKeys||[]).forEach(function(k){ if(k.indexOf(pd)!==0) return;
     const m=k.match(/-([A-Za-z]+)-W(\d+)B(\d+)$/);
     if(m && (+m[2])===S.week && (+m[3])===cyc()) logged[m[1]]=1; }); }catch(e){}   // viewed week AND block: W1 of Block 2 must not inherit Block 1's checks
-  const dots=PLAN.days.map(d=>'<span style="margin-right:8px;'+(logged[d.code]?'color:var(--green);font-weight:700':'color:var(--faint)')+'">'+d.code+(logged[d.code]?'\u2713':'')+'</span>').join('');
+  // 2026-09-24: a declined session is marked rather than left looking untrained. His call - a
+  // block where every leg day was skipped must not read the same as one where the card lost them.
+  const dots=PLAN.days.map(function(d){
+    var sk=false; try{ sk=sessionSkipped(S.week, d.code); }catch(e){}
+    if(logged[d.code]) return '<span style="margin-right:8px;color:var(--green);font-weight:700">'+d.code+'\u2713</span>';
+    if(sk) return '<span style="margin-right:8px;color:var(--dim);text-decoration:line-through" title="skipped">'+d.code+'</span>';
+    return '<span style="margin-right:8px;color:var(--faint)">'+d.code+'</span>';
+  }).join('');
   const due=aftDueDate();
   // The week is TIME now, and the strip below says so out loud: every week is a visible,
   // tappable chip - no hidden chevrons to discover. Solid chip = the week the clock says
@@ -21653,7 +21794,8 @@ function blockEndHTML(early){
       +(g.squatMoved!=null? ' \u00b7 squat e1RM moved <b>'+(g.squatMoved>=0?'+':'')+WV(g.squatMoved)+' '+uLbl()+'</b> across '+g.squatPts+' sessions'
                           : ' \u00b7 not enough logged squat sessions to measure movement')+'</div>'
     + plan.map(p=>'<div class="ed-row" style="margin-top:8px"><div style="flex:1">'
-        +'<div style="font-weight:700">'+p.name+'</div>'
+        +'<div style="font-weight:700">'+p.name+(function(){ try{ var n=skipCountFor(p.k);
+            return n? ' <span class="cue" style="font-weight:400">\u00b7 '+n+' session'+(n===1?'':'s')+' skipped</span>' : ''; }catch(e){ return ''; } })()+'</div>'
         +'<div class="sleeve-label">'+WV(p.cur)+' '+uLbl()+(p.sugg!=null&&p.sugg!==p.cur? ' \u2192 '+WV(p.sugg)+' '+uLbl():' \u2014 hold')
         +(p.review!=null? ' <span style="color:var(--red)">\u00b7 REVIEW</span>':'')
         +(p.succ? ' \u00b7 '+Math.round(p.succ.rate*100)+'% reps hit':'')
@@ -23590,6 +23732,10 @@ async function bootAfterLoad(res){
   // since the day it shipped. "Acknowledged once per DISC_V" was the rule; this is where it is
   // actually enforced, now that the acknowledgment has been loaded. The splash is still over the
   // top at this point, so nobody sees the gate come and go.
+  // 2026-09-24: a tap that landed while the state was still being read put discAck on an object
+  // load() has just replaced, and save() was refused at the time. The tap happened; keep it, and
+  // write it now - the refused save is not retried by anything else until the athlete acts.
+  try{ if(DISC_ACKED){ S.discAck=DISC_ACKED; save(); } }catch(e){}
   try{ if(!discPending()){ var g0=document.getElementById('discGate'); if(g0 && !g0.__force) g0.remove(); } }catch(e){}
   // ACCESS (v214): a card from before the gate becomes an athlete card for 90 days; a card whose
   // holder lacks coach rights runs solo; anything without current access meets the gate.
