@@ -5132,14 +5132,11 @@ function landOnTraining(){
     // Same sentence, the other door.
     var op=null; try{ op=openSession(); }catch(e){}
     if(op && !(op.week===S.week && op.code===S.day)){ S.day=op.code; S.week=op.week; }
-    // 2026-09-23: a session the athlete RELEASED must not be handed back by the fallback below
-    // either. openSession() already honours `freed`; nextSession() has to be told. FLD31 caught
-    // this half a fix short.
-    var __freed=null; try{ var __fs=S.strand;
-      if(__fs && __fs.freed && __fs.c===cyc()) __freed={week:__fs.w, code:__fs.d}; }catch(e){}
+    // 2026-09-25: the release is gone; nextSession() is asked plainly. A declined session is
+    // passed over inside it (sessionSkipped), which is the only kind of "not this one" left.
     var onTab=!PLAN.days.some(function(d){ return d.code===S.day; });
     if(onTab){
-      var nx=null; try{ nx=nextSession(__freed); }catch(e){}
+      var nx=null; try{ nx=nextSession(); }catch(e){}
       if(nx){ S.day=nx.code; S.week=nx.week; }
       else {
         // the block's weeks are spent: the day view carries the block-end review, so land on
@@ -5189,11 +5186,13 @@ var HOLD_MAX_DAYS=7;
 function strandHold(c, w, d){
   try{
     if(sessionLogged(w, d)) return false;              // banked: there is nothing unfinished
+    if(sessionSkipped(w, d)) return false;             // 2026-09-25: declined - nothing to hold on
     var n=sessionWorkAt(c, w, d);
     if(!n) return false;
     var s=S.strand;
     if(s && s.c===c && s.w===w && s.d===d){
-      if(s.freed) return false;                        // they tapped Go to today: never hold again
+      // 2026-09-25: `freed` (the old Go to today) is no longer honoured - an unfinished session is
+      // offered until it is banked or skipped, which is the v246 rule. Skip is the way to decline.
       s.n=n;
       try{
         var age=(new Date(shiftDate()+'T12:00:00')-new Date(String(s.at)+'T12:00:00'))/86400000;
@@ -5219,8 +5218,8 @@ function strandHold(c, w, d){
 //     date, so the week it sits in is the only honest clock this can read, and one week is
 //     HOLD_MAX_DAYS in the unit the data actually has. A draft abandoned in week 1 does not
 //     capture an open in week 5;
-//   - it honours `freed`. Having once tapped Go to today, the athlete is not carried back
-//     tomorrow to the same session.
+//   - (2026-09-25) it no longer honours `freed`: the old Go to today release is gone, and a
+//     session the athlete wants to put down is declined with Skip, which nextSession() honours.
 function openSession(){
   try{
     var C=cyc(), tw=timeWeek();
@@ -5229,10 +5228,9 @@ function openSession(){
        && !sessionLogged(S.week, S.day) && !sessionSkipped(S.week, S.day)
        && sessionWorkAt(C, S.week, S.day)) return null;
     var floorW=Math.max(1, tw-1);
-    var freed=(S.strand && S.strand.freed && S.strand.c===C)? (S.strand.w+'|'+S.strand.d) : null;
     var s=S.strand;
-    if(s && s.c===C && !s.freed && s.w>=floorW && s.w<=tw
-       && !sessionLogged(s.w, s.d) && sessionWorkAt(C, s.w, s.d)) return {week:s.w, code:s.d};
+    if(s && s.c===C && s.w>=floorW && s.w<=tw
+       && !sessionLogged(s.w, s.d) && !sessionSkipped(s.w, s.d) && sessionWorkAt(C, s.w, s.d)) return {week:s.w, code:s.d};
     var codes=(PLAN&&PLAN.days||[]).map(function(d){ return d.code; });
     var best=null;
     Object.keys(S.data||{}).forEach(function(k){
@@ -5242,7 +5240,6 @@ function openSession(){
       var w=+m[2], d=m[3];
       if(w<floorW || w>tw) return;
       if(codes.indexOf(d)<0) return;
-      if(freed===(w+'|'+d)) return;
       if(sessionLogged(w, d)) return;
       if(sessionSkipped(w, d)) return;            // 2026-09-24: declined, so not somewhere to return to
       if(!sessionWorkAt(C, w, d)) return;
@@ -5305,9 +5302,7 @@ function syncToNext(){
       if(!sessionLogged(S.week, S.day) && !sessionSkipped(S.week, S.day)) return;
     }
     if(!sessionLogged(S.week, S.day) && !sessionSkipped(S.week, S.day)) return;
-    var __sk=null; try{ var __s=S.strand;
-      if(__s && __s.freed && __s.c===cyc()) __sk={week:__s.w, code:__s.d}; }catch(e){}
-    var nx=nextSession(__sk); if(nx){ S.day=nx.code; S.week=nx.week;
+    var nx=nextSession(); if(nx){ S.day=nx.code; S.week=nx.week;
       // A repeat pass re-opens its cell: same split slot, same week, MORE training - the
       // athlete's choice. The cell unlocks, its set states wipe to a clean card, and pass
       // one's log keeps its date.
@@ -5337,18 +5332,21 @@ function strandBannerHTML(){
     // Finished, banked, or the work was undone: the note has no reason to exist.
     if(sessionLogged(s.w, s.d) || !sessionWorkAt(s.c, s.w, s.d)){ S.strand=null; try{ save(); }catch(e){} return ''; }
     if(s.c!==cyc()) return '';
+    if(sessionSkipped(s.w, s.d)) return '';           // 2026-09-25: declined - the Skipped note says so instead
     if(!(s.w===S.week && s.d===S.day)) return '';     // only while the card is actually held here
     var tw=s.w; try{ tw=timeWeek(); }catch(e){}
     if(tw<=s.w) return '';                            // the calendar has not passed it yet
+    // 2026-09-25 (Jerry, screenshot). No control here any more. This session IS today - the card
+    // finishes a week before it moves (v246) - so "Go to today" had nowhere honest to go and went to
+    // the session after this one while quietly marking this one released: a skip with no mark.
+    // Moving on is Skip, on the row below, which is explicit and shows on the record. `keep` so
+    // Minimal - which hides coaching - does not hide the one fact this line exists to state.
     return '<div class="block lockfree" style="border-color:var(--amber)">'
-      +'<div class="cue" style="padding:0 0 8px"><b>Week '+tw+' has started.</b> '
-      +'You have '+s.n+' set'+(s.n===1?'':'s')+' logged here from Week '+s.w+' that '
-      +(s.n===1?'was':'were')+' never banked, so the card has stayed on this session rather than '
-      +'leaving it behind. Finish it or bank it \u2014 or move on, and it keeps counting toward '
-      +'Week '+s.w+' either way.</div>'
-      +'<div class="cardio-row">'
-      +'<div class="toggle" data-strandgo="1" role="button" tabindex="0">Go to today</div>'
-      +'</div></div>';
+      +'<div class="cue keep" style="padding:0 0 2px"><b>Week '+tw+' has started.</b> '
+      +'You still have '+s.n+' set'+(s.n===1?'':'s')+' logged here from Week '+s.w+' that '
+      +(s.n===1?'was':'were')+' never banked, so this is still your session. Finish it or bank it '
+      +'\u2014 or use <b>Skip it</b> below to move on, and it keeps counting toward Week '+s.w+' either way.</div>'
+      +'</div>';
   }catch(e){ return ''; }
 }
 // The pin's control and its state, on the day screen where the session is.
@@ -5362,12 +5360,12 @@ function pinHTML(){
     // 2026-09-24: a session already declined says so, and offers the way back.
     if(sessionSkipped(S.week, S.day))
       return '<div class="block lockfree" style="border-color:var(--dim)">'
-        +'<div class="cue" style="padding:0 0 8px"><b>Skipped:</b> Week '+S.week+' \u00b7 '+esc(name)
+        +'<div class="cue keep" style="padding:0 0 8px"><b>Skipped:</b> Week '+S.week+' \u00b7 '+esc(name)
         +'. It will not be offered again and it counts as nothing \u2014 not trained, not missed. '
         +'It is still on your calendar and in the block review so you can see you chose it.</div>'
         +'<div class="cardio-row"><div class="toggle" data-skipoff="1" role="button" tabindex="0">Put it back</div></div></div>';
     if(here) return '<div class="block lockfree" style="border-color:var(--amber)">'
-      +'<div class="cue" style="padding:0 0 8px"><b>Pinned:</b> Week '+S.week+' \u00b7 '+esc(name)
+      +'<div class="cue keep" style="padding:0 0 8px"><b>Pinned:</b> Week '+S.week+' \u00b7 '+esc(name)
       +'. The card will open here every time until you log it or unpin it \u2014 whatever the calendar says.</div>'
       +'<div class="cardio-row"><div class="toggle" data-pinoff="1" role="button" tabindex="0">Unpin</div></div></div>';
     var canSkip=false; try{ canSkip=!sessionLogged(S.week, S.day); }catch(e){}
@@ -15319,7 +15317,7 @@ const SKEY = 'training-card-v1', LOGP='nova-sc-log:';
 const TLOGP='tc-log:';
 // Build prefix is v from here on (his call, 2026-09-06): c66..c207 shipped as c, v207 onward as v.
 // The number keeps counting - it is the same sequence, only the letter changed.
-const BUILD = 'v248';
+const BUILD = 'v249';
 // The card's TRUE home, baked at build time. Every share surface (both QRs, the share link,
 // the social payload) uses THIS, never the runtime address - a card opened from a download,
 // a preview, the hub, or the wrong path would otherwise immortalise that wrong address in a
@@ -20195,10 +20193,6 @@ function wire(){
   try{ rosterWire(); }catch(e){ oops('rosterWire',e); }
   document.querySelectorAll('[data-unlock]').forEach(function(el){
     el.onclick=function(){ dayLock(false); alertToast('Unlocked \u2014 changes will be saved again'); render(); }; });
-  // F28. Releases the hold and moves to today. Deletes NOTHING - the unbanked sets stay under their
-  // own key, still count toward their own week and block, and that session can still be banked
-  // later from the calendar. `freed` makes the release permanent, so having once said "move on" the
-  // athlete is not asked again tomorrow about the same session.
   document.querySelectorAll('[data-pinon]').forEach(function(el){
     el.onclick=function(){ try{
       pinSet(S.week, S.day); render();
@@ -20227,47 +20221,7 @@ function wire(){
       try{ syncToNext(); }catch(e){}
       save(); render(); alertToast('Unpinned \u2014 the card picks up where the plan is', 5000);
     }catch(e){ oops('pinOff',e); } }; });
-  document.querySelectorAll('[data-strandgo]').forEach(function(el){
-    el.onclick=function(){
-      try{
-        var s=S.strand;
-        var __was=S.week+'|'+S.day;
-        if(s) s.freed=true;
-        // FOUND 2026-09-16, walking this button on the real state of one of Jerry's athletes.
-        // The action used to be syncToNext() alone - and syncToNext()'s second check is
-        // `if(!sessionLogged(S.week,S.day)) return`, which is TRUE of every session the strand
-        // holds, because strandHold() returns false the moment that session IS logged. So the
-        // release handed control to a function whose first act was to return, every time, on
-        // every build in this ladder. The button could never move anybody, and the toast below
-        // said "Moved on" regardless.
-        //
-        // Go to today goes to today: the session the card itself would take them to, which is
-        // nextSession() - the same function every other "where next" decision here uses. If the
-        // block's weeks are spent and there is no next session, the pointer at least comes up to
-        // the calendar rather than sitting in a week that is over.
-        // 2026-09-23: pass the session being released, so the card moves PAST it rather than
-        // offering it straight back. Since the clock can no longer step over untrained work, the
-        // released session is usually the very next one due - which made this button dead again
-        // until FLD31 and FLD36 said so.
-        var __rel=(s && s.c===cyc())? {week:s.w, code:s.d} : null;
-        var __nx=null; try{ __nx=nextSession(__rel); }catch(e){}
-        if(__nx){ S.day=__nx.code; S.week=__nx.week; }
-        else { try{ if(S.week<timeWeek()) S.week=timeWeek(); }catch(e){} }
-        try{ S.focus=firstOpenFocus(); }catch(e){ S.focus=0; }
-        S.calSel=null;
-        save();
-        try{ syncToNext(); }catch(e){}
-        save(); render();
-        // and the toast reports what happened, not what was intended. Holding the session the
-        // rotation already points at is a real case - bank A and B, stall on C, and C is next -
-        // and telling that athlete he has been moved on is a lie about his own card.
-        var __moved=(S.week+'|'+S.day)!==__was;
-        if(s && __moved) alertToast('Moved on \u2014 those '+s.n+' set'+(s.n===1?'':'s')
-                        +' still count toward Week '+s.w, 6000);
-        else if(s) alertToast('This is already your next session \u2014 those '+s.n+' set'
-                        +(s.n===1?'':'s')+' still count toward Week '+s.w, 6000);
-      }catch(e){ oops('strandGo',e); }
-    }; });
+  // 2026-09-25: the strand release ("Go to today") is gone - see strandBannerHTML().
   document.querySelectorAll('[data-how]').forEach(function(el){ el.onclick=function(ev){ ev.stopPropagation(); howEx=el.dataset.how; render(); }; });
   document.querySelectorAll('[data-howclose]').forEach(function(el){ el.onclick=function(ev){
     if(ev.target!==el) return; howEx=null; render(); }; });
